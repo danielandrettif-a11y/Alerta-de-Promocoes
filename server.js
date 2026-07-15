@@ -25,7 +25,7 @@ const GROUP_NAME = 'Alerta de Descontos';
 
 // Função para ler variáveis do arquivo .env dinamicamente sem precisar reiniciar o processo
 function readEnv() {
-  const envVars = {};
+  const envVars = { ...process.env };
   const envPath = path.join(__dirname, '.env');
   if (fs.existsSync(envPath)) {
     try {

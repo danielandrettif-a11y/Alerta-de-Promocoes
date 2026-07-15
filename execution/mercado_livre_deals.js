@@ -111,7 +111,7 @@ async function scrapeLiveCoupons() {
 
 async function main() {
   // Simple .env parser to read config
-  const envVars = {};
+  const envVars = { ...process.env };
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
     const content = fs.readFileSync(envPath, 'utf-8');
