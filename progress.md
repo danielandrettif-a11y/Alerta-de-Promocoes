@@ -68,4 +68,11 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Daniel efetuou o login interativo localmente no Chrome com sucesso.
   - Novo teste headless disparado: a extração foi concluída com **sucesso absoluto**. O robô invisível acessou o produto, localizou e clicou na barra `#stripe` no botão "Compartilhar", gerando e extraindo o link de afiliado `meli.la/1Z3YVke` sem ser barrado por Captchas.
 
+- **Deploy Automático no Coolify:**
+  - Sincronizados todos os arquivos modificados do projeto e criados commits enviados para o branch `main` do GitHub remoto.
+  - Criado o arquivo [Dockerfile](file:///c:/Users/danie/OneDrive/Documents/Antigravity%20Projetos/Alerta%20de%20Promocoes/Dockerfile) na raiz do projeto contendo a instalação das dependências do sistema necessárias para o Chromium/Puppeteer rodar headless no Linux.
+  - Criada e configurada a aplicação integrada ao GitHub App no Coolify (UUID: `v13vybz3batitff5ukstrnse`).
+  - Disparado o build e deploy. O Coolify completou o build da imagem Docker com sucesso (`finished`) e disponibilizou a aplicação sob o domínio sslip.io.
+
+
 

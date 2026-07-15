@@ -1,33 +1,18 @@
 FROM node:18-slim
 
-# Instalar dependencias do Puppeteer no Linux
+# Instalar dependencias e baixar o Chrome oficial para Linux (essencial para o Puppeteer)
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     ca-certificates \
-    procps \
-    libxss1 \
-    libxtst6 \
-    libxrender1 \
-    libxi6 \
-    libgconf-2-4 \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libglib2.0-0 \
-    libgtk-3-0 \
+    curl \
     --no-install-recommends \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /app
 

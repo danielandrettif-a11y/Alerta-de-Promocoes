@@ -16,11 +16,17 @@ const puppeteer = require('puppeteer-core');
 
 function findBrowserPath() {
   const possiblePaths = [
+    // Windows
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     path.join(process.env.USERPROFILE || 'C:\\Users\\danie', 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    // Linux
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser'
   ];
 
   for (const executablePath of possiblePaths) {
