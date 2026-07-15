@@ -56,5 +56,16 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
 ### 14/07/2026
 - **Renomeação do Projeto:**
   - O projeto foi renomeado de "Projeito novo" para "Alerta de Promocoes".
-  - O nome do projeto no arquivo `package.json` foi atualizado para `alerta-de-promocoes`.
-  - O arquivo `package-lock.json` foi atualizado rodando `npm install` após a renomeação da pasta física.
+  - O nome do projeto no arquivo `package.json` foi updated para `alerta-de-promocoes`.
+  - O arquivo `package-lock.json` foi updated rodando `npm install` após a renomeação da pasta física.
+
+### 15/07/2026
+- **Simulação Headless de Login do Mercado Livre (VPS):**
+  - Modificado o script `get_meli_affiliate_link.js` para usar `headless: true` para simular o ambiente de servidor (VPS).
+  - Executados testes de extração de links de afiliados. O Puppeteer em modo headless rodou com sucesso, mas o teste falhou porque a sessão local em `.tmp/ml_user_data` expirou.
+  - A página inicial e a página de produto do Mercado Livre redirecionaram para a tela de login ("Olá! Para continuar, acesse sua conta").
+  - Corrigido o escopo da variável `page` no script para garantir capturas de tela adequadas no bloco catch em caso de erros futuros.
+  - Daniel efetuou o login interativo localmente no Chrome com sucesso.
+  - Novo teste headless disparado: a extração foi concluída com **sucesso absoluto**. O robô invisível acessou o produto, localizou e clicou na barra `#stripe` no botão "Compartilhar", gerando e extraindo o link de afiliado `meli.la/1Z3YVke` sem ser barrado por Captchas.
+
+

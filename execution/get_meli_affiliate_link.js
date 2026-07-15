@@ -53,18 +53,19 @@ async function main() {
   console.log(`📡 Abrindo navegador para extrair link de afiliado...`);
   const browser = await puppeteer.launch({
     executablePath: browserPath,
-    headless: false, // Visível para evitar bloqueios anti-bot do Mercado Livre
+    headless: true, // Modo headless ativo para simular o ambiente de VPS
     userDataDir: userDataDir,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
   });
 
+  let page;
   try {
-    const page = await browser.newPage();
+    page = await browser.newPage();
     await page.setViewport({ width: 1366, height: 768 });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
     console.log(`🔗 Navegando para o produto: ${productUrl}`);
-    await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
     console.log('⏳ Aguardando a barra de afiliados (#stripe)...');
     await page.waitForSelector('#stripe', { timeout: 15000 });
@@ -131,6 +132,16 @@ async function main() {
     
   } catch (err) {
     console.error('❌ Erro durante a execucao:', err.message);
+    try {
+      if (typeof page !== 'undefined' && !page.isClosed()) {
+        const debugScreen = path.join(__dirname, '..', '.tmp', 'affiliate_link_error.png');
+        fs.mkdirSync(path.dirname(debugScreen), { recursive: true });
+        await page.screenshot({ path: debugScreen });
+        console.log(`📸 Print do erro salvo em: .tmp/affiliate_link_error.png`);
+      }
+    } catch (screenErr) {
+      console.error('⚠️ Nao foi possivel tirar o print de erro:', screenErr.message);
+    }
     process.exit(1);
   } finally {
     await browser.close();

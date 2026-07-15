@@ -88,18 +88,16 @@ Este espaço define os invariantes, schemas de dados e regras comportamentais es
 
 ## Regras Comportamentais
 
-1. **Uso de Imagens Temporárias**: O sistema deve fazer upload das imagens JPG para o imgBB somente no momento da publicação do story e deve obter uma URL válida. Essas URLs são temporárias e não devem ser salvas de forma persistente.
-2. **Robustez na Publicação**: O script deve realizar polling da API de mídia do Instagram a cada 3 segundos, por um limite máximo de 10 tentativas. Se expirar, deve relatar erro amigável ao usuário.
-3. **Tratamento de Erros de Conectividade**: Caso as chaves de API não estejam configuradas no `.env`, o backend deve barrar a tentativa imediatamente com erro `400 Bad Request` informando quais chaves estão ausentes.
-4. **Validação de Nomes Headless**: A verificação de disponibilidade de nomes de usuário deve utilizar o `puppeteer-core` de forma headless, simulando comportamento de navegação humana para evitar bloqueios temporários de IP e redirecionamentos para login.
-5. **Critérios de Ranking**: O ranking de nomes de promoções deve priorizar menor extensão (comprimento), ausência de caracteres especiais consecutivos e presença de palavras de alto engajamento (como 'promo', 'achados', 'descontos').
-
+1. **API do Instagram Dormente**: A integração automática e a publicação na Graph API do Instagram ficam dormentes por tempo indeterminado. A interface do painel web oferece apenas visualização e download dos Stories gerados para postagem manual.
+2. **Extração de Afiliados Headless (VPS)**: O script `get_meli_affiliate_link.js` opera obrigatoriamente em modo headless (`headless: true`) e usa a sessão ativa em `.tmp/ml_user_data` para obter os links de afiliado encurtados de forma invisível.
+3. **Comandos Interativos do WhatsApp**: O cliente WhatsApp deve escutar ativamente menções a `@antigravity` no grupo e responder de forma cortês a comandos estruturados (`ajuda`, `status`, `atualizar`, `gerar [categoria]`).
+4. **Prevenção de Loops**: O robô nunca deve responder a mensagens enviadas por ele mesmo (`msg.fromMe === true`) para evitar loops infinitos de comandos no grupo.
 
 ## Invariantes Arquiteturais
 
-1. **Camada 3 (Execução)**: O arquivo `execution/publish_story.js` é o único responsável direto pelas requisições HTTP externas do Instagram e imgBB.
-2. **Camada 2 (Servidor)**: O `server.js` gerencia as requisições de API vindas do painel web e despacha as ações de forma determinística para o script de execução.
-3. **Segurança de Segredos**: Nenhuma chave de API (Instagram ou imgBB) deve ser colocada diretamente no código-fonte. Devem ser sempre carregadas via `process.env`.
+1. **Camada 3 (Execução)**: O arquivo `execution/whatsapp_client.js` é o único responsável direto pelas conexões e eventos do WhatsApp Web.
+2. **Camada 2 (Servidor)**: O `server.js` gerencia o ciclo automático de ofertas do WhatsApp, inicializa a escuta persistente de comandos no WhatsApp Client e expõe endpoints locais do painel.
+3. **Segurança de Segredos**: Segredos e limites do WhatsApp e Mercado Livre devem ser carregados estritamente via `process.env` de forma isolada do código-fonte.
 4. **WhatsApp Client**: O arquivo `execution/whatsapp_client.js` gerencia de forma isolada a conexão e o envio de mídias/mensagens para o WhatsApp via `whatsapp-web.js`, mantendo os cookies de sessão salvos localmente em `.tmp/wpp_session`.
 
 ## Esquemas de Dados do WhatsApp

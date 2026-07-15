@@ -144,6 +144,230 @@ client.on('message_reaction', async (reaction) => {
   }
 });
 
+// Listener de mensagens recebidas para comandos interativos do @antigravity
+client.on('message', async (msg) => {
+  const body = msg.body || '';
+  if (body.toLowerCase().includes('@antigravity')) {
+    // Evita loop: ignora se a mensagem foi enviada pelo próprio bot
+    if (msg.fromMe) return;
+
+    console.log(`🤖 [WhatsApp Command] Menção recebida de ${msg.from}: "${body}"`);
+
+    // Limpa a menção para ler o comando
+    const cleanMsg = body.replace(/@antigravity/gi, '').trim().toLowerCase();
+
+    try {
+      if (cleanMsg === 'ajuda' || cleanMsg === 'comandos' || cleanMsg === '') {
+        const helpText = `🤖 *ROBÔ ANTIGRAVITY - GUIA DE COMANDOS*
+
+Comande o robô diretamente no grupo marcando *@antigravity* com os seguintes comandos:
+
+1. 🎟️ *atualizar* ou *varrer*
+   Busca ofertas recentes no Mercado Livre e atualiza cupons. Ao concluir, envia as top 3 ofertas do dia.
+
+2. 📦 *gerar [categoria]* ou *enviar [categoria]*
+   Gera o story vertical com link de afiliado e posta a melhor oferta daquela categoria no grupo.
+   _Exemplo:_ \`@antigravity gerar cozinha\` ou \`@antigravity enviar eletronicos\`
+   _Categorias:_ \`cozinha\`, \`suplementos\`, \`eletronicos\`, \`celulares\`, \`moda\`, \`beleza\`, \`eletrodomesticos\`.
+
+3. ⚡ *status*
+   Exibe a integridade da conexão do robô e o limite diário.`;
+        await msg.reply(helpText);
+        console.log('   ✅ Resposta de ajuda enviada.');
+      } 
+      else if (cleanMsg === 'status') {
+        const uptime = process.uptime();
+        const hrs = Math.floor(uptime / 3600);
+        const mins = Math.floor((uptime % 3600) / 60);
+        const uptimeStr = `${hrs}h ${mins}m`;
+        const sessionActive = fs.existsSync(path.join(__dirname, '..', '.tmp', 'ml_user_data'));
+        
+        const statusText = `🤖 *STATUS DO ROBÔ*
+
+🔌 Conexão WhatsApp: *ONLINE* ✅
+🔒 Sessão Mercado Livre: *${sessionActive ? 'ATIVA ✅' : 'EXPIRADA ❌'}*
+⏱️ Servidor Online: *${uptimeStr}*
+📊 Limite de Posts: *30 por dia*`;
+        await msg.reply(statusText);
+        console.log('   ✅ Resposta de status enviada.');
+      }
+      else if (cleanMsg.startsWith('atualizar') || cleanMsg.startsWith('varrer')) {
+        await msg.reply('⏳ *Entendido!* Iniciando varredura e atualização de ofertas no Mercado Livre...\nIsso pode levar de 15 a 30 segundos. Mandarei o resumo ao terminar.');
+        
+        const { exec } = require('child_process');
+        exec('node execution/mercado_livre_deals.js', async (err, stdout, stderr) => {
+          if (err) {
+            console.error('Erro no scraper via WhatsApp:', err.message);
+            await msg.reply(`❌ *Falha ao atualizar ofertas:* ${err.message}`);
+            return;
+          }
+          
+          const dealsReportPath = path.join(__dirname, '..', 'mercado_livre_deals_report.json');
+          if (fs.existsSync(dealsReportPath)) {
+            try {
+              const data = JSON.parse(fs.readFileSync(dealsReportPath, 'utf-8'));
+              const deals = data.deals || [];
+              
+              if (deals.length === 0) {
+                await msg.reply('✅ *Atualização concluída!* Nenhuma oferta ativa localizada.');
+                return;
+              }
+              
+              const sorted = [...deals].sort((a, b) => b.discount - a.discount).slice(0, 3);
+              let summary = `✅ *VARREDURA COMPLETA!* Base de ofertas atualizada.\n\n*Top 3 Maiores Descontos do Dia:*\n`;
+              
+              sorted.forEach((d, idx) => {
+                summary += `\n*${idx + 1}. ${d.title.substring(0, 50)}...*\n🔥 *${d.discount}% OFF* | Por: *${d.currentPrice}*\n`;
+              });
+              
+              summary += `\n💡 _Dica: Digite \`@antigravity gerar [categoria]\` para gerar o story de alguma delas!_`;
+              await msg.reply(summary);
+            } catch (e) {
+              await msg.reply('✅ *Atualização concluída!* Mas ocorreu um erro ao abrir a lista de ofertas.');
+            }
+          } else {
+            await msg.reply('✅ *Atualização concluída!* Mas a base de dados não foi encontrada.');
+          }
+        });
+      }
+      else if (cleanMsg.startsWith('gerar') || cleanMsg.startsWith('enviar') || cleanMsg.startsWith('story')) {
+        // Extrai a categoria
+        const match = cleanMsg.match(/(?:gerar|enviar|story)\s+(.+)/i);
+        if (!match) {
+          await msg.reply('⚠️ *Por favor, especifique a categoria.* Exemplo: `@antigravity gerar cozinha`');
+          return;
+        }
+        
+        const categoryInput = match[1].trim().toLowerCase();
+        let targetCategory = '';
+        
+        if (categoryInput.includes('cozinha') || categoryInput.includes('casa') || categoryInput.includes('panela') || categoryInput.includes('frigideira')) {
+          targetCategory = 'Casa e Cozinha';
+        } else if (categoryInput.includes('suplemento') || categoryInput.includes('saude') || categoryInput.includes('whey') || categoryInput.includes('esporte') || categoryInput.includes('creatina')) {
+          targetCategory = 'Saúde e Esportes';
+        } else if (categoryInput.includes('eletr') || categoryInput.includes('som') || categoryInput.includes('fone') || categoryInput.includes('gamer') || categoryInput.includes('relogio') || categoryInput.includes('smartwatch')) {
+          targetCategory = 'Eletrônicos e Acessórios';
+        } else if (categoryInput.includes('celular') || categoryInput.includes('iphone') || categoryInput.includes('smartphone') || categoryInput.includes('telef')) {
+          targetCategory = 'Celulares';
+        } else if (categoryInput.includes('moda') || categoryInput.includes('roupa') || categoryInput.includes('tenis') || categoryInput.includes('vestido')) {
+          targetCategory = 'Moda e Calçados';
+        } else if (categoryInput.includes('beleza') || categoryInput.includes('perfume') || categoryInput.includes('shampoo') || categoryInput.includes('cosmetico')) {
+          targetCategory = 'Beleza e Cuidado Pessoal';
+        } else if (categoryInput.includes('eletrodo') || categoryInput.includes('ar condicionado') || categoryInput.includes('ventilador') || categoryInput.includes('aspirador')) {
+          targetCategory = 'Eletrodomésticos';
+        }
+        
+        if (!targetCategory) {
+          await msg.reply(`⚠️ *Categoria "${categoryInput}" não reconhecida.*\nTente: _cozinha, suplementos, eletronicos, celulares, moda, beleza, eletrodomesticos_.`);
+          return;
+        }
+
+        await msg.reply(`⏳ *Processando:* Buscando a melhor oferta de *${targetCategory}* e renderizando o Story...`);
+
+        const dealsReportPath = path.join(__dirname, '..', 'mercado_livre_deals_report.json');
+        if (!fs.existsSync(dealsReportPath)) {
+          await msg.reply('❌ Base de dados de ofertas não encontrada. Use `@antigravity atualizar` antes.');
+          return;
+        }
+
+        const data = JSON.parse(fs.readFileSync(dealsReportPath, 'utf-8'));
+        const deals = data.deals || [];
+        
+        // Função auxiliar interna para inferência idêntica
+        const inferCategoryLocal = (title) => {
+          const t = title.toLowerCase();
+          if (t.includes('panela') || t.includes('frigideira') || t.includes('cozinha') || t.includes('prato') || t.includes('copo') || t.includes('chaleira') || t.includes('fritadeira') || t.includes('cafeteira') || t.includes('airfryer') || t.includes('forno') || t.includes('fogao') || t.includes('microondas')) return 'Casa e Cozinha';
+          if (t.includes('creatina') || t.includes('suplemento') || t.includes('whey') || t.includes('proteina') || t.includes('caps') || t.includes('omega') || t.includes('vitamina') || t.includes('dark lab') || t.includes('soldiers') || t.includes('colageno')) return 'Saúde e Esportes';
+          if (t.includes('fone') || t.includes('headset') || t.includes('caixa de som') || t.includes('alexa') || t.includes('smart') || t.includes('relogio') || t.includes('watch') || t.includes('jbl') || t.includes('bluetooth') || t.includes('teclado') || t.includes('mouse') || t.includes('gamer')) return 'Eletrônicos e Acessórios';
+          if (t.includes('smartphone') || t.includes('celular') || t.includes('iphone') || t.includes('motorola') || t.includes('samsung') || t.includes('xiaomi') || t.includes('redmi')) return 'Celulares';
+          if (t.includes('vestido') || t.includes('camisa') || t.includes('camiseta') || t.includes('calça') || t.includes('tenis') || t.includes('sapato') || t.includes('bota') || t.includes('mochila') || t.includes('moda') || t.includes('roupa') || t.includes('casaco') || t.includes('jaqueta')) return 'Moda e Calçados';
+          if (t.includes('perfume') || t.includes('fragrancia') || t.includes('sedutor') || t.includes('shampoo') || t.includes('creme') || t.includes('maquiagem') || t.includes('cosmetico') || t.includes('hidratante')) return 'Beleza e Cuidado Pessoal';
+          if (t.includes('ventilador') || t.includes('ar condicionado') || t.includes('aquecedor') || t.includes('climatizador') || t.includes('extratora') || t.includes('aspirador') || t.includes('lavadora') || t.includes('secadora')) return 'Eletrodomésticos';
+          return 'Ofertas Gerais';
+        };
+
+        const categoryDeals = deals.filter(d => inferCategoryLocal(d.title) === targetCategory);
+
+        if (categoryDeals.length === 0) {
+          await msg.reply(`⚠️ *Nenhuma oferta ativa* de *${targetCategory}* foi encontrada. Tente rodar \`@antigravity atualizar\` antes.`);
+          return;
+        }
+
+        // Seleciona a de maior desconto
+        categoryDeals.sort((a, b) => b.discount - a.discount);
+        const bestDeal = categoryDeals[0];
+
+        // Processamento síncrono da oferta
+        const { execSync } = require('child_process');
+        // Gera hash de ID simples
+        const dealId = `deal_${Math.abs(bestDeal.title.length + bestDeal.discount)}`;
+        const localLastLinkPath = path.join(__dirname, '..', '.tmp', `last_link_${dealId}.txt`);
+        const singleSelectionPath = path.join(__dirname, '..', '.tmp', `wpp_single_deal_${dealId}.json`);
+        const storiesDir = path.join(__dirname, '..', 'stories');
+
+        try {
+          // 1. Extrai link de afiliado (headless)
+          if (fs.existsSync(localLastLinkPath)) fs.unlinkSync(localLastLinkPath);
+          execSync(`node execution/get_meli_affiliate_link.js "${bestDeal.link}" "${localLastLinkPath}"`, {
+            cwd: path.join(__dirname, '..')
+          });
+
+          let affiliateLink = bestDeal.link;
+          if (fs.existsSync(localLastLinkPath)) {
+            affiliateLink = fs.readFileSync(localLastLinkPath, 'utf-8').trim();
+            fs.unlinkSync(localLastLinkPath);
+          }
+
+          // 2. Gera a imagem do Story
+          const tempSelectionData = {
+            generatedAt: new Date().toISOString(),
+            deals: [{ ...bestDeal, link: bestDeal.link }],
+            selectedCoupon: data.coupons && data.coupons.length > 0 ? data.coupons[0] : null
+          };
+          fs.writeFileSync(singleSelectionPath, JSON.stringify(tempSelectionData, null, 2), 'utf-8');
+
+          if (fs.existsSync(storiesDir)) {
+            fs.readdirSync(storiesDir)
+              .filter(f => f.endsWith('.jpg'))
+              .forEach(f => {
+                try { fs.unlinkSync(path.join(storiesDir, f)); } catch (e) {}
+              });
+          }
+
+          execSync(`node execution/generate_stories.js "${singleSelectionPath}"`, {
+            cwd: path.join(__dirname, '..')
+          });
+
+          fs.unlinkSync(singleSelectionPath);
+
+          const generatedFiles = fs.readdirSync(storiesDir).filter(f => f.endsWith('.jpg'));
+          if (generatedFiles.length === 0) {
+            throw new Error('Falha ao renderizar imagem do story no Sharp/Puppeteer.');
+          }
+          const storyImagePath = path.join(storiesDir, generatedFiles[0]);
+
+          // 3. Envia no WhatsApp com caption formatada
+          const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${bestDeal.title}*\n\n🔥 *${bestDeal.discount}% OFF*\nDe: ~~${bestDeal.originalPrice}~~\nPor: *${bestDeal.currentPrice}*\n\n👉 *Compre pelo link:* ${affiliateLink}\n\n📌 _Categoria: ${targetCategory}_`;
+          
+          const media = MessageMedia.fromFilePath(storyImagePath);
+          await client.sendMessage(msg.from, media, { caption: wppMessage });
+          console.log(`   ✅ Oferta de ${targetCategory} postada via comando.`);
+
+        } catch (execErr) {
+          console.error('Erro ao gerar story por comando:', execErr.message);
+          await msg.reply(`❌ *Erro ao gerar story:* ${execErr.message}`);
+        }
+      }
+      else {
+        await msg.reply('🤖 *Comando não reconhecido.* Marque *@antigravity ajuda* para ver a lista de comandos.');
+      }
+    } catch (err) {
+      console.error('Erro no processamento da mensagem:', err.message);
+      await msg.reply(`❌ *Erro interno:* ${err.message}`);
+    }
+  }
+});
+
 // Função principal para envio de ofertas
 async function sendOffer(groupNameOrId, messageText, imagePath = null) {
   return new Promise(async (resolve, reject) => {
@@ -184,7 +408,7 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
       }
 
       console.log('✅ Mensagem enviada com sucesso!');
-      resolve(sentMsg.id._serialized);
+      resolve(sentMsg && sentMsg.id ? sentMsg.id._serialized : 'sent_success_no_id');
     } catch (err) {
       console.error('❌ Falha no envio da mensagem:', err.message);
       reject(err);

@@ -1,29 +1,23 @@
 # Plano de Tarefas do Projeto (task_plan.md)
 
-Este documento registra as fases de desenvolvimento para a integração com a API do Instagram para publicação de Stories.
+Este documento registra as fases de desenvolvimento para a automação de ofertas de afiliados.
 
 ## Checklist de Fases
 
-### Fase 1: Visão & Descoberta
-- [ ] Obter respostas para as 5 Perguntas de Descoberta.
-- [ ] Confirmar o Esquema de Dados em `GEMINI.md`.
+### Fase 1: WhatsApp Interativo (Concluído)
+- [x] Criar listener de mensagens recebidas com identificação de `@antigravity`.
+- [x] Implementar comando `ajuda` com menu de guias.
+- [x] Implementar comando `status` de integridade.
+- [x] Implementar comando `atualizar` disparando o scraping concorrente de ofertas.
+- [x] Implementar comando `gerar [categoria]` com extração e geração de story integrada.
 
-### Fase 2: Link (Conectividade)
-- [ ] Adicionar variáveis de ambiente (`INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID`, `IMGBB_API_KEY`) no `.env`.
-- [ ] Criar script de teste de conectividade em `tools/test_instagram_link.js`.
-- [ ] Executar handshake com a API da Meta e imgBB para validar as chaves.
+### Fase 2: Simulação Headless (Concluído)
+- [x] Ajustar `get_meli_affiliate_link.js` para usar `headless: true`.
+- [x] Executar testes de extração e validar persistência de login no Mercado Livre.
 
-### Fase 3: Arquitetura (Construção das Camadas)
-- [ ] Criar POP técnico em `directives/instagram_publishing_sop.md`.
-- [ ] Implementar script determinístico `execution/publish_story.js` para upload e publicação.
-- [ ] Adicionar rota `POST /api/publish` em `server.js` conectando o backend ao script de execução.
-
-### Fase 4: Estilo (Refinamento & UI)
-- [ ] Modificar o frontend do painel (`public/index.html` e `public/app.js`) para incluir botões de publicação e feedback visual de loading/sucesso.
-
-### Fase 5: Gatilho (Implantação & Testes Finais)
-- [ ] Testar fluxo ponta a ponta com stories reais gerados.
-- [ ] Adicionar notas de manutenção ao `GEMINI.md`.
+### Fase 3: Desativação do Instagram (Concluído)
+- [x] Manter scripts da API do Instagram e imgBB inativos (dormentes).
+- [x] Limpar botões de publicação no Instagram na UI do frontend (`index.html` e `app.js`).
 
 ---
 

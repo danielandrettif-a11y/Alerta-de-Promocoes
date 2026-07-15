@@ -195,96 +195,7 @@ function finishProgressModal(success) {
   }
 }
 
-async function publishSingleStory(filename) {
-  showProgressModal(`Publicando: ${filename}`);
-  addProgressLog(`Iniciando publicação de ${filename}...`);
-  addProgressLog('Fazendo upload da imagem no imgBB...');
-
-  try {
-    const response = await fetch('/api/publish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename })
-    });
-    const data = await response.json();
-
-    if (data.success) {
-      addProgressLog('Upload concluído!', 'success');
-      addProgressLog('Container criado na Meta!', 'success');
-      addProgressLog('Story publicado no Instagram!', 'success');
-      finishProgressModal(true);
-    } else {
-      addProgressLog(`Erro: ${data.error}`, 'error');
-      finishProgressModal(false);
-    }
-  } catch (err) {
-    addProgressLog(`Erro de rede: ${err.message}`, 'error');
-    finishProgressModal(false);
-  }
-}
-
-async function publishAllStories() {
-  showProgressModal('Publicando todos os stories no Instagram');
-  addProgressLog('Iniciando publicação em lote...');
-  addProgressLog('Isso pode levar alguns minutos dependendo do número de stories.');
-
-  try {
-    const response = await fetch('/api/publish-all-pending', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const data = await response.json();
-
-    if (data.success) {
-      addProgressLog(data.message, 'success');
-      finishProgressModal(true);
-    } else {
-      addProgressLog(`Erro: ${data.error}`, 'error');
-      finishProgressModal(false);
-    }
-  } catch (err) {
-    addProgressLog(`Erro de rede: ${err.message}`, 'error');
-    finishProgressModal(false);
-  }
-}
-
-async function triggerAutoRun() {
-  const count = 3;
-
-  if (!confirm(`A automação vai selecionar as TOP ${count} ofertas com maior desconto, gerar os stories e publicar no Instagram automaticamente.\n\nDeseja continuar?`)) {
-    return;
-  }
-
-  showProgressModal('\ud83e\udd16 Automação Inteligente em execução');
-  addProgressLog('Analisando ofertas do dia...');
-  addProgressLog(`Selecionando as ${count} melhores ofertas não publicadas...`);
-  addProgressLog('Gerando imagens dos stories...');
-  addProgressLog('Publicando no Instagram...');
-  addProgressLog('Este processo pode levar alguns minutos. Aguarde...');
-
-  try {
-    const response = await fetch('/api/auto-run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count })
-    });
-    const data = await response.json();
-
-    if (data.success) {
-      addProgressLog(data.message, 'success');
-      finishProgressModal(true);
-      // Atualiza a galeria de stories
-      fetchGeneratedStories();
-    } else {
-      addProgressLog(`Erro: ${data.error}`, 'error');
-      if (data.output) addProgressLog(data.output, 'warning');
-      finishProgressModal(false);
-    }
-  } catch (err) {
-    addProgressLog(`Erro de rede: ${err.message}`, 'error');
-    finishProgressModal(false);
-  }
-}
+// Funcoes de publicacao no Instagram removidas. A postagem passa a ser manual.
 
 // ==========================================
 // Rendering Methods
@@ -795,7 +706,6 @@ function renderStories(stories) {
         <span class="story-title" title="${story.filename}">${story.filename}</span>
         <div class="story-actions">
           <a href="${story.url}" download="${story.filename}" class="btn-download-icon">Salvar 📥</a>
-          <button class="btn-publish-story-card" data-filename="${story.filename}" title="Publicar este story no Instagram">📸</button>
         </div>
       </div>
     `;
@@ -803,12 +713,6 @@ function renderStories(stories) {
     // Modal zoom click
     card.querySelector('.story-preview-box').addEventListener('click', () => {
       openLightbox(story.url, story.filename);
-    });
-
-    // Publish single story from card
-    card.querySelector('.btn-publish-story-card').addEventListener('click', (e) => {
-      e.stopPropagation();
-      publishSingleStory(story.filename);
     });
     
     elGridStories.appendChild(card);
@@ -974,34 +878,6 @@ function init() {
       closeLightbox();
     }
   });
-
-  // Publish single from lightbox
-  const elBtnPublishSingle = document.getElementById('btn-publish-single');
-  if (elBtnPublishSingle) {
-    elBtnPublishSingle.addEventListener('click', () => {
-      const filename = elBtnPublishSingle.dataset.filename;
-      if (filename) {
-        closeLightbox();
-        publishSingleStory(filename);
-      }
-    });
-  }
-
-  // Publish all stories button
-  const elBtnPublishAll = document.getElementById('btn-publish-all');
-  if (elBtnPublishAll) {
-    elBtnPublishAll.addEventListener('click', () => {
-      if (confirm('Deseja publicar TODOS os stories gerados no Instagram?')) {
-        publishAllStories();
-      }
-    });
-  }
-
-  // Auto Run button
-  const elBtnAutoRun = document.getElementById('btn-auto-run');
-  if (elBtnAutoRun) {
-    elBtnAutoRun.addEventListener('click', triggerAutoRun);
-  }
 
   // Fetch initial content
   fetchDeals();
