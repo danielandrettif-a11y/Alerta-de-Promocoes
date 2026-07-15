@@ -1,0 +1,140 @@
+/**
+ * execution/get_meli_affiliate_link.js
+ * ─────────────────────────────────────────────────────────────────
+ * Camada 3 — Execução (Determinística)
+ *
+ * Acessa um link de produto do Mercado Livre com a sessão ativa
+ * e extrai o link encurtado de afiliado (meli.la) gerado no modal.
+ *
+ * Uso:
+ *   node execution/get_meli_affiliate_link.js <product_url>
+ */
+
+const fs = require('fs');
+const path = require('path');
+const puppeteer = require('puppeteer-core');
+
+function findBrowserPath() {
+  const possiblePaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    path.join(process.env.USERPROFILE || 'C:\\Users\\danie', 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+  ];
+
+  for (const executablePath of possiblePaths) {
+    if (fs.existsSync(executablePath)) {
+      return executablePath;
+    }
+  }
+  return null;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const productUrl = args[0];
+  const customOutputPath = args[1]; // Caminho customizado opcional para evitar concorrência
+
+  if (!productUrl) {
+    console.error('❌ Erro: URL do produto nao especificada.');
+    console.error('Uso: node execution/get_meli_affiliate_link.js <URL> [caminho_output]');
+    process.exit(1);
+  }
+
+  const browserPath = findBrowserPath();
+  const userDataDir = path.join(__dirname, '..', '.tmp', 'ml_user_data');
+
+  if (!fs.existsSync(userDataDir)) {
+    console.error('❌ Erro: Pasta de sessao .tmp/ml_user_data nao encontrada. Faça o login primeiro.');
+    process.exit(1);
+  }
+
+  console.log(`📡 Abrindo navegador para extrair link de afiliado...`);
+  const browser = await puppeteer.launch({
+    executablePath: browserPath,
+    headless: false, // Visível para evitar bloqueios anti-bot do Mercado Livre
+    userDataDir: userDataDir,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1366, height: 768 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+    console.log(`🔗 Navegando para o produto: ${productUrl}`);
+    await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+    console.log('⏳ Aguardando a barra de afiliados (#stripe)...');
+    await page.waitForSelector('#stripe', { timeout: 15000 });
+    await new Promise(r => setTimeout(r, 1000)); // Espera apenas 1s para o widget se assentar
+
+    console.log('🔍 Localizando botao "Compartilhar" na barra...');
+    const buttonInfo = await page.evaluate(() => {
+      const stripe = document.querySelector('#stripe');
+      if (!stripe) return null;
+      
+      const elements = Array.from(stripe.querySelectorAll('button, a, div, span'));
+      const shareBtn = elements.find(el => el.textContent?.trim() === 'Compartilhar');
+      
+      if (!shareBtn) return null;
+      
+      const rect = shareBtn.getBoundingClientRect();
+      return {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height
+      };
+    });
+
+    if (!buttonInfo) {
+      throw new Error('Botao "Compartilhar" nao encontrado no DOM da barra.');
+    }
+
+    const clickX = Math.round(buttonInfo.x + buttonInfo.width / 2);
+    const clickY = Math.round(buttonInfo.y + buttonInfo.height / 2);
+    
+    console.log(`🖱️ Clicando no botao nas coordenadas (${clickX}, ${clickY})...`);
+    await page.mouse.click(clickX, clickY);
+
+    console.log('⏳ Aguardando geracao do link...');
+    let affiliateLink = null;
+    const maxAttempts = 30; // 3 segundos limite total (30 * 100ms)
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      affiliateLink = await page.evaluate(() => {
+        const inputs = Array.from(document.querySelectorAll('input, textarea'));
+        for (const input of inputs) {
+          const val = input.value || '';
+          if (val.includes('meli.la') || val.includes('mercadolivre.com')) {
+            return val;
+          }
+        }
+        return null;
+      });
+      if (affiliateLink) break;
+      await new Promise(r => setTimeout(r, 100)); // Espera ativa a cada 100ms
+    }
+
+    if (!affiliateLink) {
+      const debugScreen = path.join(__dirname, '..', '.tmp', 'affiliate_link_error.png');
+      await page.screenshot({ path: debugScreen });
+      throw new Error(`Link de afiliado nao encontrado. Print de erro salvo em .tmp/affiliate_link_error.png`);
+    }
+
+    console.log(`\n💚 LINK DE AFILIADO ENCONTRADO: ${affiliateLink}\n`);
+    
+    // Escreve no caminho customizado ou no padrão
+    const outputPath = customOutputPath || path.join(__dirname, '..', '.tmp', 'last_affiliate_link.txt');
+    fs.writeFileSync(outputPath, affiliateLink, 'utf-8');
+    
+  } catch (err) {
+    console.error('❌ Erro durante a execucao:', err.message);
+    process.exit(1);
+  } finally {
+    await browser.close();
+  }
+}
+
+main().catch(console.error);

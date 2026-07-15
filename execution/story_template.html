@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Story Template</title>
+  <!-- Google Fonts: Montserrat e Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Definição de Variáveis por Tema de Oferta (Azul, Amarelo e Vermelho Fraco) */
+    :root {
+      /* Tema Padrão: Oferta do Dia (Amarelo de Atenção) */
+      --bg-color-start: #faf0d2;     /* Amarelo manteiga pastel */
+      --bg-color-end: #f4e3b5;
+      --accent-color: #1e150a;       /* Marrom super escuro / Quase preto */
+      --accent-text: #ffffff;
+      --shadow-color: rgba(30, 21, 10, 0.12);
+      --text-muted: #6e5f4f;
+      --badge-border: rgba(30, 21, 10, 0.12);
+    }
+
+    /* Tema: Ofertas de Campanha (Frio - Azul Suave) */
+    body.theme-camp {
+      --bg-color-start: #dbe7fc;     /* Azul bebê/cinzento pastel */
+      --bg-color-end: #c4d7f7;
+      --accent-color: #0c2340;       /* Azul marinho profundo */
+      --accent-text: #ffffff;
+      --shadow-color: rgba(12, 35, 64, 0.12);
+      --text-muted: #536985;
+      --badge-border: rgba(12, 35, 64, 0.12);
+    }
+
+    /* Tema: Oferta Relâmpago (Urgência - Vermelho Fraco / Rosa) */
+    body.theme-lightning {
+      --bg-color-start: #fcdbd9;     /* Vermelho fraco / Rosa pastel */
+      --bg-color-end: #f7bec0;
+      --accent-color: #8c1d20;       /* Vermelho escuro carmesim */
+      --accent-text: #ffffff;
+      --shadow-color: rgba(140, 29, 32, 0.12);
+      --text-muted: #825254;
+      --badge-border: rgba(140, 29, 32, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 1080px;
+      height: 1920px;
+      background: linear-gradient(180deg, var(--bg-color-start) 0%, var(--bg-color-end) 100%);
+      font-family: 'Outfit', sans-serif;
+      color: var(--accent-color);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 95px 65px;
+      transition: background 0.3s ease;
+    }
+
+    /* Elementos tipográficos de fundo elegantes (Editorial Style) */
+    .bg-text-left {
+      position: absolute;
+      left: -80px;
+      top: 25%;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 110px;
+      font-weight: 900;
+      color: rgba(14, 14, 14, 0.01);
+      -webkit-text-stroke: 1.5px rgba(14, 14, 14, 0.03);
+      letter-spacing: 15px;
+      z-index: 1;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    .bg-text-right {
+      position: absolute;
+      right: -80px;
+      bottom: 25%;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 110px;
+      font-weight: 900;
+      color: rgba(14, 14, 14, 0.01);
+      -webkit-text-stroke: 1.5px rgba(14, 14, 14, 0.03);
+      letter-spacing: 15px;
+      z-index: 1;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    /* Header - Nome da Página (Fonte Montserrat Modificada) */
+    .header {
+      z-index: 10;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .page-handle {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 34px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      color: var(--accent-color);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .page-handle::before, .page-handle::after {
+      content: '';
+      display: inline-block;
+      width: 25px;
+      height: 4px;
+      background-color: var(--accent-color);
+    }
+
+    .header-tagline {
+      font-size: 20px;
+      color: var(--text-muted);
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    /* Card Central */
+    .card {
+      width: 100%;
+      height: 1150px;
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 45px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 3px solid var(--accent-color);
+      box-shadow: 20px 20px 0px var(--shadow-color);
+      position: relative;
+    }
+
+    /* Floating Discount Badge (Editorial Style Ticket) */
+    .discount-badge {
+      position: absolute;
+      top: -30px;
+      right: 40px;
+      background: var(--accent-color);
+      color: var(--accent-text);
+      font-family: 'Montserrat', sans-serif;
+      font-size: 44px;
+      font-weight: 900;
+      padding: 12px 30px;
+      border-radius: 0;
+      z-index: 20;
+      letter-spacing: -0.5px;
+      border: 2px solid #ffffff;
+      box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Product Image Container (Seamless Integration) */
+    .image-container {
+      width: 100%;
+      height: 540px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 15px;
+      border-bottom: 2px solid rgba(14, 14, 14, 0.08);
+    }
+
+    .product-image {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    /* Product Details */
+    .product-details {
+      margin-top: 25px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 15px;
+    }
+
+    /* Row of badges */
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .tag-badge {
+      padding: 6px 14px;
+      border-radius: 0;
+      font-size: 17px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .badge-rating {
+      background: #ffffff;
+      border: 1.5px solid var(--accent-color);
+      color: var(--accent-color);
+    }
+
+    .badge-sales {
+      background: #ffffff;
+      border: 1.5px solid var(--accent-color);
+      color: var(--accent-color);
+    }
+
+    /* Badges sólidas e limpas de envio */
+    .badge-full {
+      background: var(--accent-color);
+      color: var(--accent-text);
+      font-weight: 800;
+      border: 1.5px solid var(--accent-color);
+    }
+
+    .badge-free-shipping {
+      background: var(--accent-color);
+      color: var(--accent-text);
+      font-weight: 800;
+      border: 1.5px solid var(--accent-color);
+    }
+
+    .hide-shipping {
+      display: none !important;
+    }
+
+    .product-title {
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1.45;
+      color: var(--accent-color);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    /* Pricing Section */
+    .price-section {
+      border-top: 2px solid var(--accent-color);
+      padding-top: 25px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .price-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .original-price-label {
+      font-size: 17px;
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .original-price {
+      font-size: 42px;
+      color: var(--text-muted);
+      text-decoration: line-through;
+      font-weight: 600;
+    }
+
+    .promo-price-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      text-align: right;
+    }
+
+    .price-label {
+      font-size: 20px;
+      color: var(--accent-color);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .current-price-container {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    .current-price {
+      font-size: 96px;
+      font-weight: 900;
+      font-family: 'Montserrat', sans-serif;
+      letter-spacing: -2px;
+      color: var(--accent-color);
+    }
+
+    /* Faixa Transversal (Ribbon) no canto superior esquerdo do Card */
+    .deal-ribbon {
+      position: absolute;
+      top: 35px;
+      left: -12px;
+      color: var(--accent-text);
+      font-family: 'Montserrat', sans-serif;
+      font-size: 18px;
+      font-weight: 900;
+      padding: 8px 20px 8px 25px;
+      border-radius: 0;
+      z-index: 15;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      background: var(--accent-color);
+      border: 1.5px solid #ffffff;
+      box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Detalhe de dobra para o ribbon */
+    .deal-ribbon::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: -10px;
+      width: 0;
+      height: 0;
+      border-top: 10px solid #000000;
+      border-left: 10px solid transparent;
+    }
+
+    /* Pílula de Tempo Restante */
+    .badge-time {
+      background: #ffffff;
+      border: 1.5px solid var(--accent-color);
+      color: var(--accent-color);
+      font-weight: 800;
+    }
+
+    .hide-time {
+      display: none !important;
+    }
+
+    /* Footer / Call to Action */
+    .footer {
+      width: 100%;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .cta-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .cta-text {
+      font-size: 32px;
+      font-weight: 900;
+      color: var(--accent-color);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-align: center;
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .cta-subtext {
+      font-size: 22px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Area limpa invisivel de espacamento para colar o sticker do Instagram */
+    .sticker-placement-area {
+      width: 440px;
+      height: 110px;
+      background: transparent;
+      border: none;
+      margin-top: 5px;
+      position: relative;
+    }
+
+    .arrow-down {
+      width: 0;
+      height: 0;
+      border-left: 16px solid transparent;
+      border-right: 16px solid transparent;
+      border-top: 20px solid var(--accent-color);
+      animation: bounce 1.2s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(8px); }
+    }
+  </style>
+</head>
+<body class="{{THEME_CLASS}}">
+
+  <!-- Background decorative text outlines -->
+  <div class="bg-text-left">Alerta de Descontos</div>
+  <div class="bg-text-right">Ofertas Editoriais</div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="page-handle">Alerta de Descontos</div>
+    <div class="header-tagline">Curadoria diária de promoções</div>
+  </div>
+
+  <!-- Main Card -->
+  <div class="card">
+    <!-- Deal Ribbon (Faixa de Tipo de Oferta) -->
+    <div class="deal-ribbon">
+      {{DEAL_TYPE}}
+    </div>
+
+    <!-- Discount Badge -->
+    <div class="discount-badge">
+      {{DISCOUNT}}% OFF
+    </div>
+
+    <!-- Product Image -->
+    <div class="image-container">
+      <img class="product-image" src="{{IMAGE_URL}}" alt="{{TITLE}}" onerror="this.src='https://http2.mlstatic.com/frontend-assets/ml-web-navigation/navigation-assets/v5/logo__large@2x.png'; this.style.objectFit='contain';">
+    </div>
+
+    <!-- Product Details -->
+    <div class="product-details">
+      <!-- Badge Row -->
+      <div class="badge-row">
+        <div class="tag-badge badge-rating">⭐ {{RATING}}</div>
+        <div class="tag-badge badge-sales" id="sales-badge">{{SALES_INFO}}</div>
+        <div class="tag-badge {{SHIPPING_CLASS}}" id="shipping-badge">{{SHIPPING_TEXT}}</div>
+        <div class="tag-badge badge-time {{TIME_LEFT_CLASS}}" id="time-badge">⏳ {{TIME_LEFT_TEXT}}</div>
+      </div>
+      
+      <!-- Title -->
+      <h1 class="product-title">{{TITLE}}</h1>
+    </div>
+
+    <!-- Pricing (Original Price Left, Promo Price Right) -->
+    <div class="price-section">
+      <div class="price-left">
+        <span class="original-price-label">Preço original</span>
+        <div class="original-price">{{ORIGINAL_PRICE}}</div>
+      </div>
+      <div class="promo-price-wrapper">
+        <span class="price-label">Por apenas:</span>
+        <div class="current-price-container">
+          <span class="current-price">{{CURRENT_PRICE}}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer / Call to Action -->
+  <div class="footer">
+    <div class="arrow-down"></div>
+    <div class="cta-container">
+      <div class="cta-text">Toque no Link para Comprar</div>
+      <div class="cta-subtext">Estoque limitado com esse valor!</div>
+      <!-- Area limpa e harmônica para colar o sticker de link por cima -->
+      <div class="sticker-placement-area"></div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const salesBadge = document.getElementById("sales-badge");
+      if (salesBadge) {
+        let text = salesBadge.textContent.trim();
+        text = text.replace(/produtos vendidos\.?/gi, 'vendidos')
+                   .replace(/mais de/gi, '+')
+                   .replace(/vendido\.?/gi, 'vendido');
+        
+        if (text === "" || text === "0" || text.includes("null") || text.includes("N/A")) {
+          salesBadge.style.display = "none";
+        } else {
+          salesBadge.innerHTML = '🔥 ' + text;
+        }
+      }
+    });
+  </script>
+</body>
+</html>

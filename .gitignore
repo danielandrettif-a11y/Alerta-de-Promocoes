@@ -1,0 +1,20 @@
+# Dependências
+node_modules/
+
+# Arquivos temporários e de sessão (Segurança!)
+.tmp/
+.wwebjs_auth/
+.wwebjs_cache/
+.env
+
+# Mídias pesadas
+*.gif
+*.mp4
+*.webp
+
+# Rascunhos e scripts temporários
+scratch/
+scratch_script_*.js
+tools/
+.claude/
+.agents/
