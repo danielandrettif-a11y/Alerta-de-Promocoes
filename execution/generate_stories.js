@@ -158,23 +158,32 @@ async function main() {
       // Abre o arquivo local no Chrome
       const fileUrl = `file:///${tempHtmlPath.replace(/\\/g, '/')}`;
       
-      // Carrega o arquivo e espera recursos terminarem de carregar
-      await page.goto(fileUrl, { waitUntil: 'networkidle0' });
+      try {
+        // Carrega o arquivo e espera o DOM ser carregado para evitar travar em conexões de fontes/imagens pendentes
+        await page.goto(fileUrl, { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 10000 
+        });
 
-      // Timeout de segurança para fontes e imagens carregarem completamente
-      await new Promise(r => setTimeout(r, 1200));
+        // Timeout de segurança para fontes e imagens carregarem completamente
+        await new Promise(r => setTimeout(r, 2000));
 
-      // Salva o screenshot na pasta stories
-      const filename = `story_${rank}_discount_${deal.discount}.jpg`;
-      const outputImagePath = path.join(storiesDir, filename);
+        // Salva o screenshot na pasta stories
+        const filename = `story_${rank}_discount_${deal.discount}.jpg`;
+        const outputImagePath = path.join(storiesDir, filename);
 
-      await page.screenshot({
-        path: outputImagePath,
-        type: 'jpeg',
-        quality: 90
-      });
+        await page.screenshot({
+          path: outputImagePath,
+          type: 'jpeg',
+          quality: 90
+        });
 
-      await page.close();
+        console.log(`  ✓ Story salvo em: ${path.join('stories', filename)}`);
+      } catch (pageErr) {
+        console.error(`  ❌ Erro ao capturar imagem do Story para o item ${rank}: ${pageErr.message}`);
+      } finally {
+        await page.close();
+      }
 
       // Deleta arquivo HTML temporário
       try {

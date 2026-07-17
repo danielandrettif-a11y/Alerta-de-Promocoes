@@ -1,0 +1,131 @@
+/**
+ * execution/category_helper.js
+ * ─────────────────────────────────────────────────────────────────
+ * Camada 3 — Execução (Módulo Utilitário Determinístico)
+ *
+ * Centraliza a taxonomia de categorias, subcategorias, emojis e 
+ * regras de inferência por palavras-chave para o Mercado Livre e Amazon.
+ */
+
+const TAXONOMY = {
+  'Eletrônicos e Tecnologia': {
+    icon: '💻',
+    subcategories: {
+      'Celulares e Smartphones': ['smartphone', 'celular', 'iphone', 'motorola', 'samsung', 'xiaomi', 'redmi', 'telef', 'poco'],
+      'Computadores e Notebooks': ['notebook', 'laptop', 'computador', 'pc gamer', 'macbook', 'ipad', 'tablet', 'monitor', 'impressora'],
+      'Fones de Ouvido e Som': ['fone', 'headset', 'caixa de som', 'alexa', 'jbl', 'bluetooth', 'earbuds', 'headphone', 'soundbar'],
+      'Smartwatches e Relógios': ['smartwatch', 'relogio', 'watch', 'mi band', 'pulseira inteligente'],
+      'Acessórios e Periféricos': ['teclado', 'mouse', 'cabo', 'carregador', 'pendrive', 'hd externo', 'ssd', 'roteador', 'filtro de linha', 'webcam']
+    }
+  },
+  'Casa, Cozinha e Eletrodomésticos': {
+    icon: '🏠',
+    subcategories: {
+      'Eletrodomésticos Grandes': ['geladeira', 'fogao', 'lavadora', 'lava e seca', 'secadora', 'microondas', 'ar condicionado', 'ventilador', 'aspirador', 'climatizador', 'freezer'],
+      'Eletroportáteis': ['airfryer', 'fritadeira', 'cafeteira', 'liquidificador', 'batedeira', 'sanduicheira', 'grill', 'chapa', 'espremedor', 'mixer', 'panela eletrica', 'chaleira eletrica'],
+      'Utensílios de Cozinha': ['panela', 'frigideira', 'faca', 'garfo', 'colher', 'copo', 'prato', 'chaleira', 'assadeira', 'pote', 'tábua', 'escorredor', 'abridor'],
+      'Cama, Mesa, Banho e Decoração': ['lençol', 'toalha', 'travesseiro', 'almofada', 'cortina', 'tapete', 'luminaria', 'quadro', 'espelho', 'organizador', 'manta', 'cobertor']
+    }
+  },
+  'Saúde, Fitness e Esportes': {
+    icon: '💪',
+    subcategories: {
+      'Suplementos e Creatinas': ['creatina', 'whey', 'proteina', 'suplemento', 'caps', 'omega', 'vitamina', 'colageno', 'termogenico', 'pre treino', 'bcaa', 'glutamina'],
+      'Roupas e Calçados Esportivos': ['camisa dry fit', 'shorts academia', 'legging', 'tenis corrida', 'meia esportiva', 'top fitness'],
+      'Equipamentos de Treino': ['halter', 'colchonete', 'elastico', 'caneleira', 'barra', 'esteira', 'bicicleta ergometrica', 'corda de pular', 'anilhas'],
+      'Bike e Lazer': ['bicicleta', 'bike', 'capacete', 'patinete', 'skate', 'mochila hidratação', 'barraca', 'saco de dormir']
+    }
+  },
+  'Beleza e Cuidados Pessoais': {
+    icon: '✨',
+    subcategories: {
+      'Perfumaria': ['perfume', 'fragrancia', 'colonia', 'body splash', 'eau de parfum'],
+      'Cuidados com Cabelo': ['shampoo', 'condicionador', 'mascara capilar', 'oleo capilar', 'secador', 'chapinha', 'modelador', 'maquina de cortar cabelo', 'barbeador'],
+      'Skincare e Maquiagem': ['protetor solar', 'hidratante facial', 'sabonete liquido', 'base', 'batom', 'rimel', 'delineador', 'serum', 'anti-idade', 'paleta de sombras'],
+      'Higiene Diária': ['desodorante', 'sabonete', 'creme dental', 'escova de dentes', 'fio dental', 'aparelho de barbear', 'absorvente', 'enxaguante']
+    }
+  },
+  'Moda e Acessórios': {
+    icon: '👗',
+    subcategories: {
+      'Calçados': ['tenis', 'sapato', 'sandalia', 'chinelo', 'bota', 'sapatilha', 'crocs', 'rasteirinha'],
+      'Roupas Masculinas': ['camiseta masculina', 'camisa polo', 'calça jeans masculina', 'bermuda', 'cueca', 'casaco masculino', 'jaqueta'],
+      'Roupas Femininas': ['vestido', 'blusa', 'calça jeans feminina', 'saia', 'lingerie', 'body', 'biquini', 'casaco feminino'],
+      'Bolsas e Mochilas': ['mochila', 'bolsa', 'carteira', 'mala de viagem', 'necessaire', 'pochete']
+    }
+  },
+  'Games e Consoles': {
+    icon: '🎮',
+    subcategories: {
+      'Consoles': ['playstation', 'ps5', 'nintendo switch', 'xbox', 'console', 'ps4'],
+      'Jogos': ['game', 'jogo', 'midia fisica', 'zelda', 'mario', 'fifa', 'gta', 'resident evil', 'elden ring'],
+      'Acessórios Gamer': ['controle ps5', 'dualshock', 'headset gamer', 'cadeira gamer', 'mouse gamer', 'teclado mecanico', 'joycon', 'mousepad gamer']
+    }
+  },
+  'Bebidas e Alimentos': {
+    icon: '🍻',
+    subcategories: {
+      'Destilados e Cervejas': ['whisky', 'whiskey', 'gin', 'vodka', 'cerveja', 'chope', 'rum', 'licor', 'tequila', 'cachaça'],
+      'Vinhos e Espumantes': ['vinho', 'espumante', 'champagne', 'cabernet', 'malbec', 'chardonnay', 'merlot'],
+      'Alimentos e Cafés': ['cafe em grao', 'capsula cafe', 'chocolate', 'snack', 'azeite', 'doce', 'barra de cereal', 'biscoito', 'macarrão']
+    }
+  },
+  'Ferramentas e Construção': {
+    icon: '🛠️',
+    subcategories: {
+      'Ferramentas Elétricas': ['parafusadeira', 'furadeira', 'serra', 'esmerilhadeira', 'lixadeira', 'soprador'],
+      'Ferramentas Manuais': ['chave de fenda', 'alicate', 'martelo', 'trena', 'maleta de ferramentas', 'nivel bolha'],
+      'Jardim e Reparos': ['mangueira', 'lavadora de alta pressao', 'fita isolante', 'cola', 'lampada led', 'refletor', 'organizador de ferramentas']
+    }
+  }
+};
+
+/**
+ * Infere a categoria e subcategoria a partir do título do produto.
+ * @param {string} title Título do produto
+ * @returns {object} { category, subcategory, icon }
+ */
+function inferCategoryAndSub(title) {
+  if (!title) {
+    return {
+      category: 'Ofertas Gerais',
+      subcategory: 'Outros',
+      icon: '🛍️'
+    };
+  }
+
+  const cleanTitle = title.toLowerCase();
+
+  // Varre a taxonomia buscando a palavra-chave no título
+  for (const [catName, catData] of Object.entries(TAXONOMY)) {
+    for (const [subName, keywords] of Object.entries(catData.subcategories)) {
+      for (const keyword of keywords) {
+        if (cleanTitle.includes(keyword)) {
+          // Exceções e refinamentos específicos para termos ambíguos:
+          if (keyword === 'cola' && cleanTitle.includes('colageno')) continue; // colágeno é suplemento
+          if (keyword === 'cabo' && cleanTitle.includes('cabernet')) continue; // Cabernet é vinho
+          if (keyword === 'barra' && cleanTitle.includes('barra de cereal')) continue; // barra de cereal é alimentos
+          if (keyword === 'game' && cleanTitle.includes('cadeira gamer')) continue; // cadeira gamer é acessório gamer
+          
+          return {
+            category: catName,
+            subcategory: subName,
+            icon: catData.icon
+          };
+        }
+      }
+    }
+  }
+
+  // Fallback se não bater com nenhuma regra
+  return {
+    category: 'Ofertas Gerais',
+    subcategory: 'Outros',
+    icon: '🛍️'
+  };
+}
+
+module.exports = {
+  TAXONOMY,
+  inferCategoryAndSub
+};

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Painel de controle para gerenciar ofertas, cupons do Mercado Livre e automatizar a geração de Stories para Instagram.">
-  <title>Promo Automator | Painel de Controle de Stories e Afiliados</title>
+  <meta name="description" content="Painel de controle simplificado para buscar ofertas do Mercado Livre/Shopee, cupons diários e gerar Stories diretamente no navegador para enviar ao WhatsApp.">
+  <title>Promo Automator | Painel de Controle de Ofertas e Stories</title>
   
   <!-- Google Fonts: Outfit & Montserrat -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   
   <!-- CSS Link -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
   <header class="main-header">
     <div class="logo-area">
       <h1 class="logo-title">PROMO AUTOMATOR <span class="badge-neon">⚡</span></h1>
-      <p class="logo-subtitle">Automação de Promoções & Stories para Afiliados</p>
+      <p class="logo-subtitle">Painel de Automação de Ofertas & Geração de Stories Locais</p>
     </div>
     
     <div class="status-area">
@@ -42,38 +42,38 @@
 
   <!-- Navigation Tabs -->
   <nav class="navigation-tabs" role="tablist">
-    <button id="btn-tab-deals" class="tab-button active" role="tab" aria-selected="true" aria-controls="panel-deals">
-      🛍️ Ofertas do Dia
+    <button id="btn-tab-ml" class="tab-button active" role="tab" aria-selected="true" aria-controls="panel-ml">
+      🛍️ Mercado Livre
+    </button>
+    <button id="btn-tab-amazon" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-amazon">
+      🟡 Amazon
     </button>
     <button id="btn-tab-coupons" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-coupons">
-      🎟️ Cupons de Desconto
-    </button>
-    <button id="btn-tab-stories" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-stories">
-      🖼️ Stories Gerados
+      🎟️ Cupons do Dia
     </button>
   </nav>
 
   <main class="dashboard-content">
     
-    <!-- Tab 1: Deals Panel -->
-    <section id="panel-deals" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-deals">
+    <!-- Tab 1: Mercado Livre Panel -->
+    <section id="panel-ml" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-ml">
       <div class="control-bar">
         <div class="selection-actions">
           <label class="checkbox-container">
-            <input type="checkbox" id="chk-select-all">
+            <input type="checkbox" id="chk-select-all-ml">
             <span class="checkmark"></span>
             Selecionar Todos
           </label>
-          <button id="btn-clear-selection" class="btn-secondary" disabled>
+          <button id="btn-clear-selection-ml" class="btn-secondary" disabled>
             Limpar Seleção
           </button>
         </div>
         <div class="primary-actions">
-          <button id="btn-update-deals" class="btn-refresh">
-            <span class="icon-sync">🔄</span> Atualizar Ofertas
+          <button id="btn-update-ml" class="btn-refresh">
+            <span class="icon-sync">🔄</span> Atualizar Mercado Livre
           </button>
-          <button id="btn-generate-stories" class="btn-cta" disabled>
-            Gerar Stories Selecionados (<span id="txt-selected-count">0</span>) 🚀
+          <button id="btn-generate-ml" class="btn-cta" disabled>
+            Postar no WhatsApp (<span id="txt-selected-count-ml">0</span>) 🚀
           </button>
         </div>
       </div>
@@ -82,116 +82,135 @@
       <div class="filter-bar">
         <div class="filter-group search-filter">
           <span class="filter-icon">🔍</span>
-          <input type="text" id="ipt-filter-name" placeholder="Buscar por nome do produto (ex: televisão)..." title="Buscar por nome do produto">
+          <input type="text" id="ipt-filter-name-ml" placeholder="Buscar nas ofertas do Mercado Livre..." title="Buscar produtos">
         </div>
         <div class="filter-group category-filter">
           <span class="filter-icon">🏷️</span>
-          <select id="sel-filter-category" class="select-premium" title="Filtrar por categoria">
+          <select id="sel-filter-category-ml" class="select-premium" title="Filtrar por categoria">
             <option value="">Todas as Categorias</option>
-            <option value="tecnologia">Eletrônicos & Tecnologia</option>
-            <option value="eletrodomesticos">Eletrodomésticos & Utilidades</option>
-            <option value="academia_dieta">Saúde & Suplementos</option>
-            <option value="beleza_higiene">Beleza & Cuidados Pessoais</option>
-            <option value="casa_construcao">Casa & Ferramentas</option>
-            <option value="outros">Outros & Variedades</option>
+          </select>
+        </div>
+        <div class="filter-group subcategory-filter">
+          <span class="filter-icon">📂</span>
+          <select id="sel-filter-subcategory-ml" class="select-premium" title="Filtrar por subcategoria" disabled>
+            <option value="">Todas as Subcategorias</option>
           </select>
         </div>
         <div class="filter-group discount-filter">
           <span class="filter-icon">📉</span>
-          <select id="sel-filter-discount" class="select-premium" title="Filtrar por desconto mínimo">
+          <select id="sel-filter-discount-ml" class="select-premium" title="Filtrar por desconto">
             <option value="">Qualquer desconto</option>
             <option value="30">30% OFF ou mais</option>
             <option value="40">40% OFF ou mais</option>
             <option value="50">50% OFF ou mais</option>
-            <option value="60">60% OFF ou mais</option>
-          </select>
-        </div>
-        <div class="filter-group deal-type-filter">
-          <span class="filter-icon">⚡</span>
-          <select id="sel-filter-deal-type" class="select-premium" title="Filtrar por tipo de oferta">
-            <option value="">Todos os tipos</option>
-            <option value="Oferta Relâmpago">Oferta Relâmpago</option>
-            <option value="Oferta do Dia">Oferta do Dia</option>
-            <option value="Ofertas de Campanha">Ofertas de Campanha</option>
           </select>
         </div>
       </div>
 
-      <!-- Deals Grid -->
-      <div id="grid-deals" class="grid-layout">
-        <!-- Rendered dynamically by JavaScript -->
+      <!-- Grid -->
+      <div id="grid-ml" class="grid-layout">
         <div class="empty-state">
-          <p>Nenhuma oferta carregada. Clique em "Atualizar Ofertas" para pesquisar no Mercado Livre.</p>
+          <p>Nenhuma oferta carregada. Clique em "Atualizar Mercado Livre" para buscar ofertas.</p>
         </div>
       </div>
     </section>
 
-    <!-- Tab 2: Coupons Panel -->
-    <section id="panel-coupons" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-coupons">
-      <div class="control-bar-coupons">
-        <div class="control-bar-header">
-          <h2 class="section-title">🎟️ Cupons de Desconto do Dia</h2>
-          <p class="section-desc">Monitore e copie os cupons ativos coletados e validados automaticamente na internet para seus posts.</p>
+    <!-- Tab 2: Amazon Panel -->
+    <section id="panel-amazon" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-amazon">
+      <div class="control-bar">
+        <div class="selection-actions">
+          <label class="checkbox-container">
+            <input type="checkbox" id="chk-select-all-amazon">
+            <span class="checkmark"></span>
+            Selecionar Todos
+          </label>
+          <button id="btn-clear-selection-amazon" class="btn-secondary" disabled>
+            Limpar Seleção
+          </button>
+        </div>
+        <div class="primary-actions">
+          <button id="btn-update-amazon" class="btn-refresh btn-amazon-refresh">
+            <span class="icon-sync">🔄</span> Atualizar Amazon
+          </button>
+          <button id="btn-generate-amazon" class="btn-cta btn-amazon-cta" disabled>
+            Postar no WhatsApp (<span id="txt-selected-count-amazon">0</span>) 🚀
+          </button>
         </div>
       </div>
 
-      <!-- Coupons Grid -->
+      <!-- Filter Bar -->
+      <div class="filter-bar">
+        <div class="filter-group search-filter">
+          <span class="filter-icon">🔍</span>
+          <input type="text" id="ipt-filter-name-amazon" placeholder="Buscar nas ofertas da Amazon..." title="Buscar produtos">
+        </div>
+        <div class="filter-group category-filter">
+          <span class="filter-icon">🏷️</span>
+          <select id="sel-filter-category-amazon" class="select-premium" title="Filtrar por categoria">
+            <option value="">Todas as Categorias</option>
+          </select>
+        </div>
+        <div class="filter-group subcategory-filter">
+          <span class="filter-icon">📂</span>
+          <select id="sel-filter-subcategory-amazon" class="select-premium" title="Filtrar por subcategoria" disabled>
+            <option value="">Todas as Subcategorias</option>
+          </select>
+        </div>
+        <div class="filter-group discount-filter">
+          <span class="filter-icon">📉</span>
+          <select id="sel-filter-discount-amazon" class="select-premium" title="Filtrar por desconto">
+            <option value="">Qualquer desconto</option>
+            <option value="15">15% OFF ou mais</option>
+            <option value="30">30% OFF ou mais</option>
+            <option value="45">45% OFF ou mais</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Grid -->
+      <div id="grid-amazon" class="grid-layout">
+        <div class="empty-state">
+          <p>Nenhuma oferta carregada. Clique em "Atualizar Amazon" para buscar ofertas.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Coupons Panel -->
+    <section id="panel-coupons" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-coupons">
+      <div class="control-bar-coupons">
+        <div class="control-bar-header">
+          <h2 class="section-title">🎟️ Cupons de Desconto Válidos do Dia</h2>
+          <p class="section-desc">Esses cupons são atualizados automaticamente na internet quando as ofertas do Mercado Livre são atualizadas.</p>
+        </div>
+      </div>
+
+      <!-- Coupons Container -->
       <div id="grid-coupons" class="coupons-container">
-        <!-- Rendered dynamically by JavaScript -->
         <div class="empty-state">
           <p>Nenhum cupom ativo no momento.</p>
         </div>
       </div>
     </section>
 
-    <!-- Tab 3: Stories Panel (Gallery) -->
-    <section id="panel-stories" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-stories">
-      <div class="control-bar">
-        <div>
-          <h2 class="section-title">🖼️ Stories Prontos</h2>
-          <p class="section-desc">Visualização das imagens geradas prontas para download e compartilhamento manual.</p>
-        </div>
-      </div>
-
-      <!-- Stories Gallery -->
-      <div id="grid-stories" class="gallery-layout">
-        <!-- Rendered dynamically by JavaScript -->
-        <div class="empty-state">
-          <p>Nenhum Story gerado ainda. Selecione ofertas na aba anterior e clique em "Gerar Stories".</p>
-        </div>
-      </div>
-    </section>
-
   </main>
-
-  <!-- Lightbox Modal for Story Preview -->
-  <div id="lightbox-modal" class="lightbox-modal hidden" aria-hidden="true" role="dialog">
-    <button id="btn-close-lightbox" class="lightbox-close" aria-label="Fechar">&times;</button>
-    <div class="lightbox-content">
-      <img id="img-lightbox-preview" src="" alt="Visualização do Story">
-      <div class="lightbox-actions">
-        <a id="btn-download-story" href="" download class="btn-cta">Download Image 📥</a>
-      </div>
-    </div>
-  </div>
 
   <!-- Progress Log Modal -->
   <div id="progress-modal" class="progress-modal hidden">
     <div class="progress-modal-content">
       <div class="progress-header">
-        <h3 id="progress-title">Publicando Stories...</h3>
+        <h3 id="progress-title">Postando Stories no WhatsApp...</h3>
         <div class="progress-spinner"></div>
       </div>
       <div id="progress-log" class="progress-log"></div>
-      <button id="btn-close-progress" class="btn-cta hidden" onclick="document.getElementById('progress-modal').classList.add('hidden')">Fechar</button>
+      <button id="btn-close-progress" class="btn-cta" onclick="document.getElementById('progress-modal').classList.add('hidden')">Fechar</button>
     </div>
   </div>
 
   <footer class="main-footer">
-    <p>&copy; 2026 Promo Automator. Desenvolvido para automação rápida de afiliados.</p>
+    <p>&copy; 2026 Promo Automator. Geração de imagens via Canvas & Envio Direto ao WhatsApp.</p>
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

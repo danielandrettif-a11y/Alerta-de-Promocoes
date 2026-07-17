@@ -1594,3 +1594,336 @@ button {
   font-weight: 600;
   margin-top: 1px;
 }
+
+/* ==========================================
+   Estilos Temáticos da Shopee
+   ========================================== */
+.btn-amazon-refresh {
+  background: linear-gradient(135deg, #ff9900 0%, #37475a 100%) !important;
+  box-shadow: 0 4px 15px rgba(255, 153, 0, 0.2) !important;
+  color: #ffffff !important;
+}
+
+.btn-amazon-refresh:hover {
+  background: linear-gradient(135deg, #37475a 0%, #ff9900 100%) !important;
+  box-shadow: 0 6px 20px rgba(255, 153, 0, 0.3) !important;
+}
+
+.btn-amazon-cta {
+  background: linear-gradient(135deg, #ff9900 0%, #131921 100%) !important;
+  box-shadow: 0 4px 15px rgba(255, 153, 0, 0.3) !important;
+}
+
+.btn-amazon-cta:hover:not(:disabled) {
+  background: linear-gradient(135deg, #131921 0%, #ff9900 100%) !important;
+  box-shadow: 0 6px 20px rgba(255, 153, 0, 0.4) !important;
+}
+
+.deal-card.amazon-theme {
+  border: 1px solid rgba(255, 153, 0, 0.1);
+}
+
+.deal-card.amazon-theme:hover {
+  border-color: #ff9900;
+  box-shadow: 0 10px 25px rgba(255, 153, 0, 0.15);
+}
+
+.deal-card.amazon-theme .card-discount-badge {
+  background: linear-gradient(135deg, #ff9900 0%, #ffe600 100%);
+  box-shadow: 0 2px 8px rgba(255, 153, 0, 0.3);
+  color: #111111;
+  font-weight: 800;
+}
+
+.deal-card.amazon-theme .card-link-product {
+  color: #ff9900;
+}
+
+.deal-card.amazon-theme .card-link-product:hover {
+  color: #ffe600;
+}
+
+.deal-card.amazon-theme.selected {
+  border-color: #ff9900;
+  box-shadow: 0 0 20px rgba(255, 153, 0, 0.3), inset 0 0 0 1px #ff9900;
+  background: rgba(255, 153, 0, 0.03);
+}
+
+/* ==========================================
+   Price Comparison Styles (Buscape)
+   ========================================== */
+.price-comparison-area {
+  margin-top: 15px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 10;
+}
+
+.btn-compare-buscape {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-compare-buscape:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border-color: var(--border-hover);
+}
+
+.btn-compare-buscape:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.comparison-results {
+  font-size: 13px;
+  width: 100%;
+}
+
+.comparison-loading {
+  color: var(--text-muted);
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: pulse-loading 1.5s infinite;
+}
+
+@keyframes pulse-loading {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.comp-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+.comparison-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.comp-price-row {
+  color: var(--text-muted);
+}
+
+.comp-price-row strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.comparison-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  width: fit-content;
+}
+
+.badge-real {
+  background: rgba(0, 230, 118, 0.15);
+  color: var(--neon-green);
+  border: 1px solid rgba(0, 230, 118, 0.2);
+}
+
+.badge-eq {
+  background: rgba(0, 176, 255, 0.15);
+  color: #00b0ff;
+  border: 1px solid rgba(0, 176, 255, 0.2);
+}
+
+.badge-alert {
+  background: rgba(255, 153, 0, 0.15);
+  color: #ff9900;
+  border: 1px solid rgba(255, 153, 0, 0.2);
+}
+
+.comparison-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 12px;
+  transition: var(--transition-smooth);
+}
+
+.comparison-link:hover {
+  text-decoration: underline;
+  color: var(--secondary-color);
+}
+
+.comparison-error {
+  color: #e94057;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Layout lado a lado dos 3 buscadores */
+.comparison-providers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  padding-bottom: 10px;
+}
+
+.provider-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 6px 4px;
+  transition: var(--transition-smooth);
+}
+
+.provider-col:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.provider-col.disabled {
+  opacity: 0.4;
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.02);
+}
+
+.provider-name {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.provider-price {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.provider-link {
+  font-size: 9px;
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: var(--transition-smooth);
+}
+
+.provider-link:hover {
+  background: var(--gradient-brand);
+  color: #fff;
+  border-color: transparent;
+}
+
+.comparison-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.manual-links-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+/* Estilos para Ofertas Publicadas no WhatsApp */
+.published-card {
+  border-color: rgba(0, 230, 118, 0.25) !important;
+  background: rgba(0, 230, 118, 0.01) !important;
+}
+
+.published-tick {
+  color: #00e676;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-published-area {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.published-badge {
+  font-size: 10px;
+  color: #00e676;
+  font-weight: 600;
+  background: rgba(0, 230, 118, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 230, 118, 0.1);
+}
+
+.btn-delete-wpp {
+  background: rgba(255, 23, 68, 0.08);
+  color: #ff1744;
+  border: 1px solid rgba(255, 23, 68, 0.15);
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.btn-delete-wpp:hover {
+  background: #ff1744;
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 0 8px rgba(255, 23, 68, 0.3);
+}
+
+.btn-delete-wpp:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

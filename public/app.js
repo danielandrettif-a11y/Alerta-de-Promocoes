@@ -1,39 +1,91 @@
 // State management
-let allDeals = [];
+let allMLDeals = [];
+let allAmazonDeals = [];
 let allCoupons = [];
-const selectedIndices = new Set();
+const selectedMLIndices = new Set();
+const selectedAmazonIndices = new Set();
+let lastUpdateML = '';
+let lastUpdateAmazon = '';
 
-// DOM elements
-const elTabDeals = document.getElementById('btn-tab-deals');
+// DOM elements - Tabs
+const elTabML = document.getElementById('btn-tab-ml');
+const elTabAmazon = document.getElementById('btn-tab-amazon');
 const elTabCoupons = document.getElementById('btn-tab-coupons');
-const elTabStories = document.getElementById('btn-tab-stories');
 
-const elPanelDeals = document.getElementById('panel-deals');
+const elPanelML = document.getElementById('panel-ml');
+const elPanelAmazon = document.getElementById('panel-amazon');
 const elPanelCoupons = document.getElementById('panel-coupons');
-const elPanelStories = document.getElementById('panel-stories');
 
-const elGridDeals = document.getElementById('grid-deals');
+// DOM elements - Grids
+const elGridML = document.getElementById('grid-ml');
+const elGridAmazon = document.getElementById('grid-amazon');
 const elGridCoupons = document.getElementById('grid-coupons');
-const elGridStories = document.getElementById('grid-stories');
 
-const elBtnUpdateDeals = document.getElementById('btn-update-deals');
-const elBtnGenerateStories = document.getElementById('btn-generate-stories');
-const elChkSelectAll = document.getElementById('chk-select-all');
-const elBtnClearSelection = document.getElementById('btn-clear-selection');
+// DOM elements - ML Actions
+const elBtnUpdateML = document.getElementById('btn-update-ml');
+const elBtnGenerateML = document.getElementById('btn-generate-ml');
+const elChkSelectAllML = document.getElementById('chk-select-all-ml');
+const elBtnClearSelectionML = document.getElementById('btn-clear-selection-ml');
+const elTxtSelectedCountML = document.getElementById('txt-selected-count-ml');
 
+// DOM elements - Amazon Actions
+const elBtnUpdateAmazon = document.getElementById('btn-update-amazon');
+const elBtnGenerateAmazon = document.getElementById('btn-generate-amazon');
+const elChkSelectAllAmazon = document.getElementById('chk-select-all-amazon');
+const elBtnClearSelectionAmazon = document.getElementById('btn-clear-selection-amazon');
+const elTxtSelectedCountAmazon = document.getElementById('txt-selected-count-amazon');
+
+// DOM elements - Filters ML
+const elFilterNameML = document.getElementById('ipt-filter-name-ml');
+const elFilterCategoryML = document.getElementById('sel-filter-category-ml');
+const elFilterSubcategoryML = document.getElementById('sel-filter-subcategory-ml');
+const elFilterDiscountML = document.getElementById('sel-filter-discount-ml');
+
+// DOM elements - Filters Amazon
+const elFilterNameAmazon = document.getElementById('ipt-filter-name-amazon');
+const elFilterCategoryAmazon = document.getElementById('sel-filter-category-amazon');
+const elFilterSubcategoryAmazon = document.getElementById('sel-filter-subcategory-amazon');
+const elFilterDiscountAmazon = document.getElementById('sel-filter-discount-amazon');
+
+let globalTaxonomy = {};
+
+// General
 const elTxtLastUpdate = document.getElementById('txt-last-update');
-const elTxtSelectedCount = document.getElementById('txt-selected-count');
-
 const elLoadingOverlay = document.getElementById('loading-overlay');
 const elLoadingText = document.getElementById('loading-text');
 
-const elLightboxModal = document.getElementById('lightbox-modal');
-const elImgLightboxPreview = document.getElementById('img-lightbox-preview');
-const elBtnCloseLightbox = document.getElementById('btn-close-lightbox');
-const elBtnDownloadStory = document.getElementById('btn-download-story');
+function parseBackendDate(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr.includes('T') || dateStr.endsWith('Z')) {
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  if (match) {
+    const [, day, month, year, hour, minute, second] = match;
+    const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10), parseInt(hour, 10), parseInt(minute, 10), parseInt(second, 10));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const fallbackDate = new Date(dateStr);
+  return isNaN(fallbackDate.getTime()) ? null : fallbackDate;
+}
+
+function updateLastUpdateUI(platform) {
+  const currentUpdateStr = platform === 'amazon' ? lastUpdateAmazon : lastUpdateML;
+  if (currentUpdateStr) {
+    const date = parseBackendDate(currentUpdateStr);
+    if (date) {
+      elTxtLastUpdate.textContent = `Última atualização: ${date.toLocaleString('pt-BR')}`;
+    } else {
+      elTxtLastUpdate.textContent = `Última atualização: ${currentUpdateStr}`;
+    }
+  } else {
+    elTxtLastUpdate.textContent = 'Última atualização: N/A';
+  }
+}
 
 // ==========================================
-// API Interaction Helpers
+// Loading Overlay Helpers
 // ==========================================
 function showLoading(text) {
   elLoadingText.textContent = text;
@@ -44,44 +96,171 @@ function hideLoading() {
   elLoadingOverlay.classList.add('hidden');
 }
 
-async function fetchDeals() {
-  try {
-    const response = await fetch('/api/deals');
-    const data = await response.json();
-    
-    allDeals = data.deals || [];
-    allCoupons = data.coupons || [];
-    renderDeals(allDeals);
-    renderCoupons(allCoupons);
-    populateCouponSelect(allCoupons);
-    
-    if (data.generatedAt) {
-      elTxtLastUpdate.textContent = `Última atualização: ${data.generatedAt}`;
-    } else {
-      elTxtLastUpdate.textContent = 'Última atualização: Sem registros';
+// ==========================================
+// Category Inference Helper
+// ==========================================
+// ==========================================
+// Category Inference Helper (Taxonomia Dinâmica)
+// ==========================================
+function getProductCategoryAndSub(title) {
+  if (!title) return { category: 'Ofertas Gerais', subcategory: 'Outros', icon: '🛍️' };
+  const cleanTitle = title.toLowerCase();
+  
+  for (const [catName, catData] of Object.entries(globalTaxonomy)) {
+    for (const [subName, keywords] of Object.entries(catData.subcategories)) {
+      for (const keyword of keywords) {
+        if (cleanTitle.includes(keyword)) {
+          // Trata exceções do helper
+          if (keyword === 'cola' && cleanTitle.includes('colageno')) continue;
+          if (keyword === 'cabo' && cleanTitle.includes('cabernet')) continue;
+          if (keyword === 'barra' && cleanTitle.includes('barra de cereal')) continue;
+          if (keyword === 'game' && cleanTitle.includes('cadeira gamer')) continue;
+          
+          return {
+            category: catName,
+            subcategory: subName,
+            icon: catData.icon
+          };
+        }
+      }
     }
+  }
+  
+  return {
+    category: 'Ofertas Gerais',
+    subcategory: 'Outros',
+    icon: '🛍️'
+  };
+}
+
+async function fetchCategories() {
+  try {
+    const response = await fetch('/api/categories');
+    globalTaxonomy = await response.json();
+    
+    // Povoar os selects de categoria
+    populateCategorySelect(elFilterCategoryML);
+    populateCategorySelect(elFilterCategoryAmazon);
+    
+    // Configurar listeners em cascata
+    elFilterCategoryML.addEventListener('change', () => {
+      handleCategoryChange(elFilterCategoryML, elFilterSubcategoryML);
+      applyMLFilters();
+    });
+    elFilterCategoryAmazon.addEventListener('change', () => {
+      handleCategoryChange(elFilterCategoryAmazon, elFilterSubcategoryAmazon);
+      applyAmazonFilters();
+    });
+    
+    elFilterSubcategoryML.addEventListener('change', applyMLFilters);
+    elFilterSubcategoryAmazon.addEventListener('change', applyAmazonFilters);
   } catch (err) {
-    console.error('Erro ao buscar dados:', err);
-    alert('Erro ao carregar dados do servidor.');
+    console.error('Erro ao buscar taxonomia de categorias:', err);
   }
 }
 
-function populateCouponSelect(coupons) {
-  const elSel = document.getElementById('sel-active-coupon');
-  if (!elSel) return;
-  
-  elSel.innerHTML = '<option value="">Sem cupom no story</option>';
-  
-  coupons.forEach(coupon => {
+function populateCategorySelect(selectEl) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '<option value="">Todas as Categorias</option>';
+  for (const catName of Object.keys(globalTaxonomy)) {
     const opt = document.createElement('option');
-    opt.value = coupon.code;
-    opt.textContent = `${coupon.code} (${coupon.rules})`;
-    elSel.appendChild(opt);
-  });
+    opt.value = catName;
+    opt.textContent = catName;
+    selectEl.appendChild(opt);
+  }
 }
 
-async function triggerScraper() {
-  showLoading('Buscando ofertas mais recentes no Mercado Livre e atualizando cupons... Isso leva alguns segundos.');
+function handleCategoryChange(categorySelectEl, subcategorySelectEl) {
+  if (!categorySelectEl || !subcategorySelectEl) return;
+  
+  const selectedCat = categorySelectEl.value;
+  subcategorySelectEl.innerHTML = '<option value="">Todas as Subcategorias</option>';
+  
+  if (!selectedCat || !globalTaxonomy[selectedCat]) {
+    subcategorySelectEl.disabled = true;
+    subcategorySelectEl.value = '';
+    return;
+  }
+  
+  const subcategories = Object.keys(globalTaxonomy[selectedCat].subcategories);
+  subcategories.forEach(sub => {
+    const opt = document.createElement('option');
+    opt.value = sub;
+    opt.textContent = sub;
+    subcategorySelectEl.appendChild(opt);
+  });
+  
+  subcategorySelectEl.disabled = false;
+}
+
+// ==========================================
+// API Handlers
+// ==========================================
+async function fetchMLDeals() {
+  try {
+    const historyRes = await fetch('/api/publish-history');
+    const historyData = await historyRes.json();
+    const publishedEntries = historyData.entries || [];
+
+    const response = await fetch('/api/deals');
+    const data = await response.json();
+    
+    allMLDeals = (data.deals || []).map(deal => {
+      const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+      const pub = publishedEntries.find(e => e.dealId === dealId);
+      return {
+        ...deal,
+        publishedMsgId: pub ? pub.msgId : null
+      };
+    });
+    allCoupons = data.coupons || [];
+    
+    renderMLDeals(allMLDeals);
+    renderCoupons(allCoupons);
+    
+    if (data.generatedAt) {
+      lastUpdateML = data.generatedAt;
+      if (elTabML.classList.contains('active') || elTabCoupons.classList.contains('active')) {
+        updateLastUpdateUI('ml');
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao buscar ofertas do Mercado Livre:', err);
+  }
+}
+
+async function fetchAmazonDeals() {
+  try {
+    const historyRes = await fetch('/api/publish-history');
+    const historyData = await historyRes.json();
+    const publishedEntries = historyData.entries || [];
+
+    const response = await fetch('/api/amazon-deals');
+    const data = await response.json();
+    
+    allAmazonDeals = (data.deals || []).map(deal => {
+      const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+      const pub = publishedEntries.find(e => e.dealId === dealId);
+      return {
+        ...deal,
+        publishedMsgId: pub ? pub.msgId : null
+      };
+    });
+    renderAmazonDeals(allAmazonDeals);
+    
+    if (data.generatedAt) {
+      lastUpdateAmazon = data.generatedAt;
+      if (elTabAmazon.classList.contains('active')) {
+        updateLastUpdateUI('amazon');
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao buscar ofertas da Amazon:', err);
+  }
+}
+
+async function triggerMLScraper() {
+  showLoading('Varrendo Mercado Livre & atualizando cupons válidos do dia... Por favor aguarde.');
   try {
     const response = await fetch('/api/scrape', { method: 'POST' });
     const data = await response.json();
@@ -89,140 +268,393 @@ async function triggerScraper() {
     if (data.error) {
       alert(`Erro: ${data.error}`);
     } else {
-      allDeals = data.data.deals || [];
+      const historyRes = await fetch('/api/publish-history');
+      const historyData = await historyRes.json();
+      const publishedEntries = historyData.entries || [];
+
+      allMLDeals = (data.data.deals || []).map(deal => {
+        const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+        const pub = publishedEntries.find(e => e.dealId === dealId);
+        return {
+          ...deal,
+          publishedMsgId: pub ? pub.msgId : null
+        };
+      });
       allCoupons = data.data.coupons || [];
-      selectedIndices.clear();
-      updateSelectionUI();
-      renderDeals(allDeals);
+      selectedMLIndices.clear();
+      updateMLSelectionUI();
+      renderMLDeals(allMLDeals);
       renderCoupons(allCoupons);
-      populateCouponSelect(allCoupons);
+      
       if (data.data.generatedAt) {
-        elTxtLastUpdate.textContent = `Última atualização: ${data.data.generatedAt}`;
+        lastUpdateML = data.data.generatedAt;
+        updateLastUpdateUI('ml');
       }
-      alert('Ofertas e cupons atualizados com sucesso!');
+      alert('Ofertas do Mercado Livre e Cupons do dia atualizados com sucesso!');
     }
   } catch (err) {
-    console.error('Erro ao atualizar ofertas:', err);
-    alert('Falha ao rodar o minerador de ofertas.');
+    console.error('Erro ao rodar scraper do ML:', err);
+    alert('Erro ao atualizar base de dados do Mercado Livre.');
   } finally {
     hideLoading();
   }
 }
 
-async function triggerGenerateStories() {
-  const indices = Array.from(selectedIndices);
-  if (indices.length === 0) return;
+async function triggerAmazonScraper() {
+  showLoading('Varrendo ofertas da Amazon... Isso pode levar de 15 a 30 segundos.');
+  try {
+    const response = await fetch('/api/scrape-amazon', { method: 'POST' });
+    const data = await response.json();
+    
+    if (data.error) {
+      alert(`Erro: ${data.error}`);
+    } else {
+      const historyRes = await fetch('/api/publish-history');
+      const historyData = await historyRes.json();
+      const publishedEntries = historyData.entries || [];
+
+      allAmazonDeals = (data.data.deals || []).map(deal => {
+        const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+        const pub = publishedEntries.find(e => e.dealId === dealId);
+        return {
+          ...deal,
+          publishedMsgId: pub ? pub.msgId : null
+        };
+      });
+      selectedAmazonIndices.clear();
+      updateAmazonSelectionUI();
+      renderAmazonDeals(allAmazonDeals);
+      
+      if (data.data.generatedAt) {
+        lastUpdateAmazon = data.data.generatedAt;
+        updateLastUpdateUI('amazon');
+      }
+      alert('Ofertas da Amazon atualizadas com sucesso!');
+    }
+  } catch (err) {
+    console.error('Erro ao rodar scraper da Amazon:', err);
+    alert('Erro ao atualizar base de dados da Amazon.');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ==========================================
+// Canvas Story Rendering (Local Frontend)
+// ==========================================
+function drawStoryOnCanvas(deal, platform) {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+
+    // 1. Desenha o fundo (Gradiente dinâmico baseado no tipo de oferta)
+    let gradient = ctx.createLinearGradient(0, 0, 0, 1920);
+    const isLightning = deal.dealType === 'Oferta Relâmpago';
+    
+    if (isLightning) {
+      // Gradiente escuro futurista com tons de roxo/fogo para Ofertas Relâmpago
+      gradient.addColorStop(0, '#0f0c20');
+      gradient.addColorStop(0.5, '#190a2a');
+      gradient.addColorStop(1, '#05020a');
+    } else {
+      // Gradiente azul escuro premium para Ofertas do Dia / Campanha
+      gradient.addColorStop(0, '#0a192f');
+      gradient.addColorStop(0.5, '#0d2b45');
+      gradient.addColorStop(1, '#020c1b');
+    }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1080, 1920);
+
+    // Efeito Glow central
+    ctx.beginPath();
+    ctx.arc(540, 960, 480, 0, Math.PI * 2);
+    ctx.fillStyle = isLightning ? 'rgba(255, 0, 128, 0.07)' : 'rgba(0, 242, 254, 0.06)';
+    ctx.fill();
+
+    // 2. Carrega imagem do produto através do Proxy para desviar do CORS
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = `/api/proxy-image?url=${encodeURIComponent(deal.image)}`;
+    
+    img.onload = () => {
+      // Desenha card de fundo branco arredondado para destacar o produto
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      const rx = 120, ry = 520, rw = 840, rh = 840, radius = 40;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(rx, ry, rw, rh, radius);
+      } else {
+        ctx.rect(rx, ry, rw, rh);
+      }
+      ctx.fill();
+
+      // Desenha imagem proporcional
+      const padding = 60;
+      const targetW = rw - (padding * 2);
+      const targetH = rh - (padding * 2);
+      const imgRatio = img.width / img.height;
+      const targetRatio = targetW / targetH;
+      let drawW, drawH;
+      
+      if (imgRatio > targetRatio) {
+        drawW = targetW;
+        drawH = targetW / imgRatio;
+      } else {
+        drawH = targetH;
+        drawW = targetH * imgRatio;
+      }
+      
+      const drawX = rx + padding + (targetW - drawW) / 2;
+      const drawY = ry + padding + (targetH - drawH) / 2;
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+      // 3. Tag da Plataforma no topo
+      const platColor = platform === 'amazon' ? '#ff9900' : '#ffe600';
+      const platTextColor = platform === 'amazon' ? '#ffffff' : '#333333';
+      const platText = platform === 'amazon' ? '🟡 AMAZON' : '🛍️ MERCADO LIVRE';
+      
+      ctx.fillStyle = platColor;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(390, 120, 300, 70, 20);
+      } else {
+        ctx.rect(390, 120, 300, 70);
+      }
+      ctx.fill();
+      
+      ctx.fillStyle = platTextColor;
+      ctx.font = 'bold 36px Outfit, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(platText, 540, 155);
+
+      // 4. Tipo de Oferta em Destaque
+      const dealTypeText = isLightning ? '⚡ OFERTA RELÂMPAGO' : '🔥 OFERTA DO DIA';
+      const dealTypeColor = isLightning ? '#ff6633' : '#00f2fe';
+      ctx.fillStyle = dealTypeColor;
+      ctx.font = 'bold 46px Montserrat, sans-serif';
+      ctx.fillText(dealTypeText, 540, 245);
+
+      // 5. Título do Produto (com quebra inteligente de linha)
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 44px Outfit, sans-serif';
+      ctx.textAlign = 'center';
+      
+      const words = deal.title.split(' ');
+      let line = '';
+      let y = 330;
+      const maxWidth = 920;
+      const lineHeight = 55;
+      let linesDrawn = 0;
+
+      for (let n = 0; n < words.length; n++) {
+        let testLine = line + words[n] + ' ';
+        let metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+          ctx.fillText(line, 540, y);
+          line = words[n] + ' ';
+          y += lineHeight;
+          linesDrawn++;
+          if (linesDrawn >= 2) break;
+        } else {
+          line = testLine;
+        }
+      }
+      if (linesDrawn < 2) {
+        ctx.fillText(line, 540, y);
+      }
+
+      // 6. Preços e Desconto
+      // Selo de Desconto redondo
+      ctx.fillStyle = '#ff0055';
+      ctx.beginPath();
+      ctx.arc(880, 1340, 85, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 42px Montserrat, sans-serif';
+      ctx.fillText(`${deal.discount}%`, 880, 1325);
+      ctx.font = 'bold 24px Montserrat, sans-serif';
+      ctx.fillText('OFF', 880, 1360);
+
+      // Preço Original riscado
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.font = '36px Outfit, sans-serif';
+      ctx.fillText(`De: ${deal.originalPrice}`, 540, 1430);
+      
+      const origTextWidth = ctx.measureText(`De: ${deal.originalPrice}`).width;
+      ctx.strokeStyle = 'rgba(255, 0, 85, 0.7)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(540 - (origTextWidth / 2), 1418);
+      ctx.lineTo(540 + (origTextWidth / 2), 1418);
+      ctx.stroke();
+
+      // Preço Promocional em Destaque Verde Neon
+      ctx.fillStyle = '#00ff66';
+      ctx.font = '900 86px Montserrat, sans-serif';
+      ctx.fillText(deal.currentPrice, 540, 1530);
+
+      // Categoria e Subcategoria
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = 'italic 30px Outfit, sans-serif';
+      const catInfo = getProductCategoryAndSub(deal.title);
+      ctx.fillText(`Categoria: ${catInfo.icon} ${catInfo.category} > ${catInfo.subcategory}`, 540, 1640);
+
+      // Chamada de Link
+      ctx.fillStyle = platColor;
+      ctx.font = 'bold 36px Outfit, sans-serif';
+      ctx.fillText('👉 Link direto enviado no Grupo!', 540, 1730);
+
+      // Retorna a URL base64 da imagem pronta
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    };
+
+    img.onerror = () => reject(new Error('Erro ao carregar imagem via proxy de CORS. O link pode estar inacessível.'));
+  });
+}
+
+// ==========================================
+// Post Flow to WhatsApp
+// ==========================================
+async function postSelectedDeals(platform) {
+  const indices = Array.from(platform === 'ml' ? selectedMLIndices : selectedAmazonIndices);
+  const deals = platform === 'ml' ? allMLDeals : allAmazonDeals;
+  const targetDeals = deals.filter((_, idx) => indices.includes(idx));
+
+  if (targetDeals.length === 0) return;
+
+  const modal = document.getElementById('progress-modal');
+  const logEl = document.getElementById('progress-log');
+  const spinner = modal.querySelector('.progress-spinner');
   
-  const elSel = document.getElementById('sel-active-coupon');
-  const couponCode = elSel ? elSel.value : '';
+  modal.classList.remove('hidden');
+  spinner.style.display = 'block';
+  logEl.innerHTML = '';
+
+  const addLog = (msg, type = 'info') => {
+    const d = document.createElement('div');
+    d.className = `progress-line progress-${type}`;
+    d.textContent = msg;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  addLog(`Preparando envio de ${targetDeals.length} ofertas para o WhatsApp...`);
   
-  showLoading(`Gerando ${indices.length} stories... Isso abrirá o Chrome no backend.`);
+  const payloadDeals = [];
+
+  for (let i = 0; i < targetDeals.length; i++) {
+    const deal = targetDeals[i];
+    addLog(`[${i+1}/${targetDeals.length}] Renderizando Story via Canvas para: ${deal.title.substring(0, 30)}...`);
+
+    try {
+      const base64Image = await drawStoryOnCanvas(deal, platform);
+      payloadDeals.push({
+        title: deal.title,
+        originalPrice: deal.originalPrice,
+        currentPrice: deal.currentPrice,
+        discount: deal.discount,
+        link: deal.link,
+        category: (() => { const res = getProductCategoryAndSub(deal.title); return `${res.icon} ${res.category} > ${res.subcategory}`; })(),
+        platform: platform,
+        imageBuffer: base64Image
+      });
+      addLog(`✓ Story renderizado com sucesso!`, 'success');
+    } catch (canvasErr) {
+      addLog(`❌ Falha ao renderizar Story: ${canvasErr.message}. Enviando apenas texto.`, 'warning');
+      payloadDeals.push({
+        title: deal.title,
+        originalPrice: deal.originalPrice,
+        currentPrice: deal.currentPrice,
+        discount: deal.discount,
+        link: deal.link,
+        category: (() => { const res = getProductCategoryAndSub(deal.title); return `${res.icon} ${res.category} > ${res.subcategory}`; })(),
+        platform: platform,
+        imageBuffer: null
+      });
+    }
+  }
+
+  addLog(`Iniciando envio para o servidor Express...`);
+
   try {
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ selectedIndices: indices, couponCode: couponCode })
+      body: JSON.stringify({ selectedDeals: payloadDeals })
     });
-    const data = await response.json();
+    const result = await response.json();
     
-    if (data.error) {
-      alert(`Erro ao gerar stories: ${data.error}`);
+    if (result.success && result.results) {
+      addLog(`🚀 Ofertas postadas no WhatsApp com sucesso!`, 'success');
+      
+      // Atualiza o estado local das ofertas com o respectivo msgId retornado
+      result.results.forEach(resItem => {
+        if (resItem.success && resItem.msgId) {
+          const dealList = platform === 'ml' ? allMLDeals : allAmazonDeals;
+          const found = dealList.find(d => `deal_${Math.abs(d.title.length + d.discount)}` === resItem.dealId);
+          if (found) {
+            found.publishedMsgId = resItem.msgId;
+          }
+        }
+      });
+
+      // Redesenha a UI
+      if (platform === 'ml') {
+        renderMLDeals(allMLDeals);
+      } else {
+        renderAmazonDeals(allAmazonDeals);
+      }
+    } else if (result.success) {
+      addLog(`🚀 Envio disparado no servidor!`, 'success');
     } else {
-      alert(data.message);
-      // Limpa seleções
-      selectedIndices.clear();
-      updateSelectionUI();
-      // Troca para a aba de stories gerados
-      switchTab(elTabStories, elPanelStories);
+      addLog(`❌ Falha no servidor: ${result.error}`, 'error');
     }
   } catch (err) {
-    console.error('Erro ao gerar stories:', err);
-    alert('Erro de rede ao disparar geração de stories.');
-  } finally {
-    hideLoading();
+    addLog(`❌ Falha de rede ao disparar envios: ${err.message}`, 'error');
   }
-}
-
-async function fetchGeneratedStories() {
-  try {
-    const response = await fetch('/api/stories');
-    const data = await response.json();
-    renderStories(data.stories || []);
-  } catch (err) {
-    console.error('Erro ao listar stories:', err);
-  }
-}
-
-// ==========================================
-// Instagram Publish Functions
-// ==========================================
-function showProgressModal(title) {
-  const modal = document.getElementById('progress-modal');
-  const titleEl = document.getElementById('progress-title');
-  const logEl = document.getElementById('progress-log');
-  const closeBtn = document.getElementById('btn-close-progress');
-  const spinner = modal.querySelector('.progress-spinner');
-
-  titleEl.textContent = title;
-  logEl.innerHTML = '';
-  closeBtn.classList.add('hidden');
-  spinner.style.display = 'block';
-  modal.classList.remove('hidden');
-}
-
-function addProgressLog(message, type = 'info') {
-  const logEl = document.getElementById('progress-log');
-  const line = document.createElement('div');
-  line.className = `progress-line progress-${type}`;
-  const icon = type === 'success' ? '\u2705' : type === 'error' ? '\u274c' : type === 'warning' ? '\u26a0\ufe0f' : '\u2139\ufe0f';
-  line.textContent = `${icon} ${message}`;
-  logEl.appendChild(line);
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
-function finishProgressModal(success) {
-  const modal = document.getElementById('progress-modal');
-  const closeBtn = document.getElementById('btn-close-progress');
-  const spinner = modal.querySelector('.progress-spinner');
 
   spinner.style.display = 'none';
-  closeBtn.classList.remove('hidden');
-
-  if (success) {
-    addProgressLog('Processo concluído com sucesso!', 'success');
+  
+  // Limpa seleções pós envio
+  if (platform === 'ml') {
+    selectedMLIndices.clear();
+    updateMLSelectionUI();
   } else {
-    addProgressLog('Processo finalizado com erros.', 'error');
+    selectedAmazonIndices.clear();
+    updateAmazonSelectionUI();
   }
 }
 
-// Funcoes de publicacao no Instagram removidas. A postagem passa a ser manual.
-
 // ==========================================
-// Rendering Methods
+// Rendering Methods (Cards & UI)
 // ==========================================
-function renderDeals(deals) {
-  elGridDeals.innerHTML = '';
+function renderMLDeals(deals) {
+  elGridML.innerHTML = '';
   
   if (deals.length === 0) {
-    elGridDeals.innerHTML = `
+    elGridML.innerHTML = `
       <div class="empty-state">
-        <p>Nenhuma oferta carregada. Clique em "Atualizar Ofertas" para pesquisar no Mercado Livre.</p>
+        <p>Nenhuma oferta do Mercado Livre carregada. Clique em "Atualizar Mercado Livre".</p>
       </div>
     `;
     return;
   }
   
   deals.forEach((deal, index) => {
-    const isSelected = selectedIndices.has(index);
+    const isSelected = selectedMLIndices.has(index);
+    const isPublished = !!deal.publishedMsgId;
     const card = document.createElement('article');
-    card.className = `deal-card ${isSelected ? 'selected' : ''}`;
+    card.className = `deal-card ${isSelected ? 'selected' : ''} ${isPublished ? 'published-card' : ''}`;
     card.dataset.index = index;
     
-    // Evita o fechamento da tabela MD ao filtrar caracteres problemáticos no título
     const displayTitle = deal.title;
     const ratingText = deal.rating ? `⭐ ${deal.rating.toFixed(1)}` : 'Sem avaliação';
 
-    // Procura cupons compatíveis
+    // Cupons compatíveis
     const compatibleCoupons = allCoupons.filter(coupon => {
       const comp = findCompatibleDealsForCoupon(coupon, [deal]);
       return comp.length > 0;
@@ -237,14 +669,39 @@ function renderDeals(deals) {
         </div>
       `;
     }
+
+    let checkboxHtml = '';
+    if (!isPublished) {
+      checkboxHtml = `
+        <div class="card-checkbox">
+          <label class="checkbox-container">
+            <input type="checkbox" class="deal-chk" data-index="${index}" ${isSelected ? 'checked' : ''}>
+            <span class="checkmark"></span>
+          </label>
+        </div>
+      `;
+    } else {
+      checkboxHtml = `
+        <div class="card-checkbox published-tick" title="Já publicado no WhatsApp">
+          ✅
+        </div>
+      `;
+    }
+
+    let deleteBtnHtml = '';
+    if (isPublished) {
+      deleteBtnHtml = `
+        <div class="card-published-area">
+          <span class="published-badge">WhatsApp Ativo ✅</span>
+          <button type="button" class="btn-delete-wpp" data-msg-id="${deal.publishedMsgId}" data-platform="ml" data-index="${index}">
+            🗑️ Excluir do WhatsApp
+          </button>
+        </div>
+      `;
+    }
     
     card.innerHTML = `
-      <div class="card-checkbox">
-        <label class="checkbox-container">
-          <input type="checkbox" class="deal-chk" data-index="${index}" ${isSelected ? 'checked' : ''}>
-          <span class="checkmark"></span>
-        </label>
-      </div>
+      ${checkboxHtml}
       <div class="card-image-box">
         <img class="card-image" src="${deal.image}" alt="${displayTitle}" loading="lazy">
         <span class="card-discount-badge">${deal.discount}% OFF</span>
@@ -261,228 +718,129 @@ function renderDeals(deals) {
           <span class="card-promo-price">Por: ${deal.currentPrice}</span>
         </div>
         ${couponBadgeHtml}
+        <div class="price-comparison-area" data-title="${displayTitle}">
+          <button type="button" class="btn-compare-buscape" data-title="${displayTitle}">
+            🔍 Comparar Preços
+          </button>
+          <div class="comparison-results hidden"></div>
+        </div>
+        ${deleteBtnHtml}
       </div>
     `;
     
-    // Add Click listener toggling selection on the card
     card.addEventListener('click', (e) => {
-      // Ignora se o clique foi direto no checkbox ou em algum link externo (se houver)
-      if (e.target.closest('.checkbox-container') || e.target.closest('a')) {
-        return;
-      }
-      
-      toggleSelectIndex(index);
+      if (isPublished) return;
+      if (e.target.closest('.checkbox-container') || e.target.closest('a') || e.target.closest('button')) return;
+      toggleMLSelectIndex(index);
     });
     
-    // Checkbox custom listener
-    const chk = card.querySelector('.deal-chk');
-    chk.addEventListener('change', () => {
-      toggleSelectIndex(index);
-    });
+    if (!isPublished) {
+      card.querySelector('.deal-chk').addEventListener('change', () => {
+        toggleMLSelectIndex(index);
+      });
+    }
     
-    elGridDeals.appendChild(card);
+    elGridML.appendChild(card);
   });
   
-  applyFilters();
+  applyMLFilters();
 }
 
-// ==========================================
-// Lógica de Filtros e Categorias
-// ==========================================
-function getProductCategory(title) {
-  const t = title.toLowerCase();
+function renderAmazonDeals(deals) {
+  elGridAmazon.innerHTML = '';
   
-  // Eletrônicos & Tecnologia
-  if (t.includes('tv') || t.includes('smart tv') || t.includes('televisao') || t.includes('televisão') || 
-      t.includes('roku') || t.includes('led') || t.includes('dolby') || t.includes('hdmi') || 
-      t.includes('hdr') || t.includes('qled') || t.includes('4k') || t.includes('webos') || 
-      t.includes('celular') || t.includes('smartphone') || t.includes('samsung') || t.includes('galaxy') || 
-      t.includes('motorola') || t.includes('moto') || t.includes('playstation') || t.includes('ps5') || 
-      t.includes('tapo') || t.includes('camera') || t.includes('câmera') || t.includes('segurança') || 
-      t.includes('wifi') || t.includes('icsee') || t.includes('impressora') || t.includes('elgin')) {
-    return 'tecnologia';
+  if (deals.length === 0) {
+    elGridAmazon.innerHTML = `
+      <div class="empty-state">
+        <p>Nenhuma oferta da Amazon carregada. Clique em "Atualizar Amazon".</p>
+      </div>
+    `;
+    return;
   }
   
-  // Eletrodomésticos & Utilidades
-  if (t.includes('air fryer') || t.includes('fritadeira') || t.includes('barbecue') || 
-      t.includes('chaleira') || t.includes('ventilador') || t.includes('britânia') || 
-      t.includes('britania') || t.includes('extratora') || t.includes('eletrodoméstico') || 
-      t.includes('liquidificador') || t.includes('micro-ondas')) {
-    return 'eletrodomesticos';
-  }
-  
-  // Saúde & Suplementos
-  if (t.includes('creatina') || t.includes('whey') || t.includes('suplemento') || 
-      t.includes('proteina') || t.includes('proteína') || t.includes('bcaa') || 
-      t.includes('glutamina') || t.includes('omega') || t.includes('ômega') || 
-      t.includes('dark lab') || t.includes('soldiers') || t.includes('growth') ||
-      t.includes('termogenico') || t.includes('termogênico') || t.includes('dieta') || 
-      t.includes('academia') || t.includes('fitness')) {
-    return 'academia_dieta';
-  }
-  
-  // Beleza & Cuidados Pessoais
-  if (t.includes('creme') || t.includes('hidratante') || t.includes('cerave') || 
-      t.includes('perfume') || t.includes('sabah') || t.includes('maquina') || 
-      t.includes('máquina') || t.includes('acabamento') || t.includes('corte') || 
-      t.includes('cabelo') || t.includes('kemei') || t.includes('sabonete') || 
-      t.includes('shampoo') || t.includes('condicionador') || t.includes('desodorante') || 
-      t.includes('barbear') || t.includes('beleza') || t.includes('maquiagem') || 
-      t.includes('esmalte')) {
-    return 'beleza_higiene';
-  }
-  
-  // Casa & Construção
-  if (t.includes('vaso') || t.includes('sanitario') || t.includes('sanitário') || 
-      t.includes('tubrax') || t.includes('acoplada') || t.includes('privada') || 
-      t.includes('perfurador') || t.includes('solo') || t.includes('trado') || 
-      t.includes('gasolina') || t.includes('brocas') || t.includes('ferramenta') || 
-      t.includes('construção') || t.includes('reforma') || t.includes('torneira')) {
-    return 'casa_construcao';
-  }
-  
-  return 'outros';
-}
-
-function findCompatibleDealsForCoupon(coupon, deals) {
-  if (!coupon || !coupon.rules || !deals) return [];
-  
-  const rulesText = coupon.rules.toLowerCase();
-  
-  // 1. Extrai preço mínimo
-  let minPrice = 0;
-  const priceMatch = rulesText.match(/(?:r\$\s*|acima de\s+|partir de\s+|mínimas de\s+)([0-9.,]+)/i);
-  if (priceMatch) {
-    const numStr = priceMatch[1].replace(/\./g, '').replace(',', '.');
-    minPrice = parseFloat(numStr) || 0;
-  }
-  
-  return deals.filter(deal => {
-    // Valida preço mínimo
-    const cleanPriceStr = deal.currentPrice.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-    const price = parseFloat(cleanPriceStr) || 0;
+  deals.forEach((deal, index) => {
+    const isSelected = selectedAmazonIndices.has(index);
+    const isPublished = !!deal.publishedMsgId;
+    const card = document.createElement('article');
+    card.className = `deal-card amazon-theme ${isSelected ? 'selected' : ''} ${isPublished ? 'published-card' : ''}`;
+    card.dataset.index = index;
     
-    if (minPrice > 0 && price < minPrice) {
-      return false;
-    }
+    const displayTitle = deal.title;
+    const ratingText = deal.rating ? `⭐ ${deal.rating.toFixed(1)}` : 'Sem avaliação';
     
-    // 2. Valida restrições de categorias
-    const cat = getProductCategory(deal.title);
-    
-    const categoryTerms = {
-      tecnologia: ['tecnologia', 'celular', 'smartphone', 'tv', 'smart tv', 'ps5', 'game', 'eletrônicos', 'eletronico', 'câmera', 'camera', 'samsung', 'motorola', 'impressora'],
-      eletrodomesticos: ['eletrodomésticos', 'eletrodomestico', 'cozinha', 'air fryer', 'fritadeira', 'liquidificador', 'casa', 'ventilador', 'panela'],
-      academia_dieta: ['suplementos', 'suplemento', 'whey', 'creatina', 'growth', 'dieta', 'academia', 'esporte', 'fitness', 'treino', 'sports', 'health'],
-      beleza_higiene: ['beleza', 'cabelo', 'perfume', 'hidratante', 'creme', 'shampoo', 'higiene', 'pessoal', 'barbear', 'skincare', 'loreal', 'l\'oreal', 'garnier', 'elseve', 'maybelline', 'lola', 'darrow', 'avene', 'avène', 'isdin', 'protetor solar'],
-      casa_construcao: ['casa', 'construção', 'construcao', 'ferramenta', 'torneira', 'reforma', 'decoração', 'decoracao', 'utilidades domésticas', 'utilidades domesticas']
-    };
-    
-    let hasCategoryRestriction = false;
-    let categoryMatches = false;
-    
-    for (const [key, terms] of Object.entries(categoryTerms)) {
-      const isMentioned = terms.some(term => rulesText.includes(term));
-      if (isMentioned) {
-        hasCategoryRestriction = true;
-        if (cat === key) {
-          categoryMatches = true;
-        }
-      }
-    }
-    
-    if (hasCategoryRestriction && !categoryMatches) {
-      return false;
-    }
-    
-    return true;
-  });
-}
-
-function scrollToProduct(productTitle) {
-  // Muda para a aba de ofertas
-  elTabDeals.click();
-  
-  // Preenche a busca com o nome do produto para destacá-lo
-  const searchInput = document.getElementById('ipt-filter-name');
-  const categorySelect = document.getElementById('sel-filter-category');
-  const discountSelect = document.getElementById('sel-filter-discount');
-  const dealTypeSelect = document.getElementById('sel-filter-deal-type');
-  
-  if (searchInput) searchInput.value = productTitle;
-  if (categorySelect) categorySelect.value = '';
-  if (discountSelect) discountSelect.value = '';
-  if (dealTypeSelect) dealTypeSelect.value = '';
-  
-  applyFilters();
-  
-  // Rola suavemente até o produto
-  setTimeout(() => {
-    const card = Array.from(document.querySelectorAll('.deal-card')).find(c => {
-      const tEl = c.querySelector('.card-title');
-      return tEl && tEl.textContent.trim() === productTitle.trim();
-    });
-    
-    if (card) {
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      card.style.boxShadow = '0 0 25px rgba(242, 113, 33, 0.4)';
-      card.style.borderColor = 'var(--primary-color)';
-      setTimeout(() => {
-        card.style.boxShadow = '';
-        card.style.borderColor = '';
-      }, 2000);
-    }
-  }, 150);
-}
-
-function applyFilters() {
-  const searchInput = document.getElementById('ipt-filter-name');
-  const categorySelect = document.getElementById('sel-filter-category');
-  const discountSelect = document.getElementById('sel-filter-discount');
-  const dealTypeSelect = document.getElementById('sel-filter-deal-type');
-  
-  if (!searchInput || !categorySelect) return;
-  
-  const searchTerm = searchInput.value.toLowerCase().trim();
-  const selectedCategory = categorySelect.value;
-  const selectedDiscount = discountSelect ? discountSelect.value : '';
-  const selectedDealType = dealTypeSelect ? dealTypeSelect.value : '';
-  
-  const cards = elGridDeals.querySelectorAll('.deal-card');
-  let visibleCount = 0;
-  
-  cards.forEach(card => {
-    const idx = parseInt(card.dataset.index, 10);
-    const deal = allDeals[idx];
-    if (!deal) return;
-    
-    const matchesSearch = deal.title.toLowerCase().includes(searchTerm);
-    const itemCategory = getProductCategory(deal.title);
-    const matchesCategory = !selectedCategory || itemCategory === selectedCategory;
-    const matchesDiscount = !selectedDiscount || deal.discount >= parseInt(selectedDiscount, 10);
-    const matchesDealType = !selectedDealType || deal.dealType === selectedDealType;
-    
-    if (matchesSearch && matchesCategory && matchesDiscount && matchesDealType) {
-      card.classList.remove('hidden-filter');
-      visibleCount++;
+    let checkboxHtml = '';
+    if (!isPublished) {
+      checkboxHtml = `
+        <div class="card-checkbox">
+          <label class="checkbox-container">
+            <input type="checkbox" class="deal-chk" data-index="${index}" ${isSelected ? 'checked' : ''}>
+            <span class="checkmark"></span>
+          </label>
+        </div>
+      `;
     } else {
-      card.classList.add('hidden-filter');
+      checkboxHtml = `
+        <div class="card-checkbox published-tick" title="Já publicado no WhatsApp">
+          ✅
+        </div>
+      `;
     }
+
+    let deleteBtnHtml = '';
+    if (isPublished) {
+      deleteBtnHtml = `
+        <div class="card-published-area">
+          <span class="published-badge">WhatsApp Ativo ✅</span>
+          <button type="button" class="btn-delete-wpp" data-msg-id="${deal.publishedMsgId}" data-platform="amazon" data-index="${index}">
+            🗑️ Excluir do WhatsApp
+          </button>
+        </div>
+      `;
+    }
+
+    card.innerHTML = `
+      ${checkboxHtml}
+      <div class="card-image-box">
+        <img class="card-image" src="${deal.image}" alt="${displayTitle}" loading="lazy">
+        <span class="card-discount-badge">${deal.discount}% OFF</span>
+      </div>
+      <div class="card-details">
+        <a href="${deal.link}" target="_blank" rel="noopener noreferrer" class="card-link-product">Ver Produto na Amazon 🔗</a>
+        <div class="card-meta">
+          <span class="card-rating">${ratingText}</span>
+          <span class="card-sales">${deal.salesInfo || ''}</span>
+        </div>
+        <h3 class="card-title" title="${displayTitle}">${displayTitle}</h3>
+        <div class="card-price-box">
+          <span class="card-orig-price">De: ${deal.originalPrice}</span>
+          <span class="card-promo-price">Por: ${deal.currentPrice}</span>
+        </div>
+        <div class="price-comparison-area" data-title="${displayTitle}">
+          <button type="button" class="btn-compare-buscape" data-title="${displayTitle}">
+            🔍 Comparar Preços
+          </button>
+          <div class="comparison-results hidden"></div>
+        </div>
+        ${deleteBtnHtml}
+      </div>
+    `;
+    
+    card.addEventListener('click', (e) => {
+      if (isPublished) return;
+      if (e.target.closest('.checkbox-container') || e.target.closest('a') || e.target.closest('button')) return;
+      toggleAmazonSelectIndex(index);
+    });
+    
+    if (!isPublished) {
+      card.querySelector('.deal-chk').addEventListener('change', () => {
+        toggleAmazonSelectIndex(index);
+      });
+    }
+    
+    elGridAmazon.appendChild(card);
   });
   
-  // Exibe estado vazio se não houver ofertas visíveis após filtragem
-  let emptyState = elGridDeals.querySelector('.empty-state-filter');
-  if (visibleCount === 0 && allDeals.length > 0) {
-    if (!emptyState) {
-      emptyState = document.createElement('div');
-      emptyState.className = 'empty-state empty-state-filter';
-      emptyState.innerHTML = '<p>Nenhum produto corresponde aos filtros aplicados.</p>';
-      elGridDeals.appendChild(emptyState);
-    }
-  } else if (emptyState) {
-    emptyState.remove();
-  }
-  
-  updateSelectionUI();
+  applyAmazonFilters();
 }
 
 function renderCoupons(coupons) {
@@ -491,125 +849,118 @@ function renderCoupons(coupons) {
   if (coupons.length === 0) {
     elGridCoupons.innerHTML = `
       <div class="empty-state">
-        <p>Nenhum cupom ativo no momento. Adicione cupons manualmente acima.</p>
+        <p>Nenhum cupom ativo no momento.</p>
       </div>
     `;
     return;
   }
   
   coupons.forEach((coupon) => {
+    // Só mostra o cupom se houver pelo menos um produto compatível nas ofertas do Mercado Livre do dia!
+    const compatibleDeals = findCompatibleDealsForCoupon(coupon, allMLDeals);
+    const compCount = compatibleDeals.length;
+    
+    if (compCount === 0) return; // Filtra apenas cupons utilizáveis e válidos hoje
+
     const item = document.createElement('div');
     item.className = 'coupon-ticket';
-    
-    // Calcula os produtos compatíveis
-    const compatibleDeals = findCompatibleDealsForCoupon(coupon, allDeals);
-    const compCount = compatibleDeals.length;
-    const hasComp = compCount > 0;
-    
-    // Se o cupom não for compatível com nenhum produto ativo, não exibimos (garante que apenas cupons funcionando ativamente apareçam)
-    if (!hasComp) return;
-
-    let compStatusHtml = `
-      <div class="coupon-compatible-status status-active">
-        🎯 Aplicável em <strong>${compCount}</strong> produtos
-      </div>
-      <div class="coupon-filter-row">
-        <input type="text" class="ipt-mini-filter" placeholder="Filtrar por nome do produto..." title="Filtrar produtos para este cupom">
-        <button class="btn-toggle-products" title="Mostrar/Esconder produtos compatíveis">
-          <span class="arrow-icon">▼</span>
-        </button>
-      </div>
-      <div class="compatible-products-list hidden">
-        <div class="compatible-products-grid"></div>
-      </div>
-    `;
     
     item.innerHTML = `
       <div class="coupon-info">
         <div class="coupon-code">${coupon.code}</div>
         <div class="coupon-rule">${coupon.rules}</div>
         <div class="coupon-limit">Limite: ${coupon.maxLimit || 'N/A'}</div>
-        ${compStatusHtml}
+        <div class="coupon-compatible-status status-active">
+          🎯 Aplicável em <strong>${compCount}</strong> ofertas do dia
+        </div>
+        <div class="coupon-filter-row">
+          <input type="text" class="ipt-mini-filter" placeholder="Filtrar produtos compatíveis..." title="Filtrar produtos">
+          <button class="btn-toggle-products" title="Ver produtos">
+            <span class="arrow-icon">▼</span>
+          </button>
+        </div>
+        <div class="compatible-products-list hidden">
+          <div class="compatible-products-grid"></div>
+        </div>
       </div>
       <button class="btn-copy" data-code="${coupon.code}">Copiar Código</button>
     `;
     
-    // Se houver produtos compatíveis, gerenciamos o mini-filtro e o toggle
-    if (hasComp) {
-      const gridContainer = item.querySelector('.compatible-products-grid');
-      const listContainer = item.querySelector('.compatible-products-list');
-      const toggleBtn = item.querySelector('.btn-toggle-products');
-      const arrowIcon = item.querySelector('.arrow-icon');
-      const miniFilterInput = item.querySelector('.ipt-mini-filter');
-      
-      // Renderização dinâmica filtrada
-      const updateFilteredGrid = (searchTerm = '') => {
-        if (!gridContainer) return;
-        gridContainer.innerHTML = '';
-        
-        const filteredDeals = compatibleDeals.filter(d => 
-          d.title.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        
-        if (filteredDeals.length === 0) {
-          gridContainer.innerHTML = '<div class="no-results-mini">Nenhum produto correspondente.</div>';
-          return;
-        }
-        
-        filteredDeals.forEach(d => {
-          const mini = document.createElement('div');
-          mini.className = 'compatible-product-mini';
-          mini.title = 'Clique para ir até este produto';
-          
-          mini.innerHTML = `
-            <img src="${d.image}" alt="">
-            <div class="mini-details">
-              <span class="mini-title"></span>
-              <span class="mini-price"></span>
-            </div>
-          `;
-          
-          mini.querySelector('.mini-title').textContent = d.title;
-          mini.querySelector('.mini-price').textContent = `${d.currentPrice} (${d.discount}% OFF)`;
-          
-          mini.addEventListener('click', () => {
-            scrollToProduct(d.title);
-          });
-          
-          gridContainer.appendChild(mini);
-        });
-      };
-      
-      // Inicializa grid
-      updateFilteredGrid();
-      
-      // Escuta digitação no input do mini-filtro (filtra apenas, sem abrir a gaveta automaticamente)
-      if (miniFilterInput) {
-        miniFilterInput.addEventListener('input', (e) => {
-          const val = e.target.value.trim();
-          updateFilteredGrid(val);
-        });
-      }
-      
-      // Escuta clique no botão/seta de toggle
-      if (toggleBtn) {
-        toggleBtn.addEventListener('click', () => {
-          if (listContainer) {
-            const isHidden = listContainer.classList.contains('hidden');
-            if (isHidden) {
-              listContainer.classList.remove('hidden');
-              if (arrowIcon) arrowIcon.textContent = '▲';
-              toggleBtn.classList.add('expanded');
-            } else {
-              listContainer.classList.add('hidden');
-              if (arrowIcon) arrowIcon.textContent = '▼';
-              toggleBtn.classList.remove('expanded');
-            }
-          }
-        });
-      }
-    }
+    const gridContainer = item.querySelector('.compatible-products-grid');
+    const listContainer = item.querySelector('.compatible-products-list');
+    const toggleBtn = item.querySelector('.btn-toggle-products');
+    const arrowIcon = item.querySelector('.arrow-icon');
+    const miniFilterInput = item.querySelector('.ipt-mini-filter');
     
+    const updateFilteredGrid = (searchTerm = '') => {
+      if (!gridContainer) return;
+      gridContainer.innerHTML = '';
+      
+      const filteredDeals = compatibleDeals.filter(d => 
+        d.title.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      
+      if (filteredDeals.length === 0) {
+        gridContainer.innerHTML = '<div class="no-results-mini">Nenhum produto correspondente.</div>';
+        return;
+      }
+      
+      filteredDeals.forEach(d => {
+        const mini = document.createElement('div');
+        mini.className = 'compatible-product-mini';
+        mini.innerHTML = `
+          <img src="${d.image}" alt="">
+          <div class="mini-details">
+            <span class="mini-title">${d.title}</span>
+            <span class="mini-price">${d.currentPrice} (${d.discount}% OFF)</span>
+          </div>
+        `;
+        mini.addEventListener('click', () => {
+          // Troca para a aba do Mercado Livre e rola até o produto
+          elTabML.click();
+          setTimeout(() => {
+            const card = Array.from(elGridML.querySelectorAll('.deal-card')).find(c => {
+              const idx = parseInt(c.dataset.index, 10);
+              return allMLDeals[idx] && allMLDeals[idx].title === d.title;
+            });
+            if (card) {
+              card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              card.style.borderColor = '#ffe600';
+              card.style.boxShadow = '0 0 15px rgba(255, 230, 0, 0.4)';
+              setTimeout(() => {
+                card.style.borderColor = '';
+                card.style.boxShadow = '';
+              }, 2000);
+            }
+          }, 200);
+        });
+        gridContainer.appendChild(mini);
+      });
+    };
+
+    updateFilteredGrid();
+
+    if (miniFilterInput) {
+      miniFilterInput.addEventListener('input', (e) => {
+        updateFilteredGrid(e.target.value.trim());
+      });
+    }
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const isHidden = listContainer.classList.contains('hidden');
+        if (isHidden) {
+          listContainer.classList.remove('hidden');
+          arrowIcon.textContent = '▲';
+          toggleBtn.classList.add('expanded');
+        } else {
+          listContainer.classList.add('hidden');
+          arrowIcon.textContent = '▼';
+          toggleBtn.classList.remove('expanded');
+        }
+      });
+    }
+
     const copyBtn = item.querySelector('.btn-copy');
     copyBtn.addEventListener('click', () => {
       navigator.clipboard.writeText(coupon.code).then(() => {
@@ -626,117 +977,137 @@ function renderCoupons(coupons) {
   });
 }
 
-async function addCoupon(code, rules, maxLimit) {
-  showLoading('Salvando cupom...');
-  try {
-    const response = await fetch('/api/coupons', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, rules, maxLimit })
-    });
-    const data = await response.json();
-    
-    if (data.error) {
-      alert(`Erro: ${data.error}`);
-    } else {
-      document.getElementById('ipt-coupon-code').value = '';
-      document.getElementById('ipt-coupon-rules').value = '';
-      document.getElementById('ipt-coupon-limit').value = '';
-      
-      allCoupons = data.coupons || [];
-      renderCoupons(allCoupons);
-      populateCouponSelect(allCoupons);
-      alert('Cupom cadastrado com sucesso!');
-    }
-  } catch (err) {
-    console.error('Erro ao adicionar cupom:', err);
-    alert('Erro ao tentar salvar o cupom.');
-  } finally {
-    hideLoading();
-  }
-}
-
-async function deleteCoupon(code) {
-  showLoading('Removendo cupom...');
-  try {
-    const response = await fetch(`/api/coupons/${code}`, {
-      method: 'DELETE'
-    });
-    const data = await response.json();
-    
-    if (data.error) {
-      alert(`Erro: ${data.error}`);
-    } else {
-      allCoupons = data.coupons || [];
-      renderCoupons(allCoupons);
-      populateCouponSelect(allCoupons);
-    }
-  } catch (err) {
-    console.error('Erro ao excluir cupom:', err);
-    alert('Erro ao tentar remover o cupom.');
-  } finally {
-    hideLoading();
-  }
-}
-
-function renderStories(stories) {
-  elGridStories.innerHTML = '';
+function findCompatibleDealsForCoupon(coupon, deals) {
+  if (!coupon || !coupon.rules || !deals) return [];
+  const rulesText = coupon.rules.toLowerCase();
   
-  if (stories.length === 0) {
-    elGridStories.innerHTML = `
-      <div class="empty-state">
-        <p>Nenhum Story gerado ainda. Selecione ofertas na aba anterior e clique em "Gerar Stories".</p>
-      </div>
-    `;
-    return;
+  let minPrice = 0;
+  const priceMatch = rulesText.match(/(?:r\$\s*|acima de\s+|partir de\s+|mínimas de\s+)([0-9.,]+)/i);
+  if (priceMatch) {
+    const numStr = priceMatch[1].replace(/\./g, '').replace(',', '.');
+    minPrice = parseFloat(numStr) || 0;
   }
   
-  stories.forEach((story) => {
-    const card = document.createElement('div');
-    card.className = 'story-card';
+  return deals.filter(deal => {
+    const cleanPriceStr = deal.currentPrice.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    const price = parseFloat(cleanPriceStr) || 0;
+    if (minPrice > 0 && price < minPrice) return false;
     
-    card.innerHTML = `
-      <div class="story-preview-box">
-        <img class="story-img" src="${story.url}" alt="${story.filename}" loading="lazy">
-        <div class="story-overlay">
-          <button class="btn-view-large">Visualizar 🔍</button>
-        </div>
-      </div>
-      <div class="story-footer">
-        <span class="story-title" title="${story.filename}">${story.filename}</span>
-        <div class="story-actions">
-          <a href="${story.url}" download="${story.filename}" class="btn-download-icon">Salvar 📥</a>
-        </div>
-      </div>
-    `;
+    const catInfo = getProductCategoryAndSub(deal.title);
+    const catName = catInfo.category;
+    const categoryTerms = {
+      'Eletrônicos e Tecnologia': ['tecnologia', 'celular', 'smartphone', 'tv', 'smart tv', 'eletrônicos', 'eletronico', 'câmera', 'camera', 'samsung', 'motorola', 'impressora'],
+      'Games e Consoles': ['ps5', 'game', 'playstation', 'xbox', 'nintendo', 'console', 'jogo'],
+      'Casa, Cozinha e Eletrodomésticos': ['eletrodomésticos', 'eletrodomestico', 'cozinha', 'air fryer', 'fritadeira', 'liquidificador', 'casa', 'ventilador', 'panela'],
+      'Saúde, Fitness e Esportes': ['suplementos', 'suplemento', 'whey', 'creatina', 'growth', 'dieta', 'academia', 'esporte', 'fitness', 'treino', 'sports', 'health'],
+      'Beleza e Cuidados Pessoais': ['beleza', 'cabelo', 'perfume', 'hidratante', 'creme', 'shampoo', 'higiene', 'pessoal', 'barbear', 'skincare', 'loreal', 'darrow', 'avene', 'avène', 'isdin', 'protetor solar'],
+      'Ferramentas e Construção': ['construção', 'construcao', 'ferramenta', 'torneira', 'reforma', 'jardim', 'reparos']
+    };
     
-    // Modal zoom click
-    card.querySelector('.story-preview-box').addEventListener('click', () => {
-      openLightbox(story.url, story.filename);
-    });
+    let hasCategoryRestriction = false;
+    let categoryMatches = false;
     
-    elGridStories.appendChild(card);
+    for (const [key, terms] of Object.entries(categoryTerms)) {
+      const isMentioned = terms.some(term => rulesText.includes(term));
+      if (isMentioned) {
+        hasCategoryRestriction = true;
+        if (catName === key) categoryMatches = true;
+      }
+    }
+    
+    if (hasCategoryRestriction && !categoryMatches) return false;
+    return true;
   });
 }
 
 // ==========================================
-// Selection Logic
+// Filters Logic
 // ==========================================
-function toggleSelectIndex(index) {
-  if (selectedIndices.has(index)) {
-    selectedIndices.delete(index);
-  } else {
-    selectedIndices.add(index);
-  }
-  updateSelectionUI();
+function applyMLFilters() {
+  const searchTerm = elFilterNameML.value.toLowerCase().trim();
+  const selectedCategory = elFilterCategoryML.value;
+  const selectedSubcategory = elFilterSubcategoryML.value;
+  const selectedDiscount = elFilterDiscountML.value;
+  
+  const cards = elGridML.querySelectorAll('.deal-card');
+  
+  cards.forEach(card => {
+    const idx = parseInt(card.dataset.index, 10);
+    const deal = allMLDeals[idx];
+    if (!deal) return;
+    
+    const matchesSearch = deal.title.toLowerCase().includes(searchTerm);
+    const catInfo = getProductCategoryAndSub(deal.title);
+    const matchesCategory = !selectedCategory || catInfo.category === selectedCategory;
+    const matchesSubcategory = !selectedSubcategory || catInfo.subcategory === selectedSubcategory;
+    const matchesDiscount = !selectedDiscount || deal.discount >= parseInt(selectedDiscount, 10);
+    
+    if (matchesSearch && matchesCategory && matchesSubcategory && matchesDiscount) {
+      card.classList.remove('hidden-filter');
+    } else {
+      card.classList.add('hidden-filter');
+    }
+  });
+
+  updateMLSelectionUI();
 }
 
-function updateSelectionUI() {
-  const cards = elGridDeals.querySelectorAll('.deal-card');
+function applyAmazonFilters() {
+  const searchTerm = elFilterNameAmazon.value.toLowerCase().trim();
+  const selectedCategory = elFilterCategoryAmazon.value;
+  const selectedSubcategory = elFilterSubcategoryAmazon.value;
+  const selectedDiscount = elFilterDiscountAmazon.value;
+  
+  const cards = elGridAmazon.querySelectorAll('.deal-card');
+  
+  cards.forEach(card => {
+    const idx = parseInt(card.dataset.index, 10);
+    const deal = allAmazonDeals[idx];
+    if (!deal) return;
+    
+    const matchesSearch = deal.title.toLowerCase().includes(searchTerm);
+    const catInfo = getProductCategoryAndSub(deal.title);
+    const matchesCategory = !selectedCategory || catInfo.category === selectedCategory;
+    const matchesSubcategory = !selectedSubcategory || catInfo.subcategory === selectedSubcategory;
+    const matchesDiscount = !selectedDiscount || deal.discount >= parseInt(selectedDiscount, 10);
+    
+    if (matchesSearch && matchesCategory && matchesSubcategory && matchesDiscount) {
+      card.classList.remove('hidden-filter');
+    } else {
+      card.classList.add('hidden-filter');
+    }
+  });
+
+  updateAmazonSelectionUI();
+}
+
+// ==========================================
+// Selection Management
+// ==========================================
+function toggleMLSelectIndex(index) {
+  if (selectedMLIndices.has(index)) {
+    selectedMLIndices.delete(index);
+  } else {
+    selectedMLIndices.add(index);
+  }
+  updateMLSelectionUI();
+}
+
+function toggleAmazonSelectIndex(index) {
+  if (selectedAmazonIndices.has(index)) {
+    selectedAmazonIndices.delete(index);
+  } else {
+    selectedAmazonIndices.add(index);
+  }
+  updateAmazonSelectionUI();
+}
+
+function updateMLSelectionUI() {
+  const cards = elGridML.querySelectorAll('.deal-card');
   cards.forEach(card => {
     const idx = parseInt(card.dataset.index, 10);
     const chk = card.querySelector('.deal-chk');
-    if (selectedIndices.has(idx)) {
+    if (selectedMLIndices.has(idx)) {
       card.classList.add('selected');
       if (chk) chk.checked = true;
     } else {
@@ -745,143 +1116,302 @@ function updateSelectionUI() {
     }
   });
 
-  const count = selectedIndices.size;
-  elTxtSelectedCount.textContent = count;
-  
-  if (count > 0) {
-    elBtnGenerateStories.disabled = false;
-    elBtnClearSelection.disabled = false;
-  } else {
-    elBtnGenerateStories.disabled = true;
-    elBtnClearSelection.disabled = true;
-  }
+  const count = selectedMLIndices.size;
+  elTxtSelectedCountML.textContent = count;
+  elBtnGenerateML.disabled = count === 0;
+  elBtnClearSelectionML.disabled = count === 0;
 
-  // Se todos os visíveis estiverem selecionados, atualiza o checkbox global
-  const visibleCards = elGridDeals.querySelectorAll('.deal-card:not(.hidden-filter)');
+  const visibleCards = elGridML.querySelectorAll('.deal-card:not(.hidden-filter)');
   if (visibleCards.length > 0) {
-    let allVisibleSelected = true;
+    let allSelected = true;
     visibleCards.forEach(card => {
-      const idx = parseInt(card.dataset.index, 10);
-      if (!selectedIndices.has(idx)) {
-        allVisibleSelected = false;
-      }
+      if (!selectedMLIndices.has(parseInt(card.dataset.index, 10))) allSelected = false;
     });
-    elChkSelectAll.checked = allVisibleSelected;
+    elChkSelectAllML.checked = allSelected;
   } else {
-    elChkSelectAll.checked = false;
+    elChkSelectAllML.checked = false;
   }
 }
 
-// ==========================================
-// Lightbox Preview Actions
-// ==========================================
-function openLightbox(imageUrl, title) {
-  elImgLightboxPreview.src = imageUrl;
-  elBtnDownloadStory.href = imageUrl;
-  elBtnDownloadStory.download = title;
-  
-  // Setup publish button in lightbox
-  const publishBtn = document.getElementById('btn-publish-single');
-  if (publishBtn) {
-    publishBtn.dataset.filename = title;
-  }
-  
-  elLightboxModal.classList.remove('hidden');
-  elLightboxModal.setAttribute('aria-hidden', 'false');
-}
+function updateAmazonSelectionUI() {
+  const cards = elGridAmazon.querySelectorAll('.deal-card');
+  cards.forEach(card => {
+    const idx = parseInt(card.dataset.index, 10);
+    const chk = card.querySelector('.deal-chk');
+    if (selectedAmazonIndices.has(idx)) {
+      card.classList.add('selected');
+      if (chk) chk.checked = true;
+    } else {
+      card.classList.remove('selected');
+      if (chk) chk.checked = false;
+    }
+  });
 
-function closeLightbox() {
-  elLightboxModal.classList.add('hidden');
-  elLightboxModal.setAttribute('aria-hidden', 'true');
-  elImgLightboxPreview.src = '';
+  const count = selectedAmazonIndices.size;
+  elTxtSelectedCountAmazon.textContent = count;
+  elBtnGenerateAmazon.disabled = count === 0;
+  elBtnClearSelectionAmazon.disabled = count === 0;
+
+  const visibleCards = elGridAmazon.querySelectorAll('.deal-card:not(.hidden-filter)');
+  if (visibleCards.length > 0) {
+    let allSelected = true;
+    visibleCards.forEach(card => {
+      if (!selectedAmazonIndices.has(parseInt(card.dataset.index, 10))) allSelected = false;
+    });
+    elChkSelectAllAmazon.checked = allSelected;
+  } else {
+    elChkSelectAllAmazon.checked = false;
+  }
 }
 
 // ==========================================
 // Tabs Management
 // ==========================================
 function switchTab(activeBtn, activePanel) {
-  // Desativa todas
-  [elTabDeals, elTabCoupons, elTabStories].forEach(btn => btn.classList.remove('active'));
-  [elPanelDeals, elPanelCoupons, elPanelStories].forEach(panel => panel.classList.remove('active'));
+  [elTabML, elTabAmazon, elTabCoupons].forEach(btn => btn.classList.remove('active'));
+  [elPanelML, elPanelAmazon, elPanelCoupons].forEach(panel => panel.classList.remove('active'));
   
-  // Ativa a selecionada
   activeBtn.classList.add('active');
   activePanel.classList.add('active');
   
-  // Ações adicionais baseadas na aba
-  if (activeBtn === elTabStories) {
-    fetchGeneratedStories();
-  }
+  const platform = activeBtn === elTabAmazon ? 'amazon' : 'ml';
+  updateLastUpdateUI(platform);
 }
 
 // ==========================================
-// Event Listeners & Init
+// Initialization & Listeners
 // ==========================================
 function init() {
-  // Tab change triggers
-  elTabDeals.addEventListener('click', () => switchTab(elTabDeals, elPanelDeals));
+  // Tab Switchers
+  elTabML.addEventListener('click', () => switchTab(elTabML, elPanelML));
+  elTabAmazon.addEventListener('click', () => switchTab(elTabAmazon, elPanelAmazon));
   elTabCoupons.addEventListener('click', () => switchTab(elTabCoupons, elPanelCoupons));
-  elTabStories.addEventListener('click', () => switchTab(elTabStories, elPanelStories));
 
-  // Scraper action trigger
-  elBtnUpdateDeals.addEventListener('click', triggerScraper);
-  
-  // Generate action trigger
-  elBtnGenerateStories.addEventListener('click', triggerGenerateStories);
+  // Scrapers
+  elBtnUpdateML.addEventListener('click', triggerMLScraper);
+  elBtnUpdateAmazon.addEventListener('click', triggerAmazonScraper);
 
-  // Checkbox Select All Toggle (age apenas nos cards visíveis)
-  elChkSelectAll.addEventListener('change', () => {
-    const visibleCards = elGridDeals.querySelectorAll('.deal-card:not(.hidden-filter)');
-    if (elChkSelectAll.checked) {
-      visibleCards.forEach(card => {
-        const idx = parseInt(card.dataset.index, 10);
-        selectedIndices.add(idx);
-      });
-    } else {
-      visibleCards.forEach(card => {
-        const idx = parseInt(card.dataset.index, 10);
-        selectedIndices.delete(idx);
-      });
-    }
-    updateSelectionUI();
+  // Generate / Post Triggers
+  elBtnGenerateML.addEventListener('click', () => postSelectedDeals('ml'));
+  elBtnGenerateAmazon.addEventListener('click', () => postSelectedDeals('amazon'));
+
+  // Select All ML Toggle
+  elChkSelectAllML.addEventListener('change', () => {
+    const visible = elGridML.querySelectorAll('.deal-card:not(.hidden-filter)');
+    visible.forEach(card => {
+      const idx = parseInt(card.dataset.index, 10);
+      if (elChkSelectAllML.checked) {
+        selectedMLIndices.add(idx);
+      } else {
+        selectedMLIndices.delete(idx);
+      }
+    });
+    updateMLSelectionUI();
   });
 
-  // Filtros de busca (nome, categoria e desconto)
-  const elFilterName = document.getElementById('ipt-filter-name');
-  const elFilterCategory = document.getElementById('sel-filter-category');
-  const elFilterDiscount = document.getElementById('sel-filter-discount');
-  
-  if (elFilterName) {
-    elFilterName.addEventListener('input', applyFilters);
-  }
-  if (elFilterCategory) {
-    elFilterCategory.addEventListener('change', applyFilters);
-  }
-  if (elFilterDiscount) {
-    elFilterDiscount.addEventListener('change', applyFilters);
-  }
-  const elFilterDealType = document.getElementById('sel-filter-deal-type');
-  if (elFilterDealType) {
-    elFilterDealType.addEventListener('change', applyFilters);
-  }
-
-  // Clear Selection click
-  elBtnClearSelection.addEventListener('click', () => {
-    selectedIndices.clear();
-    updateSelectionUI();
+  // Select All Amazon Toggle
+  elChkSelectAllAmazon.addEventListener('change', () => {
+    const visible = elGridAmazon.querySelectorAll('.deal-card:not(.hidden-filter)');
+    visible.forEach(card => {
+      const idx = parseInt(card.dataset.index, 10);
+      if (elChkSelectAllAmazon.checked) {
+        selectedAmazonIndices.add(idx);
+      } else {
+        selectedAmazonIndices.delete(idx);
+      }
+    });
+    updateAmazonSelectionUI();
   });
 
-  // Lightbox Close
-  elBtnCloseLightbox.addEventListener('click', closeLightbox);
-  elLightboxModal.addEventListener('click', (e) => {
-    if (e.target === elLightboxModal) {
-      closeLightbox();
-    }
+  // Clear Selections
+  elBtnClearSelectionML.addEventListener('click', () => {
+    selectedMLIndices.clear();
+    updateMLSelectionUI();
+  });
+  elBtnClearSelectionAmazon.addEventListener('click', () => {
+    selectedAmazonIndices.clear();
+    updateAmazonSelectionUI();
   });
 
-  // Fetch initial content
-  fetchDeals();
+  // Filters ML listeners
+  elFilterNameML.addEventListener('input', applyMLFilters);
+  elFilterDiscountML.addEventListener('change', applyMLFilters);
+
+  // Filters Amazon listeners
+  elFilterNameAmazon.addEventListener('input', applyAmazonFilters);
+  elFilterDiscountAmazon.addEventListener('change', applyAmazonFilters);
+
+  // Initial loads
+  fetchCategories().then(() => {
+    fetchMLDeals();
+    fetchAmazonDeals();
+  });
 }
 
-// Start application
+// Listener de clique para o comparador de preços
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.btn-compare-buscape');
+  if (btn) {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    const title = btn.dataset.title;
+    const card = btn.closest('.deal-card');
+    const resultsDiv = btn.nextElementSibling;
+    const platform = card.classList.contains('amazon-theme') ? 'amazon' : 'ml';
+    const index = parseInt(card.dataset.index, 10);
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="comp-spinner"></span> Consultando...';
+    resultsDiv.classList.remove('hidden');
+    resultsDiv.innerHTML = '<div class="comparison-loading">Buscando menor preço em 3 buscadores...</div>';
+    
+    try {
+      const deal = platform === 'ml' ? allMLDeals[index] : allAmazonDeals[index];
+      const cleanCurrentPriceStr = deal.currentPrice.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+      const currentPriceVal = parseFloat(cleanCurrentPriceStr) || 0;
+      
+      const response = await fetch(`/api/compare-price?q=${encodeURIComponent(title)}&price=${currentPriceVal}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        // Salva os dados de comparação no estado local da oferta
+        deal.comparison = {
+          minPrice: data.minPrice,
+          priceText: data.priceText,
+          url: data.url
+        };
+        
+        // Calcula a economia
+        const diff = data.minPrice - currentPriceVal;
+        const tolerance = currentPriceVal * 0.02; // tolerância de 2%
+        
+        let statusHtml = '';
+        if (diff > tolerance) {
+          statusHtml = `<span class="comparison-badge badge-real">Economia: R$ ${diff.toFixed(2).replace('.', ',')}! 📉</span>`;
+        } else if (diff < -tolerance) {
+          statusHtml = `<span class="comparison-badge badge-alert">⚠️ Preço Acima do Mercado</span>`;
+        } else {
+          statusHtml = `<span class="comparison-badge badge-eq">Preço Equivalente ⚖️</span>`;
+        }
+        
+        let buscapeHtml = data.buscape 
+          ? `<div class="provider-col">
+              <span class="provider-name">Buscapé 🔎</span>
+              <span class="provider-price">${data.buscape.priceText}</span>
+              <a href="${data.buscape.url}" target="_blank" rel="noopener noreferrer" class="provider-link">Ir 🔗</a>
+             </div>`
+          : `<div class="provider-col disabled">
+              <span class="provider-name">Buscapé 🔎</span>
+              <span class="provider-price">N/A</span>
+             </div>`;
+             
+        let zoomHtml = data.zoom 
+          ? `<div class="provider-col">
+              <span class="provider-name">Zoom ⚡</span>
+              <span class="provider-price">${data.zoom.priceText}</span>
+              <a href="${data.zoom.url}" target="_blank" rel="noopener noreferrer" class="provider-link">Ir 🔗</a>
+             </div>`
+          : `<div class="provider-col disabled">
+              <span class="provider-name">Zoom ⚡</span>
+              <span class="provider-price">N/A</span>
+             </div>`;
+
+        let bondfaroHtml = data.bondfaro 
+          ? `<div class="provider-col">
+              <span class="provider-name">Bondfaro 🏷️</span>
+              <span class="provider-price">${data.bondfaro.priceText}</span>
+              <a href="${data.bondfaro.url}" target="_blank" rel="noopener noreferrer" class="provider-link">Ir 🔗</a>
+             </div>`
+          : `<div class="provider-col disabled">
+              <span class="provider-name">Bondfaro 🏷️</span>
+              <span class="provider-price">N/A</span>
+             </div>`;
+
+        resultsDiv.innerHTML = `
+          <div class="comparison-details">
+            <div class="comparison-providers">
+              ${buscapeHtml}
+              ${zoomHtml}
+              ${bondfaroHtml}
+            </div>
+            <div class="comparison-summary">
+              <p class="comp-price-row">Melhor preço absoluto: <strong>${data.priceText}</strong></p>
+              ${statusHtml}
+            </div>
+          </div>
+        `;
+        btn.style.display = 'none'; // esconde o botão após sucesso
+      } else {
+        resultsDiv.innerHTML = `
+          <div class="comparison-error">
+            <span>⚠️ Preço não encontrado.</span>
+            <div class="manual-links-row">
+              <a href="https://www.buscape.com.br/search?q=${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer" class="comparison-link">Buscapé 🔗</a>
+              <a href="https://www.zoom.com.br/search?q=${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer" class="comparison-link">Zoom 🔗</a>
+              <a href="https://www.bondfaro.com.br/search?q=${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer" class="comparison-link">Bondfaro 🔗</a>
+            </div>
+          </div>
+        `;
+        btn.textContent = 'Comparar Preços';
+        btn.disabled = false;
+      }
+    } catch (err) {
+      resultsDiv.innerHTML = `<div class="comparison-error">Erro de rede ao consultar.</div>`;
+      btn.textContent = 'Comparar Preços';
+      btn.disabled = false;
+    }
+  }
+});
+
+// Listener de clique para exclusão de ofertas no WhatsApp
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.btn-delete-wpp');
+  if (btn) {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    const msgId = btn.dataset.msgId;
+    const platform = btn.dataset.platform;
+    const index = parseInt(btn.dataset.index, 10);
+    
+    if (confirm('Tem certeza que deseja apagar essa mensagem do grupo do WhatsApp para todos?')) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="comp-spinner"></span> Apagando...';
+      
+      try {
+        const response = await fetch('/api/delete-deal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ msgId })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          alert('Mensagem apagada com sucesso no WhatsApp!');
+          // Atualiza o estado local
+          const deal = platform === 'ml' ? allMLDeals[index] : allAmazonDeals[index];
+          if (deal) {
+            deal.publishedMsgId = null;
+          }
+          // Recarrega o grid da plataforma correspondente
+          if (platform === 'ml') {
+            renderMLDeals(allMLDeals);
+          } else {
+            renderAmazonDeals(allAmazonDeals);
+          }
+        } else {
+          alert(`Falha ao apagar: ${data.error || 'Erro desconhecido'}`);
+          btn.disabled = false;
+          btn.innerHTML = '🗑️ Excluir do WhatsApp';
+        }
+      } catch (err) {
+        alert(`Erro de rede ao excluir: ${err.message}`);
+        btn.disabled = false;
+        btn.innerHTML = '🗑️ Excluir do WhatsApp';
+      }
+    }
+  }
+});
+
 init();

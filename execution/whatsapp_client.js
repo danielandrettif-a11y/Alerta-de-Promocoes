@@ -5,15 +5,13 @@
  *
  * Biblioteca de integração do WhatsApp que gerencia a sessão localmente
  * e envia ofertas (imagem + texto) para um grupo específico.
- *
- * Uso para teste:
- *   node execution/whatsapp_client.js --test "Nome do Grupo"
  */
 
 const fs = require('fs');
 const path = require('path');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcodeTerminal = require('qrcode-terminal');
+const { TAXONOMY, inferCategoryAndSub } = require('./category_helper.js');
 
 function findBrowserPath() {
   const possiblePaths = [
@@ -21,7 +19,11 @@ function findBrowserPath() {
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     path.join(process.env.USERPROFILE || 'C:\\Users\\danie', 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser'
   ];
 
   for (const executablePath of possiblePaths) {
@@ -106,43 +108,72 @@ client.on('disconnected', (reason) => {
 
 // Escuta de reações para moderação (foguinho 🔥 apaga o post para todos)
 client.on('message_reaction', async (reaction) => {
-  if (reaction.reaction === '🔥') {
-    const chatId = reaction.msgId.remote;
-    const msgSerialized = reaction.msgId._serialized;
+  if (!reaction || !reaction.msgId) return;
 
-    console.log(`🔥 Reação de foguinho detectada no chat: ${chatId}`);
-    try {
-      const chat = await client.getChatById(chatId);
-      // Busca mensagens recentes
-      const messages = await chat.fetchMessages({ limit: 40 });
-      const targetMsg = messages.find(m => m.id._serialized === msgSerialized);
+  try {
+    const chatId = reaction.msgId.remote._serialized || reaction.msgId.remote;
+    const msgSerialized = reaction.msgId._serialized || `${reaction.msgId.fromMe}_${chatId}_${reaction.msgId.id}`;
+
+    console.log(`🤖 [WhatsApp Reaction] Reação recebida: "${reaction.reaction}" de ${reaction.senderId} na msg: ${msgSerialized}`);
+
+    if (reaction.reaction === '🔥') {
+      console.log(`🔥 Reação de foguinho detectada no chat: ${chatId}. Processando exclusão via wwebjs...`);
       
-      if (targetMsg) {
-        if (targetMsg.fromMe) {
-          console.log(`   Apagando mensagem ID: ${msgSerialized} para todos no grupo...`);
-          await targetMsg.delete(true);
-          console.log('   ✅ Mensagem excluída com sucesso via reação!');
-        } else {
-          console.log('   ⚠️ A mensagem reagida não foi enviada pelo bot. Ignorando.');
-        }
-      } else {
-        // Tenta buscar direto se não achou no fetch recente
-        try {
-          const directMsg = await client.getMessageById(msgSerialized);
-          if (directMsg && directMsg.fromMe) {
-            console.log(`   Apagando mensagem direta ID: ${msgSerialized}...`);
-            await directMsg.delete(true);
-            console.log('   ✅ Mensagem excluída diretamente com sucesso!');
+      try {
+        const message = await client.getMessageById(msgSerialized);
+        if (message) {
+          if (message.fromMe) {
+            console.log(`   Apagando mensagem ID: ${msgSerialized} para todos no grupo...`);
+            await message.delete(true);
+            console.log('   ✅ [Moderação] Mensagem excluída com sucesso via reação!');
+          } else {
+            console.log('   ⚠️ [Moderação] A mensagem reagida não foi enviada pelo bot. Ignorando.');
           }
-        } catch (e) {
-          console.log('   ⚠️ Mensagem antiga não pôde ser recuperada para exclusão.');
+        } else {
+          console.warn(`   ⚠️ [Moderação] Mensagem não encontrada no cache do WhatsApp para exclusão.`);
         }
+      } catch (errEx) {
+        console.error(`   ❌ [Moderação] Erro ao deletar mensagem via wwebjs:`, errEx.message);
       }
-    } catch (err) {
-      console.error('   ❌ Erro ao processar exclusão por reação:', err.message);
     }
+  } catch (err) {
+    console.error('   ❌ Erro no processamento da reação:', err);
   }
 });
+
+// Helper para mesclar ofertas locais de Mercado Livre e Shopee
+function getMergedDeals() {
+  const mlPath = path.join(__dirname, '..', 'mercado_livre_deals_report.json');
+  const amazonPath = path.join(__dirname, '..', 'amazon_deals_report.json');
+  let deals = [];
+  
+  if (fs.existsSync(mlPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(mlPath, 'utf-8'));
+      if (Array.isArray(data.deals)) {
+        deals = deals.concat(data.deals.map(d => ({ ...d, platform: 'Mercado Livre' })));
+      }
+    } catch (e) {}
+  }
+  
+  if (fs.existsSync(amazonPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(amazonPath, 'utf-8'));
+      if (Array.isArray(data.deals)) {
+        deals = deals.concat(data.deals.map(d => ({ ...d, platform: 'Amazon' })));
+      }
+    } catch (e) {}
+  }
+  
+  // Ordena decrescente por desconto
+  return deals.sort((a, b) => b.discount - a.discount);
+}
+
+// Inferência de categoria via Helper unificado
+function inferCategoryLocal(title) {
+  const info = inferCategoryAndSub(title);
+  return `${info.icon} ${info.category} > ${info.subcategory}`;
+}
 
 // Listener de mensagens recebidas para comandos interativos do @antigravity
 client.on('message', async (msg) => {
@@ -160,18 +191,19 @@ client.on('message', async (msg) => {
       if (cleanMsg === 'ajuda' || cleanMsg === 'comandos' || cleanMsg === '') {
         const helpText = `🤖 *ROBÔ ANTIGRAVITY - GUIA DE COMANDOS*
 
-Comande o robô diretamente no grupo marcando *@antigravity* com os seguintes comandos:
+Comande o robô diretamente marcando *@antigravity* com os seguintes comandos:
 
 1. 🎟️ *atualizar* ou *varrer*
-   Busca ofertas recentes no Mercado Livre e atualiza cupons. Ao concluir, envia as top 3 ofertas do dia.
+   Faz a varredura concorrente de Mercado Livre e Amazon, e atualiza os cupons.
 
-2. 📦 *gerar [categoria]* ou *enviar [categoria]*
-   Gera o story vertical com link de afiliado e posta a melhor oferta daquela categoria no grupo.
-   _Exemplo:_ \`@antigravity gerar cozinha\` ou \`@antigravity enviar eletronicos\`
-   _Categorias:_ \`cozinha\`, \`suplementos\`, \`eletronicos\`, \`celulares\`, \`moda\`, \`beleza\`, \`eletrodomesticos\`.
+2. 📦 *[quantidade]* (ex: \`5\` ou \`enviar 3\`)
+   Posta as melhores X ofertas gerais do momento (ML + Amazon unificados) com Stories e links diretos.
 
-3. ⚡ *status*
-   Exibe a integridade da conexão do robô e o limite diário.`;
+3. 🏷️ *[categoria ou subcategoria]* (ex: \`celulares\`, \`cozinha\`, \`suplementos\` ou \`fone\`)
+   Posta a melhor oferta ativa daquela categoria ou subcategoria específica.
+
+4. ⚡ *status*
+   Exibe a integridade da conexão do robô.`;
         await msg.reply(helpText);
         console.log('   ✅ Resposta de ajuda enviada.');
       } 
@@ -180,185 +212,266 @@ Comande o robô diretamente no grupo marcando *@antigravity* com os seguintes co
         const hrs = Math.floor(uptime / 3600);
         const mins = Math.floor((uptime % 3600) / 60);
         const uptimeStr = `${hrs}h ${mins}m`;
-        const sessionActive = fs.existsSync(path.join(__dirname, '..', '.tmp', 'ml_user_data'));
+        const mlActive = fs.existsSync(path.join(__dirname, '..', 'mercado_livre_deals_report.json'));
+        const amazonActive = fs.existsSync(path.join(__dirname, '..', 'amazon_deals_report.json'));
         
         const statusText = `🤖 *STATUS DO ROBÔ*
 
 🔌 Conexão WhatsApp: *ONLINE* ✅
-🔒 Sessão Mercado Livre: *${sessionActive ? 'ATIVA ✅' : 'EXPIRADA ❌'}*
-⏱️ Servidor Online: *${uptimeStr}*
-📊 Limite de Posts: *30 por dia*`;
+🛍️ Base Mercado Livre: *${mlActive ? 'ATIVA ✅' : 'INATIVA ❌'}*
+🟡 Base Amazon: *${amazonActive ? 'ATIVA ✅' : 'INATIVA ❌'}*
+⏱️ Servidor Online: *${uptimeStr}*`;
         await msg.reply(statusText);
         console.log('   ✅ Resposta de status enviada.');
       }
-      else if (cleanMsg.startsWith('atualizar') || cleanMsg.startsWith('varrer')) {
-        await msg.reply('⏳ *Entendido!* Iniciando varredura e atualização de ofertas no Mercado Livre...\nIsso pode levar de 15 a 30 segundos. Mandarei o resumo ao terminar.');
-        
-        const { exec } = require('child_process');
-        exec('node execution/mercado_livre_deals.js', async (err, stdout, stderr) => {
-          if (err) {
-            console.error('Erro no scraper via WhatsApp:', err.message);
-            await msg.reply(`❌ *Falha ao atualizar ofertas:* ${err.message}`);
-            return;
-          }
+      else if (cleanMsg === 'apagar' || cleanMsg === 'apaga' || cleanMsg === 'deletar' || cleanMsg === 'excluir') {
+        if (msg.hasQuotedMsg) {
+          const quotedMsg = await msg.getQuotedMessage();
+          const quotedSerialized = quotedMsg.id._serialized;
           
-          const dealsReportPath = path.join(__dirname, '..', 'mercado_livre_deals_report.json');
-          if (fs.existsSync(dealsReportPath)) {
+          console.log(`🔥 [Comando Apagar] Solicitada exclusão da mensagem citada: ${quotedSerialized}`);
+          
+          const result = await client.pupPage.evaluate(async (msgId) => {
             try {
-              const data = JSON.parse(fs.readFileSync(dealsReportPath, 'utf-8'));
-              const deals = data.deals || [];
-              
-              if (deals.length === 0) {
-                await msg.reply('✅ *Atualização concluída!* Nenhuma oferta ativa localizada.');
-                return;
+              if (!window.Store || !window.Store.Msg || !window.Store.Cmd) {
+                return { success: false, error: 'Store do WhatsApp Web não disponível no browser' };
               }
-              
-              const sorted = [...deals].sort((a, b) => b.discount - a.discount).slice(0, 3);
-              let summary = `✅ *VARREDURA COMPLETA!* Base de ofertas atualizada.\n\n*Top 3 Maiores Descontos do Dia:*\n`;
-              
-              sorted.forEach((d, idx) => {
-                summary += `\n*${idx + 1}. ${d.title.substring(0, 50)}...*\n🔥 *${d.discount}% OFF* | Por: *${d.currentPrice}*\n`;
-              });
-              
-              summary += `\n💡 _Dica: Digite \`@antigravity gerar [categoria]\` para gerar o story de alguma delas!_`;
-              await msg.reply(summary);
+              const msg = window.Store.Msg.get(msgId);
+              if (!msg) {
+                return { success: false, error: 'Mensagem não encontrada no cache do navegador' };
+              }
+              if (!msg.id.fromMe) {
+                return { success: false, error: 'A mensagem reagida não foi enviada pelo bot (fromMe === false)' };
+              }
+              await window.Store.Cmd.sendDeleteMsgs(msg.chat, [msg], true);
+              return { success: true };
             } catch (e) {
-              await msg.reply('✅ *Atualização concluída!* Mas ocorreu um erro ao abrir a lista de ofertas.');
+              return { success: false, error: e.message };
+            }
+          }, quotedSerialized);
+
+          if (result && result.success) {
+            console.log(`   ✅ [Comando Apagar] Mensagem citada excluída com sucesso!`);
+            // Tenta apagar a mensagem de comando do usuário para limpar o chat
+            try {
+              await msg.delete(true);
+            } catch (errDeleteCmd) {
+              console.log('   ⚠️ Não foi possível apagar a mensagem de comando (o bot não é admin do grupo).');
             }
           } else {
-            await msg.reply('✅ *Atualização concluída!* Mas a base de dados não foi encontrada.');
+            console.warn(`   ⚠️ [Comando Apagar] Falha ao excluir:`, result ? result.error : 'Sem resposta');
+            await msg.reply('⚠️ Não consegui apagar essa mensagem. Verifique se ela foi enviada por mim e se não é muito antiga.');
           }
+        } else {
+          await msg.reply('⚠️ Para apagar uma oferta, responda (reply) a ela no grupo marcando: `@antigravity apagar`.');
+        }
+      }
+      else if (cleanMsg.startsWith('atualizar') || cleanMsg.startsWith('varrer')) {
+        await msg.reply('⏳ *Entendido!* Iniciando varredura concorrente no Mercado Livre e Amazon...\nIsso pode levar cerca de 30 segundos. Mandarei o resumo ao terminar.');
+        
+        const { exec } = require('child_process');
+        
+        // Executa scrapers concorrentes
+        const mlPromise = new Promise((resolve) => {
+          exec('node execution/mercado_livre_deals.js', (err) => resolve(!err));
+        });
+        const amazonPromise = new Promise((resolve) => {
+          exec('node execution/amazon_deals.js', (err) => resolve(!err));
+        });
+
+        Promise.all([mlPromise, amazonPromise]).then(async (results) => {
+          const mlSuccess = results[0];
+          const amazonSuccess = results[1];
+          
+          let statusReport = `✅ *VARREDURA COMPLETA!*\n\n`;
+          statusReport += `🛍️ Mercado Livre: ${mlSuccess ? '*Sucesso* ✅' : '*Falha* ❌'}\n`;
+          statusReport += `🟡 Amazon: ${amazonSuccess ? '*Sucesso* ✅' : '*Falha* ❌'}\n\n`;
+
+          const deals = getMergedDeals();
+          if (deals.length === 0) {
+            statusReport += `⚠️ Nenhuma oferta ativa localizada nas bases locais.`;
+          } else {
+            const sorted = deals.slice(0, 3);
+            statusReport += `*Top 3 Maiores Descontos do Dia:*\n`;
+            sorted.forEach((d, idx) => {
+              statusReport += `\n*${idx + 1}. [${d.platform}] ${d.title.substring(0, 45)}...*\n🔥 *${d.discount}% OFF* | Por: *${d.currentPrice}*\n`;
+            });
+          }
+          await msg.reply(statusReport);
         });
       }
-      else if (cleanMsg.startsWith('gerar') || cleanMsg.startsWith('enviar') || cleanMsg.startsWith('story')) {
-        // Extrai a categoria
-        const match = cleanMsg.match(/(?:gerar|enviar|story)\s+(.+)/i);
-        if (!match) {
-          await msg.reply('⚠️ *Por favor, especifique a categoria.* Exemplo: `@antigravity gerar cozinha`');
-          return;
-        }
-        
-        const categoryInput = match[1].trim().toLowerCase();
-        let targetCategory = '';
-        
-        if (categoryInput.includes('cozinha') || categoryInput.includes('casa') || categoryInput.includes('panela') || categoryInput.includes('frigideira')) {
-          targetCategory = 'Casa e Cozinha';
-        } else if (categoryInput.includes('suplemento') || categoryInput.includes('saude') || categoryInput.includes('whey') || categoryInput.includes('esporte') || categoryInput.includes('creatina')) {
-          targetCategory = 'Saúde e Esportes';
-        } else if (categoryInput.includes('eletr') || categoryInput.includes('som') || categoryInput.includes('fone') || categoryInput.includes('gamer') || categoryInput.includes('relogio') || categoryInput.includes('smartwatch')) {
-          targetCategory = 'Eletrônicos e Acessórios';
-        } else if (categoryInput.includes('celular') || categoryInput.includes('iphone') || categoryInput.includes('smartphone') || categoryInput.includes('telef')) {
-          targetCategory = 'Celulares';
-        } else if (categoryInput.includes('moda') || categoryInput.includes('roupa') || categoryInput.includes('tenis') || categoryInput.includes('vestido')) {
-          targetCategory = 'Moda e Calçados';
-        } else if (categoryInput.includes('beleza') || categoryInput.includes('perfume') || categoryInput.includes('shampoo') || categoryInput.includes('cosmetico')) {
-          targetCategory = 'Beleza e Cuidado Pessoal';
-        } else if (categoryInput.includes('eletrodo') || categoryInput.includes('ar condicionado') || categoryInput.includes('ventilador') || categoryInput.includes('aspirador')) {
-          targetCategory = 'Eletrodomésticos';
-        }
-        
-        if (!targetCategory) {
-          await msg.reply(`⚠️ *Categoria "${categoryInput}" não reconhecida.*\nTente: _cozinha, suplementos, eletronicos, celulares, moda, beleza, eletrodomesticos_.`);
-          return;
-        }
-
-        await msg.reply(`⏳ *Processando:* Buscando a melhor oferta de *${targetCategory}* e renderizando o Story...`);
-
-        const dealsReportPath = path.join(__dirname, '..', 'mercado_livre_deals_report.json');
-        if (!fs.existsSync(dealsReportPath)) {
-          await msg.reply('❌ Base de dados de ofertas não encontrada. Use `@antigravity atualizar` antes.');
-          return;
-        }
-
-        const data = JSON.parse(fs.readFileSync(dealsReportPath, 'utf-8'));
-        const deals = data.deals || [];
-        
-        // Função auxiliar interna para inferência idêntica
-        const inferCategoryLocal = (title) => {
-          const t = title.toLowerCase();
-          if (t.includes('panela') || t.includes('frigideira') || t.includes('cozinha') || t.includes('prato') || t.includes('copo') || t.includes('chaleira') || t.includes('fritadeira') || t.includes('cafeteira') || t.includes('airfryer') || t.includes('forno') || t.includes('fogao') || t.includes('microondas')) return 'Casa e Cozinha';
-          if (t.includes('creatina') || t.includes('suplemento') || t.includes('whey') || t.includes('proteina') || t.includes('caps') || t.includes('omega') || t.includes('vitamina') || t.includes('dark lab') || t.includes('soldiers') || t.includes('colageno')) return 'Saúde e Esportes';
-          if (t.includes('fone') || t.includes('headset') || t.includes('caixa de som') || t.includes('alexa') || t.includes('smart') || t.includes('relogio') || t.includes('watch') || t.includes('jbl') || t.includes('bluetooth') || t.includes('teclado') || t.includes('mouse') || t.includes('gamer')) return 'Eletrônicos e Acessórios';
-          if (t.includes('smartphone') || t.includes('celular') || t.includes('iphone') || t.includes('motorola') || t.includes('samsung') || t.includes('xiaomi') || t.includes('redmi')) return 'Celulares';
-          if (t.includes('vestido') || t.includes('camisa') || t.includes('camiseta') || t.includes('calça') || t.includes('tenis') || t.includes('sapato') || t.includes('bota') || t.includes('mochila') || t.includes('moda') || t.includes('roupa') || t.includes('casaco') || t.includes('jaqueta')) return 'Moda e Calçados';
-          if (t.includes('perfume') || t.includes('fragrancia') || t.includes('sedutor') || t.includes('shampoo') || t.includes('creme') || t.includes('maquiagem') || t.includes('cosmetico') || t.includes('hidratante')) return 'Beleza e Cuidado Pessoal';
-          if (t.includes('ventilador') || t.includes('ar condicionado') || t.includes('aquecedor') || t.includes('climatizador') || t.includes('extratora') || t.includes('aspirador') || t.includes('lavadora') || t.includes('secadora')) return 'Eletrodomésticos';
-          return 'Ofertas Gerais';
-        };
-
-        const categoryDeals = deals.filter(d => inferCategoryLocal(d.title) === targetCategory);
-
-        if (categoryDeals.length === 0) {
-          await msg.reply(`⚠️ *Nenhuma oferta ativa* de *${targetCategory}* foi encontrada. Tente rodar \`@antigravity atualizar\` antes.`);
-          return;
-        }
-
-        // Seleciona a de maior desconto
-        categoryDeals.sort((a, b) => b.discount - a.discount);
-        const bestDeal = categoryDeals[0];
-
-        // Processamento síncrono da oferta
-        const { execSync } = require('child_process');
-        // Gera hash de ID simples
-        const dealId = `deal_${Math.abs(bestDeal.title.length + bestDeal.discount)}`;
-        const localLastLinkPath = path.join(__dirname, '..', '.tmp', `last_link_${dealId}.txt`);
-        const singleSelectionPath = path.join(__dirname, '..', '.tmp', `wpp_single_deal_${dealId}.json`);
-        const storiesDir = path.join(__dirname, '..', 'stories');
-
-        try {
-          // 1. Extrai link de afiliado (headless)
-          if (fs.existsSync(localLastLinkPath)) fs.unlinkSync(localLastLinkPath);
-          execSync(`node execution/get_meli_affiliate_link.js "${bestDeal.link}" "${localLastLinkPath}"`, {
-            cwd: path.join(__dirname, '..')
-          });
-
-          let affiliateLink = bestDeal.link;
-          if (fs.existsSync(localLastLinkPath)) {
-            affiliateLink = fs.readFileSync(localLastLinkPath, 'utf-8').trim();
-            fs.unlinkSync(localLastLinkPath);
-          }
-
-          // 2. Gera a imagem do Story
-          const tempSelectionData = {
-            generatedAt: new Date().toISOString(),
-            deals: [{ ...bestDeal, link: bestDeal.link }],
-            selectedCoupon: data.coupons && data.coupons.length > 0 ? data.coupons[0] : null
-          };
-          fs.writeFileSync(singleSelectionPath, JSON.stringify(tempSelectionData, null, 2), 'utf-8');
-
-          if (fs.existsSync(storiesDir)) {
-            fs.readdirSync(storiesDir)
-              .filter(f => f.endsWith('.jpg'))
-              .forEach(f => {
-                try { fs.unlinkSync(path.join(storiesDir, f)); } catch (e) {}
-              });
-          }
-
-          execSync(`node execution/generate_stories.js "${singleSelectionPath}"`, {
-            cwd: path.join(__dirname, '..')
-          });
-
-          fs.unlinkSync(singleSelectionPath);
-
-          const generatedFiles = fs.readdirSync(storiesDir).filter(f => f.endsWith('.jpg'));
-          if (generatedFiles.length === 0) {
-            throw new Error('Falha ao renderizar imagem do story no Sharp/Puppeteer.');
-          }
-          const storyImagePath = path.join(storiesDir, generatedFiles[0]);
-
-          // 3. Envia no WhatsApp com caption formatada
-          const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${bestDeal.title}*\n\n🔥 *${bestDeal.discount}% OFF*\nDe: ~~${bestDeal.originalPrice}~~\nPor: *${bestDeal.currentPrice}*\n\n👉 *Compre pelo link:* ${affiliateLink}\n\n📌 _Categoria: ${targetCategory}_`;
-          
-          const media = MessageMedia.fromFilePath(storyImagePath);
-          await client.sendMessage(msg.from, media, { caption: wppMessage });
-          console.log(`   ✅ Oferta de ${targetCategory} postada via comando.`);
-
-        } catch (execErr) {
-          console.error('Erro ao gerar story por comando:', execErr.message);
-          await msg.reply(`❌ *Erro ao gerar story:* ${execErr.message}`);
-        }
-      }
       else {
+        // Verifica se é pedido de quantidade (ex: "5", "enviar 3", "mandar 10")
+        const numMatch = cleanMsg.match(/(?:enviar|mandar|gerar)?\s*(\d+)/i);
+        if (numMatch) {
+          const qty = parseInt(numMatch[1], 10);
+          if (qty <= 0 || qty > 10) {
+            await msg.reply('⚠️ *Quantidade inválida.* Digite um número de 1 a 10.');
+            return;
+          }
+
+          await msg.reply(`⏳ *Processando:* Buscando as top ${qty} ofertas unificadas e gerando os Stories...`);
+          
+          const deals = getMergedDeals();
+          if (deals.length === 0) {
+            await msg.reply('❌ Nenhuma oferta localizada nas bases locais. Use `@antigravity atualizar` antes.');
+            return;
+          }
+
+          const selected = deals.slice(0, qty);
+          const { execSync } = require('child_process');
+          const storiesDir = path.join(__dirname, '..', 'stories');
+
+          for (let i = 0; i < selected.length; i++) {
+            const deal = selected[i];
+            const dealId = `wpp_deal_${Math.abs(deal.title.length + deal.discount)}_${i}`;
+            const singleSelectionPath = path.join(__dirname, '..', '.tmp', `wpp_single_deal_${dealId}.json`);
+            
+            try {
+              // 1. Prepara dados e gera story (Puppeteer no backend de fallback)
+              const tempSelectionData = {
+                generatedAt: new Date().toISOString(),
+                deals: [{ ...deal, link: deal.link }],
+                selectedCoupon: null
+              };
+              fs.writeFileSync(singleSelectionPath, JSON.stringify(tempSelectionData, null, 2), 'utf-8');
+
+              // Limpa diretório de stories temporariamente
+              if (fs.existsSync(storiesDir)) {
+                fs.readdirSync(storiesDir)
+                  .filter(f => f.endsWith('.jpg'))
+                  .forEach(f => {
+                    try { fs.unlinkSync(path.join(storiesDir, f)); } catch (e) {}
+                  });
+              }
+
+              // Roda gerador
+              execSync(`node execution/generate_stories.js "${singleSelectionPath}"`, {
+                cwd: path.join(__dirname, '..'),
+                stdio: 'ignore'
+              });
+              
+              try { fs.unlinkSync(singleSelectionPath); } catch (e) {}
+
+              const generatedFiles = fs.readdirSync(storiesDir).filter(f => f.endsWith('.jpg'));
+              if (generatedFiles.length > 0) {
+                const storyImagePath = path.join(storiesDir, generatedFiles[0]);
+                const media = MessageMedia.fromFilePath(storyImagePath);
+                
+                // Formata a legenda com a tag da plataforma
+                const platformTag = deal.platform === 'Amazon' ? '🟡 *AMAZON*' : '🛍️ *MERCADO LIVRE*';
+                const category = inferCategoryLocal(deal.title);
+                
+                const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
+                
+                // Envia
+                await client.sendMessage(msg.from, media, { caption: wppMessage });
+                console.log(`   ✅ Oferta ${i+1}/${qty} enviada via comando de quantidade.`);
+              }
+            } catch (err) {
+              console.error(`Erro ao gerar/enviar story para o item ${i}:`, err.message);
+            }
+            // Intervalo curto de segurança entre mensagens
+            await new Promise(r => setTimeout(r, 2500));
+          }
+          return;
+        }
+
+        // Caso contrário, tenta identificar uma categoria ou subcategoria (ex: "celulares", "cozinha", "suplementos")
+        let targetCategory = '';
+        let targetSubcategory = '';
+        let displayLabel = '';
+
+        const categoryInput = cleanMsg.trim().toLowerCase();
+
+        // Busca se bate com categoria ou subcategoria na taxonomia
+        for (const [catName, catData] of Object.entries(TAXONOMY)) {
+          const catNameLower = catName.toLowerCase();
+          if (catNameLower.includes(categoryInput) || categoryInput.includes(catNameLower)) {
+            targetCategory = catName;
+            displayLabel = `${catData.icon} ${catName}`;
+            break;
+          }
+
+          for (const [subName, keywords] of Object.entries(catData.subcategories)) {
+            const subNameLower = subName.toLowerCase();
+            if (subNameLower.includes(categoryInput) || categoryInput.includes(subNameLower) || keywords.some(k => categoryInput.includes(k) || k.includes(categoryInput))) {
+              targetCategory = catName;
+              targetSubcategory = subName;
+              displayLabel = `${catData.icon} ${catName} > ${subName}`;
+              break;
+            }
+          }
+          if (targetCategory) break;
+        }
+
+        if (targetCategory) {
+          await msg.reply(`⏳ *Processando:* Buscando a melhor oferta de *${displayLabel}*...`);
+          
+          const deals = getMergedDeals();
+          const categoryDeals = deals.filter(d => {
+            const info = inferCategoryAndSub(d.title);
+            if (targetSubcategory) {
+              return info.subcategory === targetSubcategory;
+            }
+            return info.category === targetCategory;
+          });
+
+          if (categoryDeals.length === 0) {
+            await msg.reply(`⚠️ *Nenhuma oferta ativa* de *${displayLabel}* foi encontrada. Tente rodar \`@antigravity atualizar\` antes.`);
+            return;
+          }
+
+          // Melhor oferta da categoria/subcategoria
+          const bestDeal = categoryDeals[0];
+          const dealId = `wpp_cat_${Math.abs(bestDeal.title.length + bestDeal.discount)}`;
+          const singleSelectionPath = path.join(__dirname, '..', '.tmp', `wpp_single_deal_${dealId}.json`);
+          const storiesDir = path.join(__dirname, '..', 'stories');
+          const { execSync } = require('child_process');
+
+          try {
+            const tempSelectionData = {
+              generatedAt: new Date().toISOString(),
+              deals: [{ ...bestDeal, link: bestDeal.link }],
+              selectedCoupon: null
+            };
+            fs.writeFileSync(singleSelectionPath, JSON.stringify(tempSelectionData, null, 2), 'utf-8');
+
+            if (fs.existsSync(storiesDir)) {
+              fs.readdirSync(storiesDir)
+                .filter(f => f.endsWith('.jpg'))
+                .forEach(f => {
+                  try { fs.unlinkSync(path.join(storiesDir, f)); } catch (e) {}
+                });
+            }
+
+            execSync(`node execution/generate_stories.js "${singleSelectionPath}"`, {
+              cwd: path.join(__dirname, '..'),
+              stdio: 'ignore'
+            });
+
+            try { fs.unlinkSync(singleSelectionPath); } catch (e) {}
+
+            const generatedFiles = fs.readdirSync(storiesDir).filter(f => f.endsWith('.jpg'));
+            if (generatedFiles.length > 0) {
+              const storyImagePath = path.join(storiesDir, generatedFiles[0]);
+              const media = MessageMedia.fromFilePath(storyImagePath);
+              
+              const platformTag = bestDeal.platform === 'Amazon' ? '🟡 *AMAZON*' : '🛍️ *MERCADO LIVRE*';
+              const bestDealCategoryStr = inferCategoryLocal(bestDeal.title);
+              const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${bestDeal.title}*\n\n🔥 *${bestDeal.discount}% OFF*\nDe: ~~${bestDeal.originalPrice}~~\nPor: *${bestDeal.currentPrice}*\n\n👉 *Compre pelo link:* ${bestDeal.link}\n\n📌 _Categoria: ${bestDealCategoryStr}_\nPlataforma: ${platformTag}`;
+              
+              await client.sendMessage(msg.from, media, { caption: wppMessage });
+              console.log(`   ✅ Oferta da categoria ${displayLabel} enviada.`);
+            }
+          } catch (err) {
+            console.error('Erro ao gerar story para categoria:', err.message);
+            await msg.reply(`❌ *Erro ao processar story:* ${err.message}`);
+          }
+          return;
+        }
+
+        // Se nada coincidir
         await msg.reply('🤖 *Comando não reconhecido.* Marque *@antigravity ajuda* para ver a lista de comandos.');
       }
     } catch (err) {
@@ -378,7 +491,6 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
       if (groupNameOrId.includes('@')) {
         chatId = groupNameOrId;
       } else if (groupNameOrId === 'Alerta de Descontos') {
-        // ID real e verificado de produção do grupo Alerta de Descontos
         chatId = '120363410833991285@g.us';
       } else {
         console.log(`📡 Buscando chat pelo nome "${groupNameOrId}"...`);
@@ -408,14 +520,23 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
       }
 
       console.log('✅ Mensagem enviada com sucesso!');
-      resolve(sentMsg && sentMsg.id ? sentMsg.id._serialized : 'sent_success_no_id');
+      console.log('🤖 Debug sentMsg:', sentMsg ? { hasId: !!sentMsg.id, idType: typeof sentMsg.id, idVal: sentMsg.id } : 'null');
+      
+      let extractedId = null;
+      if (sentMsg && sentMsg.id) {
+        if (typeof sentMsg.id === 'object') {
+          extractedId = sentMsg.id._serialized || sentMsg.id.id;
+        } else {
+          extractedId = sentMsg.id;
+        }
+      }
+      resolve(extractedId || 'sent_success_no_id');
     } catch (err) {
       console.error('❌ Falha no envio da mensagem:', err.message);
       reject(err);
     }
   });
 }
-
 
 // Listeners de falha do cliente
 client.on('auth_failure', (msg) => {
@@ -429,32 +550,6 @@ client.on('disconnected', (reason) => {
 client.initialize().catch(err => {
   console.error('💥 Erro durante o bootstrap do WhatsApp Web:', err.message);
 });
-
-// Execução de teste via linha de comando
-const args = process.argv.slice(2);
-if (args.includes('--test')) {
-  const targetGroup = args[args.indexOf('--test') + 1] || 'Alerta de Descontos';
-  
-  client.on('ready', async () => {
-    console.log(`🚀 Iniciando envio de teste para o grupo "${targetGroup}"...`);
-    const testMsg = `🧪 *TESTE DE INTEGRAÇÃO DO ROBÔ* \n\nA conexão entre o robô e o WhatsApp foi realizada com sucesso!\n\n_Horário do teste:_ ${new Date().toLocaleTimeString('pt-BR')}`;
-    
-    try {
-      await sendOffer(targetGroup, testMsg);
-      console.log('🎉 Teste concluído com sucesso! Fechando em 3s...');
-      setTimeout(() => process.exit(0), 3000);
-    } catch (e) {
-      console.error('💥 Erro no teste:', e.message);
-      process.exit(1);
-    }
-  });
-
-  // Timeout caso fique travado sem ler QR Code
-  setTimeout(() => {
-    console.log('\n⚠️  Tempo esgotado. Se você não escaneou o QR Code, execute o comando novamente.');
-    process.exit(1);
-  }, 120000); // 2 minutos
-}
 
 module.exports = {
   client,

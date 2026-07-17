@@ -20,39 +20,21 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { TAXONOMY, inferCategoryAndSub } = require('./category_helper.js');
 
 const ROOT = path.join(__dirname, '..');
-const DEALS_PATH = path.join(ROOT, 'mercado_livre_deals_report.json');
+const ML_DEALS_PATH = path.join(ROOT, 'mercado_livre_deals_report.json');
+const AMAZON_DEALS_PATH = path.join(ROOT, 'amazon_deals_report.json');
 const HISTORY_PATH = path.join(ROOT, '.tmp', 'published_history.json');
 const STORIES_DIR = path.join(ROOT, 'stories');
 const LAST_LINK_PATH = path.join(ROOT, '.tmp', 'last_affiliate_link.txt');
 const GROUP_NAME = 'Alerta de Descontos';
 
 // Inferência simples de Categoria com base no título
+// Inferência de Categoria e Subcategoria via Helper unificado
 function inferCategory(title) {
-  const t = title.toLowerCase();
-  if (t.includes('panela') || t.includes('frigideira') || t.includes('cozinha') || t.includes('prato') || t.includes('copo') || t.includes('chaleira') || t.includes('fritadeira') || t.includes('cafeteira') || t.includes('airfryer') || t.includes('forno') || t.includes('fogao') || t.includes('microondas')) {
-    return 'Casa e Cozinha';
-  }
-  if (t.includes('creatina') || t.includes('suplemento') || t.includes('whey') || t.includes('proteina') || t.includes('caps') || t.includes('omega') || t.includes('vitamina') || t.includes('dark lab') || t.includes('soldiers') || t.includes('colageno')) {
-    return 'Saúde e Esportes';
-  }
-  if (t.includes('fone') || t.includes('headset') || t.includes('caixa de som') || t.includes('alexa') || t.includes('smart') || t.includes('relogio') || t.includes('watch') || t.includes('jbl') || t.includes('bluetooth') || t.includes('teclado') || t.includes('mouse') || t.includes('gamer')) {
-    return 'Eletrônicos e Acessórios';
-  }
-  if (t.includes('smartphone') || t.includes('celular') || t.includes('iphone') || t.includes('motorola') || t.includes('samsung') || t.includes('xiaomi') || t.includes('redmi')) {
-    return 'Celulares';
-  }
-  if (t.includes('vestido') || t.includes('camisa') || t.includes('camiseta') || t.includes('calça') || t.includes('tenis') || t.includes('sapato') || t.includes('bota') || t.includes('mochila') || t.includes('moda') || t.includes('roupa') || t.includes('casaco') || t.includes('jaqueta')) {
-    return 'Moda e Calçados';
-  }
-  if (t.includes('perfume') || t.includes('fragrancia') || t.includes('sedutor') || t.includes('shampoo') || t.includes('creme') || t.includes('maquiagem') || t.includes('cosmetico') || t.includes('hidratante')) {
-    return 'Beleza e Cuidado Pessoal';
-  }
-  if (t.includes('ventilador') || t.includes('ar condicionado') || t.includes('aquecedor') || t.includes('climatizador') || t.includes('extratora') || t.includes('aspirador') || t.includes('lavadora') || t.includes('secadora')) {
-    return 'Eletrodomésticos';
-  }
-  return 'Ofertas Gerais';
+  const info = inferCategoryAndSub(title);
+  return `${info.icon} ${info.category} > ${info.subcategory}`;
 }
 
 // ID determinístico
@@ -169,23 +151,39 @@ async function runScheduler() {
   async function runCycle() {
     console.log(`\n⏰ [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo de ofertas do Mercado Livre...`);
 
-    // 1. Scraping do Mercado Livre
-    console.log('👉 Executando varredura no Mercado Livre...');
+    // 1. Scraping do Mercado Livre e Amazon
+    console.log('👉 Executando varredura no Mercado Livre e Amazon...');
     try {
-      execSync('node execution/mercado_livre_deals.js', { cwd: ROOT, stdio: 'inherit' });
+      execSync('node execution/mercado_livre_deals.js', { cwd: ROOT, stdio: 'ignore' });
+      execSync('node execution/amazon_deals.js', { cwd: ROOT, stdio: 'ignore' });
       console.log('✅ Base de dados de ofertas atualizada.');
     } catch (e) {
-      console.warn('⚠️ Falha ao rodar o scraper de ofertas. Tentando dados anteriores...', e.message);
-    }
-
-    if (!fs.existsSync(DEALS_PATH)) {
-      console.error('❌ Erro: Arquivo de ofertas não encontrado.');
-      return;
+      console.warn('⚠️ Falha ao rodar os scrapers de ofertas. Tentando dados anteriores...', e.message);
     }
 
     // 2. Carrega ofertas e histórico
-    const dealsData = JSON.parse(fs.readFileSync(DEALS_PATH, 'utf-8'));
-    const deals = dealsData.deals || [];
+    let deals = [];
+    let generatedAt = new Date().toISOString();
+    let dealsData = { generatedAt, deals, coupons: [] };
+
+    if (fs.existsSync(ML_DEALS_PATH)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(ML_DEALS_PATH, 'utf-8'));
+        if (data.deals) deals = deals.concat(data.deals.map(d => ({ ...d, platform: 'Mercado Livre' })));
+        if (data.coupons) dealsData.coupons = data.coupons;
+      } catch (e) {}
+    }
+    if (fs.existsSync(AMAZON_DEALS_PATH)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(AMAZON_DEALS_PATH, 'utf-8'));
+        if (data.deals) deals = deals.concat(data.deals.map(d => ({ ...d, platform: 'Amazon' })));
+      } catch (e) {}
+    }
+
+    if (deals.length === 0) {
+      console.error('❌ Erro: Nenhum arquivo de ofertas encontrado.');
+      return;
+    }
 
     let history = { publishedIds: [], entries: [] };
     if (fs.existsSync(HISTORY_PATH)) {
@@ -297,7 +295,8 @@ async function runScheduler() {
 
       // 3c. Formata Mensagem
       const category = inferCategory(deal.title);
-      const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${affiliateLink}\n\n📌 _Categoria: ${category}_`;
+      const platformTag = deal.platform === 'Amazon' ? '🟡 *AMAZON*' : '🛍️ *MERCADO LIVRE*';
+      const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${affiliateLink}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
 
       // 3d. Envia no WhatsApp
       let msgId = null;

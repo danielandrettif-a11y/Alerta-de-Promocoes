@@ -1,119 +1,104 @@
-# Agent Instructions
+# Constituição do Projeto - Promo Automator (V.L.A.E.G. Simplificado)
 
-> This file is mirrored across CLAUDE.md, AGENTS.md, and GEMINI.md so the same instructions load in any AI environment.
-
-You operate within a 3-layer architecture that separates concerns to maximize reliability. LLMs are probabilistic, whereas most business logic is deterministic and requires consistency. This system fixes that mismatch.
-
-## The 3-Layer Architecture
-
-**Layer 1: Directive (What to do)**
-- Basically just SOPs written in Markdown, live in `directives/`
-- Define the goals, inputs, tools/scripts to use, outputs, and edge cases
-- Natural language instructions, like you'd give a mid-level employee
-
-**Layer 2: Orchestration (Decision making)**
-- This is you. Your job: intelligent routing.
-- Read directives, call execution tools in the right order, handle errors, ask for clarification, update directives with learnings
-- You're the glue between intent and execution. E.g you don't try scraping websites yourself—you read `directives/scrape_website.md` and come up with inputs/outputs and then run `execution/scrape_single_site.py`
-
-**Layer 3: Execution (Doing the work)**
-- Deterministic Python scripts in `execution/`
-- Environment variables, api tokens, etc are stored in `.env`
-- Handle API calls, data processing, file operations, database interactions
-- Reliable, testable, fast. Use scripts instead of manual work. Commented well.
-
-**Why this works:** if you do everything yourself, errors compound. 90% accuracy per step = 59% success over 5 steps. The solution is push complexity into deterministic code. That way you just focus on decision-making.
-
-## Operating Principles
-
-**1. Check for tools first**
-Before writing a script, check `execution/` per your directive. Only create new scripts if none exist.
-
-**2. Self-anneal when things break**
-- Read error message and stack trace
-- Fix the script and test it again (unless it uses paid tokens/credits/etc—in which case you check w user first)
+Este espaço define os invariantes, schemas de dados e regras comportamentais específicas do projeto simplificado.
 
 ---
 
-# Constituição do Projeto - Promo Automator (V.L.A.E.G.)
-
-Este espaço define os invariantes, schemas de dados e regras comportamentais específicas do projeto.
-
 ## Esquemas de Dados (Data Schemas)
 
-### Payload de Entrada (Publicar Story)
+### Payload de Entrada (Envio de Story & Oferta via Painel)
 ```json
 {
-  "filename": "nome_do_story_gerado.jpg"
+  "title": "Smartphone Samsung Galaxy S24 Ultra",
+  "originalPrice": "R$ 6.999,00",
+  "currentPrice": "R$ 4.899,00",
+  "discount": 30,
+  "link": "https://www.mercadolivre.com.br/p/MLB12345",
+  "image": "https://http2.mlstatic.com/D_NQ_NP_2X_987654-MLA123-F.webp",
+  "category": "Celulares",
+  "platform": "mercado_livre",
+  "imageBuffer": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...", // Imagem em Base64 gerada pelo Canvas
+  "dealType": "Oferta Relâmpago" // "Oferta Relâmpago", "Oferta do Dia", etc.
 }
 ```
 
-### Payload de Saída (Confirmação de Publicação)
+### Payload de Saída (Confirmação de Envio)
 ```json
 {
   "success": true,
-  "message": "Story publicado com sucesso!",
-  "mediaId": "id_da_midia_instagram",
-  "tempImageUrl": "url_publica_temporaria"
+  "message": "Oferta enviada com sucesso para o WhatsApp!",
+  "msgId": "true_120363410833991285@g.us_3EB0C5..."
 }
 ```
 
-### Payload de Entrada (Validador de Nomes)
+```
+
+### Payload do Comparador de Preços (`/api/compare-price`)
 ```json
 {
-  "keywords": ["promocao", "achados", "cupons"],
-  "max_length": 30,
-  "style": "any"
+  "success": true,
+  "query": "jameson whiskey irland 750",
+  "buscape": {
+    "price": 69.08,
+    "priceText": "R$ 69,08",
+    "url": "https://www.buscape.com.br/search?q=..."
+  },
+  "zoom": {
+    "price": 69.08,
+    "priceText": "R$ 69,08",
+    "url": "https://www.zoom.com.br/search?q=..."
+  },
+  "bondfaro": {
+    "price": 69.08,
+    "priceText": "R$ 69,08",
+    "url": "https://www.bondfaro.com.br/search?q=..."
+  },
+  "minPrice": 69.08,
+  "priceText": "R$ 69,08",
+  "url": "https://www.buscape.com.br/search?q=..."
 }
 ```
 
-### Payload de Saída (Validador de Nomes)
+### Estrutura de Ofertas no Banco Local (`mercado_livre_deals_report.json` e `amazon_deals_report.json`)
 ```json
 {
-  "timestamp": "2026-07-11T00:00:00.000Z",
-  "total_checked": 15,
-  "available_count": 8,
-  "names": [
+  "generatedAt": "2026-07-15T22:00:00.000Z",
+  "deals": [
     {
-      "username": "achadinhos.promos",
-      "available": true,
-      "score": 92,
-      "relevance": "alta",
-      "checked_at": "2026-07-11T00:00:00.000Z"
+      "title": "Jogo de Panelas 5 Peças",
+      "link": "https://www.mercadolivre.com.br/...",
+      "image": "https://...",
+      "originalPrice": "R$ 499,00",
+      "currentPrice": "R$ 299,00",
+      "discount": 40,
+      "isFreeShipping": true,
+      "isFull": true,
+      "dealType": "Oferta do Dia",
+      "timeLeft": "Acaba em 5h"
     }
   ]
 }
 ```
-
-
+ 
+---
+ 
 ## Regras Comportamentais
-
-1. **API do Instagram Dormente**: A integração automática e a publicação na Graph API do Instagram ficam dormentes por tempo indeterminado. A interface do painel web oferece apenas visualização e download dos Stories gerados para postagem manual.
-2. **Extração de Afiliados Headless (VPS)**: O script `get_meli_affiliate_link.js` opera obrigatoriamente em modo headless (`headless: true`) e usa a sessão ativa em `.tmp/ml_user_data` para obter os links de afiliado encurtados de forma invisível.
-3. **Comandos Interativos do WhatsApp**: O cliente WhatsApp deve escutar ativamente menções a `@antigravity` no grupo e responder de forma cortês a comandos estruturados (`ajuda`, `status`, `atualizar`, `gerar [categoria]`).
-4. **Prevenção de Loops**: O robô nunca deve responder a mensagens enviadas por ele mesmo (`msg.fromMe === true`) para evitar loops infinitos de comandos no grupo.
-
+ 
+1. **Geração via Canvas no Frontend**: Toda a renderização do design visual do Story vertical (1080x1920) ocorre diretamente no lado do cliente usando a API HTML5 Canvas. O servidor Express não roda instâncias do Puppeteer para tirar capturas de tela dos Stories, apenas recebe a imagem final em formato Base64.
+2. **Uso de Links Diretos**: Não há processamento de links de afiliados (encurtadores do Mercado Livre stripe/headless e similares desativados). As mensagens no WhatsApp levam o link original de destino da promoção.
+3. **Moderação por Reação (🔥)**: O bot escuta ativamente o evento de reações (`message_reaction`) no WhatsApp Web. Caso um administrador adicione a reação de foguinho (`🔥`) em qualquer mensagem enviada pelo bot, o bot deve excluir imediatamente essa mensagem para todos no grupo (`msg.delete(true)`).
+4. **Comandos Interativos do WhatsApp**: O robô responde a comandos direcionados no grupo usando *@antigravity* seguidos por:
+   - Uma **quantidade** de produtos (ex: `5` ou `enviar 3`). Ele busca na base unificada local os X itens com maiores descontos e os envia no formato de Story + legenda de forma sequencial.
+   - Uma **categoria** de produtos (ex: `celulares`, `cozinha`). Ele localiza a oferta de maior desconto na categoria especificada e a posta no grupo.
+6. **Comparador Triplo Paralelo**: A rota de consulta `/api/compare-price` executa pesquisas em tempo real no Buscapé, Zoom e Bondfaro em paralelo. O menor preço é filtrado com base em um limite de corte dinâmico de 60% do preço de promoção para evitar ruídos de acessórios, e uma margem de tolerância de 2% é usada para avaliar a equivalência com a nossa promoção.
+  
+---
+ 
 ## Invariantes Arquiteturais
-
-1. **Camada 3 (Execução)**: O arquivo `execution/whatsapp_client.js` é o único responsável direto pelas conexões e eventos do WhatsApp Web.
-2. **Camada 2 (Servidor)**: O `server.js` gerencia o ciclo automático de ofertas do WhatsApp, inicializa a escuta persistente de comandos no WhatsApp Client e expõe endpoints locais do painel.
-3. **Segurança de Segredos**: Segredos e limites do WhatsApp e Mercado Livre devem ser carregados estritamente via `process.env` de forma isolada do código-fonte.
-4. **WhatsApp Client**: O arquivo `execution/whatsapp_client.js` gerencia de forma isolada a conexão e o envio de mídias/mensagens para o WhatsApp via `whatsapp-web.js`, mantendo os cookies de sessão salvos localmente em `.tmp/wpp_session`.
-
-## Esquemas de Dados do WhatsApp
-
-### Payload de Entrada (Envio de Oferta)
-```json
-{
-  "groupName": "Alerta de Descontos",
-  "messageText": "🔥 *OFERTA IMPERDÍVEL!* \n\n*Jogo De Panelas 17 Peças Teflon Antiaderente Indução*\n\n🔥 *65% OFF*\nDe: ~~R$ 999~~\nPor: *R$ 349,14*\n\n👉 *Compre pelo link:* https://meli.la/2o2L8Hw\n\n📌 _Categoria: Casa e Cozinha_",
-  "imagePath": "stories/story_1_discount_65.jpg"
-}
-```
-
-## Regras Comportamentais do WhatsApp
-
-1. **Sessão Persistente**: A autenticação do WhatsApp deve ser salva de forma persistente em `.tmp/wpp_session`. O QR Code só deve ser impresso no terminal em caso de desautenticação ou primeira inicialização.
-2. **Formatação de Mensagens**: As mensagens enviadas para o grupo devem usar a sintaxe de negrito (`*`), tachado (`~~`) e itálico (`_`) do WhatsApp para garantir excelente legibilidade e apelo visual das ofertas.
-3. **Imagens nos Stories do WhatsApp**: Toda oferta deve ser enviada acompanhada da imagem promocional vertical (Story) gerada para que os administradores possam baixá-la e repostá-la no Instagram.
-
+ 
+1. **Camada 3 (Execução)**: 
+   - `execution/whatsapp_client.js`: Gerenciador da sessão e envio direto de mensagens/mídia.
+   - `execution/mercado_livre_deals.js`: Scraper de ofertas e cupons do Mercado Livre.
+   - `execution/amazon_deals.js`: Novo scraper de ofertas da Amazon.
+2. **Camada 2 (Servidor)**: `server.js` gerencia endpoints da API, serve os arquivos estáticos, coordena o disparo dos scripts de scraping de ofertas/cupons de forma concorrente e mantém a conexão activa com o WhatsApp.
+3. **Segurança de Sessão**: A autenticação do WhatsApp Web é persistida localmente na pasta `.tmp/wpp_session`.

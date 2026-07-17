@@ -23,7 +23,8 @@ const { execSync } = require('child_process');
 
 // ─── Config ───────────────────────────────────────────────────────
 const ROOT = path.join(__dirname, '..');
-const DEALS_PATH = path.join(ROOT, 'mercado_livre_deals_report.json');
+const ML_DEALS_PATH = path.join(ROOT, 'mercado_livre_deals_report.json');
+const AMAZON_DEALS_PATH = path.join(ROOT, 'amazon_deals_report.json');
 const HISTORY_PATH = path.join(ROOT, '.tmp', 'published_history.json');
 const STORIES_DIR = path.join(ROOT, 'stories');
 const COUPONS_PATH = path.join(ROOT, 'coupons.json');
@@ -192,14 +193,38 @@ async function main() {
   }
 
   // 1. Carrega dados
-  if (!fs.existsSync(DEALS_PATH)) {
-    console.error('❌ Arquivo de ofertas não encontrado. Execute o scraper primeiro:');
-    console.error('   node execution/mercado_livre_deals.js');
+  let deals = [];
+  let generatedAt = new Date().toISOString();
+
+  if (fs.existsSync(ML_DEALS_PATH)) {
+    try {
+      const mlData = JSON.parse(fs.readFileSync(ML_DEALS_PATH, 'utf-8'));
+      if (mlData.deals) {
+        deals = deals.concat(mlData.deals.map(d => ({ ...d, platform: 'mercado_livre' })));
+      }
+      generatedAt = mlData.generatedAt || generatedAt;
+    } catch (e) {
+      console.warn('⚠️ Erro ao ler ofertas do Mercado Livre.');
+    }
+  }
+
+  if (fs.existsSync(AMAZON_DEALS_PATH)) {
+    try {
+      const amzData = JSON.parse(fs.readFileSync(AMAZON_DEALS_PATH, 'utf-8'));
+      if (amzData.deals) {
+        deals = deals.concat(amzData.deals.map(d => ({ ...d, platform: 'amazon' })));
+      }
+    } catch (e) {
+      console.warn('⚠️ Erro ao ler ofertas da Amazon.');
+    }
+  }
+
+  if (deals.length === 0) {
+    console.error('❌ Nenhum arquivo de ofertas encontrado. Execute os scrapers primeiro.');
     process.exit(1);
   }
 
-  const dealsData = JSON.parse(fs.readFileSync(DEALS_PATH, 'utf-8'));
-  const deals = dealsData.deals || [];
+  const dealsData = { generatedAt, deals };
   const history = loadHistory();
 
   console.log(`📊 Configuração: Top ${count} ofertas`);

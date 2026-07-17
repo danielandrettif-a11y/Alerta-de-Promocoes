@@ -1,12 +1,37 @@
 [
   {
+    "code": "COMPRAHOJE",
+    "rules": "Mercado Livre concede 15% OFF com cupom - 15% OFF em compras a partir de R$79, limitado a R$60.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "MELIMODA",
+    "rules": "Faça compras com cupom Mercado Livre e ganhe 20% OFF - 20% OFF em compras a partir de R$49, limitado a R$60.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "GARANTAMEUDESCONTO",
+    "rules": "Aproveite desconto de 20% com código Mercado Livre - 20% OFF em compras a partir de R$29, limitado a R$100.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "MELHORDODIA",
+    "rules": "A chance de economizar 25% em compras no Mercado Livre - 25% OFF em compras a partir de R$29, limitado a R$100.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "MUITOBARATO",
+    "rules": "12% a menos usando cupom Mercado Livre - 12% OFF em compras a partir de R$29, limitado a R$100.",
+    "maxLimit": "N/A"
+  },
+  {
     "code": "AVENE15",
     "rules": "Cupom Mercado Livre concede 15% OFF em compras - 15% OFF para produtos selecionados.",
     "maxLimit": "N/A"
   },
   {
-    "code": "OFERTASMELI",
-    "rules": "Descontão de 15% utilizando cupom Mercado Livre - 15% OFF em compras a partir de R$199, limitado a R$150.",
+    "code": "SALVAMEUBOLSO",
+    "rules": "25% OFF com cupom Mercado Livre - 25% OFF em compras a partir de R$29, limitado a R$100.",
     "maxLimit": "N/A"
   },
   {
@@ -15,33 +40,13 @@
     "maxLimit": "N/A"
   },
   {
-    "code": "MEUACHADO",
-    "rules": "Compre com cupom Mercado Livre e economize 20% - Para compras acima de R$29.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "VALEDESCONTO",
-    "rules": "Hora do desconto Mercado Livre: 18% OFF com cupom - 18% OFF em compras a partir de R$49, limitado a R$60.",
+    "code": "TUDOEMPROMO",
+    "rules": "Confira desconto de 18% usando código Mercado Livre - 18% OFF em compras a partir de R$29, limitado a R$100.",
     "maxLimit": "N/A"
   },
   {
     "code": "CUPOMPRAMODA",
     "rules": "15% OFF em seus pedidos com cupom Mercado Livre - 15% OFF em compras a partir de R$49, limitado a R$60.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "VALEPLUS",
-    "rules": "Mercado Livre garante 10% OFF com cupom - 10% OFF em compras a partir de R$79, limitado a R$60.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "MELICUPOM",
-    "rules": "Código promocional Mercado Livre concede 15% OFF - Para pedidos acima de R$79.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "DESCONTOU",
-    "rules": "Desconto de 20% com cupom Mercado Livre - Em compras acima de R$29.",
     "maxLimit": "N/A"
   },
   {
@@ -55,8 +60,73 @@
     "maxLimit": "N/A"
   },
   {
+    "code": "MELIOFFHOJE",
+    "rules": "Mercado Livre garante 15% OFF com cupom - 15% OFF em compras a partir de R$79, limitado a R$60.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "LIBERADESCONTO",
+    "rules": "20% OFF com cupom Mercado Livre - 20% OFF no site em compras a partir de R$79, limitado a R$60.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "OFFMELI",
+    "rules": "Economia de 15% com cupom Mercado Livre - 15% OFF no site em compras a partir de R$199,00, limitado a R$150.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "SEMPREML",
+    "rules": "Aproveite desconto de 25% em compras com cupom Mercado Livre - 25% OFF em compras a partir de R$29, limitado a R$100.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "VAIBARATO",
+    "rules": "Garanta economia de 12% em seus pedidos com cupom Mercado Livre - 12% OFF em compras a partir de R$29, limitado a R$100.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "CASAPROMO",
+    "rules": "Utilize cupom Mercado Livre para economizar 25% - 25% OFF em compras a partir de R$29, limitado a R$80.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "MEUACHADO",
+    "rules": "Compre com cupom Mercado Livre e economize 20% - Para compras acima de R$29.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "PROMOVALE",
+    "rules": "Itens com 12% de desconto utilizando cupom Mercado Livre - 12% OFF em compras a partir de R$29, limitado a R$100.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "VALEDESCONTO",
+    "rules": "Super promo Mercado Livre: 18% OFF com cupom - 18% OFF em compras a partir de R$49, limitado a R$60.",
+    "maxLimit": "N/A"
+  },
+  {
     "code": "MELIOFERTAS",
     "rules": "10% OFF utilizando cupom Mercado Livre - 10% OFF em compras a partir de R$79, limitado a R$50.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "MELICUPOM",
+    "rules": "Código promocional Mercado Livre concede 15% OFF - Para pedidos acima de R$79.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "VALEPLUS",
+    "rules": "Mercado Livre garante 10% OFF com cupom - 10% OFF em compras a partir de R$79, limitado a R$60.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "OFERTASMELI",
+    "rules": "Descontão de 15% utilizando cupom Mercado Livre - 15% OFF em compras a partir de R$199, limitado a R$150.",
+    "maxLimit": "N/A"
+  },
+  {
+    "code": "DESCONTOU",
+    "rules": "Desconto de 20% com cupom Mercado Livre - Em compras acima de R$29.",
     "maxLimit": "N/A"
   },
   {
@@ -106,7 +176,7 @@
   },
   {
     "code": "PROMOPRACASA",
-    "rules": "Show de descontos: 18% OFF com cupom Mercado Livre - 18% OFF em compras a partir de R$79, limitado a R$60.",
+    "rules": "18% OFF com cupom Mercado Livre - 18% OFF em compras a partir de R$79, limitado a R$60.",
     "maxLimit": "N/A"
   },
   {
@@ -117,81 +187,6 @@
   {
     "code": "AFILIADOSCOMLOLA",
     "rules": "Use código Mercado Livre e tenha 20% de economia - 20% OFF para compras mínimas de R$39,90 e desconto máximo de R$12.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "FIGURINHAS10",
-    "rules": "Figurinhas com 10% OFF - 10% OFF para compras mínimas de R$19 e desconto máximo de R$10.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "MANTECORP15",
-    "rules": "Código promocional Mercado Livre garante 15% OFF - Aplicável para itens selecionados.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "DARROW15",
-    "rules": "Mercado Livre concede 15% de economia em suas compras com cupom - Válido para produtos selecionados.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "DESCONTOAQUI",
-    "rules": "O momento chegou: Aplique cupom Mercado Livre e ganhe 25% OFF - Em compras acima de R$29, com desconto máximo de R$100.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "AFILIADOSCOMBIODERMA",
-    "rules": "Itens de cuidados pessoais com 20% OFF utilizando código Mercado Livre - Para compras acima de R$189,90, com desconto máximo limitado a R$89.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "CASACOREMELI",
-    "rules": "Casa e utilidades domésticas com 20% de economia com cupom Mercado Livre - Para compras acima de R$79, com desconto máximo limitado a R$80.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "MELILIBERADO",
-    "rules": "A chance de conseguir 18% OFF com cupom Mercado Livre - Válido para compras acima de R$49, com desconto máximo limitado a R$60.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "ISDIN15",
-    "rules": "15% de desconto em produtos Isdin - Aplique cupom Mercado Livre no carrinho para garantir economia.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "MAYBELLINENOMELI",
-    "rules": "Confira desconto de 30% utilizando cupom Mercado Livre - 30% OFF para compras mínimas de R$89,90 e desconto máximo de R$40.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "ELSEVENOMELI",
-    "rules": "Descontão de 30% com cupom Mercado Livre - 30% OFF para compras mínimas de R$69,90 e desconto máximo de R$40.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "LOREALNOMELI",
-    "rules": "Mercado Livre concede 30% OFF com cupom - 30% OFF para compras mínimas de R$69,90 e desconto máximo de R$40.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "GARNIERNOMELI",
-    "rules": "Aproveite 30% de desconto com código promocional Mercado Livre - 30% OFF para compras mínimas de R$59,90 e desconto máximo de R$40.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "KERASTASE15",
-    "rules": "O melhor da beleza com 15% OFF aplicando cupom Mercado Livre - 15% OFF para compras mínimas de R$149, e desconto máximo de R$15.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "ISDINFUSION20",
-    "rules": "Confira Protetor Solar Isdin com 20% OFF usando cupom Mercado Livre - Clique no link para conferir os itens da promoção.",
-    "maxLimit": "N/A"
-  },
-  {
-    "code": "HOJETEMCUPOM",
-    "rules": "Cupom Mercado Livre concede 15% OFF - 15% OFF em compras a partir de R$199, limitado a R$200.",
     "maxLimit": "N/A"
   }
 ]
