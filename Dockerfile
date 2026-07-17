@@ -1,4 +1,4 @@
-FROM node:18-slim
+FROM node:22-slim
 
 # Instalar dependencias e baixar o Chrome oficial para Linux (essencial para o Puppeteer)
 RUN apt-get update && apt-get install -y \
@@ -16,11 +16,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# O Chrome ja e instalado na imagem; evita um segundo download pelo Puppeteer.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 # Copiar definicoes de pacotes
 COPY package*.json ./
 
-# Instalar dependencias
-RUN npm install
+# Instalar exatamente as dependencias registradas no package-lock.json
+RUN npm ci --omit=dev
 
 # Copiar arquivos do projeto
 COPY . .

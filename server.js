@@ -6,7 +6,13 @@ const http = require('http');
 const urlModule = require('url');
 const { exec, execSync } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./execution/category_helper.js');
-const puppeteer = require('puppeteer-core');
+
+// puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
+// load Puppeteer lazily only when the price-comparison endpoint needs it.
+async function loadPuppeteer() {
+  const { default: puppeteer } = await import('puppeteer-core');
+  return puppeteer;
+}
 
 // Tratadores de erros globais para evitar que falhas do Puppeteer/WhatsApp Web crashem o servidor Express
 process.on('uncaughtException', (err) => {
@@ -17,7 +23,8 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Middleware para JSON com limite aumentado para aceitar imagens em Base64 do Canvas
 app.use(express.json({ limit: '100mb' }));
@@ -350,6 +357,7 @@ app.get('/api/compare-price', async (req, res) => {
 
   let browser;
   try {
+    const puppeteer = await loadPuppeteer();
     browser = await puppeteer.launch({
       headless: 'new',
       executablePath: execPath,
@@ -841,9 +849,9 @@ async function runAutomaticCycle() {
 }
 
 // Inicia servidor Express e escuta na porta
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log(`=================================================`);
-  console.log(` Dashboard rodando em http://localhost:${PORT}`);
+  console.log(` Dashboard rodando em http://${HOST}:${PORT}`);
   console.log(`=================================================`);
 
   // Configura ciclos automáticos periódicos (desativados por padrão via env)
