@@ -17,6 +17,7 @@ entre reinicios e novos deploys do container.
    - `MELI_PROFILE_DIR=/data/ml_user_data`
    - `APP_RUNTIME_DIR=/data/runtime`
    - `WHATSAPP_ENABLED=true`
+   - `WHATSAPP_PROTOCOL_TIMEOUT_MS=180000`
    - `WHATSAPP_RECONNECT_DELAY_MS=15000`
    - `WHATSAPP_MAX_RECONNECT_DELAY_MS=300000`
 4. Mantenha **uma unica replica**. Perfis do Chrome e o LocalAuth do WhatsApp nao

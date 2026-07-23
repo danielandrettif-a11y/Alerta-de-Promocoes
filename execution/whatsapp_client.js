@@ -17,6 +17,11 @@ const {
   ensureSessionDirectories
 } = require('./session_config.js');
 
+function readPositiveNumber(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 function findBrowserPath() {
   const possiblePaths = [
     process.env.BROWSER_EXECUTABLE_PATH,
@@ -53,6 +58,7 @@ const client = new Client({
   puppeteer: {
     executablePath: browserPath || undefined,
     headless: true,
+    protocolTimeout: readPositiveNumber('WHATSAPP_PROTOCOL_TIMEOUT_MS', 180000),
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -61,11 +67,6 @@ const client = new Client({
     ]
   }
 });
-
-function readPositiveNumber(name, fallback) {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
 
 const reconnectBaseDelayMs = Math.max(
   5000,
