@@ -6,6 +6,10 @@ const http = require('http');
 const urlModule = require('url');
 const { exec, execSync } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./execution/category_helper.js');
+const {
+  printSessionStatus,
+  getSessionStatus
+} = require('./execution/session_config.js');
 
 // puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
 // load Puppeteer lazily only when the price-comparison endpoint needs it.
@@ -36,6 +40,26 @@ const couponsPath = path.join(__dirname, 'coupons.json');
 const historyPath = path.join(__dirname, '.tmp', 'published_history.json');
 const GROUP_NAME = 'Alerta de Descontos';
 
+// Liveness do processo + estado informativo das integracoes.
+// A rota sempre responde 200 enquanto o painel estiver vivo para evitar
+// restart loops antes do primeiro QR code.
+app.get('/api/health', (req, res) => {
+  const persistedSessions = getSessionStatus();
+  const whatsappStatus = whatsappEnabled && whatsapp
+    ? whatsapp.getConnectionStatus()
+    : { status: 'disabled', ready: false };
+
+  res.json({
+    status: 'ok',
+    uptimeSeconds: Math.round(process.uptime()),
+    whatsapp: whatsappStatus,
+    sessions: {
+      whatsapp: persistedSessions.whatsapp.available,
+      mercadoLivre: persistedSessions.mercadoLivre.available
+    }
+  });
+});
+
 // Função para ler variáveis do arquivo .env dinamicamente
 function readEnv() {
   const envVars = { ...process.env };
@@ -61,9 +85,18 @@ function readEnv() {
   return envVars;
 }
 
-// Conecta ao WhatsApp Web uma única vez de forma global no servidor
-console.log('[Painel Web] Inicializando conexão persistente com o WhatsApp Web...');
-const whatsapp = require('./execution/whatsapp_client.js');
+// Informa o estado dos perfis antes de iniciar integracoes externas.
+printSessionStatus();
+
+// Conecta ao WhatsApp Web uma unica vez de forma global no servidor.
+const whatsappEnabled = process.env.WHATSAPP_ENABLED !== 'false';
+let whatsapp = null;
+if (whatsappEnabled) {
+  console.log('[Painel Web] Inicializando conexao persistente com o WhatsApp Web...');
+  whatsapp = require('./execution/whatsapp_client.js');
+} else {
+  console.log('[Painel Web] WhatsApp Web desativado por WHATSAPP_ENABLED=false.');
+}
 
 // ID determinístico para ofertas
 function generateDealId(deal) {

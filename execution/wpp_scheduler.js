@@ -21,13 +21,15 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./category_helper.js');
+const { APP_RUNTIME_DIR, ensureSessionDirectories } = require('./session_config.js');
 
 const ROOT = path.join(__dirname, '..');
 const ML_DEALS_PATH = path.join(ROOT, 'mercado_livre_deals_report.json');
 const AMAZON_DEALS_PATH = path.join(ROOT, 'amazon_deals_report.json');
 const HISTORY_PATH = path.join(ROOT, '.tmp', 'published_history.json');
 const STORIES_DIR = path.join(ROOT, 'stories');
-const LAST_LINK_PATH = path.join(ROOT, '.tmp', 'last_affiliate_link.txt');
+ensureSessionDirectories();
+const LAST_LINK_PATH = path.join(APP_RUNTIME_DIR, 'last_affiliate_link.txt');
 const GROUP_NAME = 'Alerta de Descontos';
 
 // Inferência simples de Categoria com base no título
@@ -243,7 +245,7 @@ async function runScheduler() {
       // 3a. Gera link de afiliado
       try {
         if (fs.existsSync(LAST_LINK_PATH)) fs.unlinkSync(LAST_LINK_PATH);
-        execSync(`node execution/get_meli_affiliate_link.js "${deal.link}"`, {
+        execSync(`node execution/get_meli_affiliate_link.js "${deal.link}" "${LAST_LINK_PATH}"`, {
           cwd: ROOT,
           stdio: 'ignore'
         });

@@ -3,6 +3,7 @@ node_modules/
 
 # Arquivos temporários e de sessão (Segurança!)
 .tmp/
+test/.tmp/
 .wwebjs_auth/
 .wwebjs_cache/
 .env

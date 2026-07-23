@@ -13,9 +13,15 @@
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
+const {
+  MELI_PROFILE_DIR,
+  APP_RUNTIME_DIR,
+  ensureSessionDirectories
+} = require('./session_config.js');
 
 function findBrowserPath() {
   const possiblePaths = [
+    process.env.BROWSER_EXECUTABLE_PATH,
     // Windows
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -30,7 +36,7 @@ function findBrowserPath() {
   ];
 
   for (const executablePath of possiblePaths) {
-    if (fs.existsSync(executablePath)) {
+    if (executablePath && fs.existsSync(executablePath)) {
       return executablePath;
     }
   }
@@ -49,10 +55,17 @@ async function main() {
   }
 
   const browserPath = findBrowserPath();
-  const userDataDir = path.join(__dirname, '..', '.tmp', 'ml_user_data');
+  ensureSessionDirectories();
+  const userDataDir = MELI_PROFILE_DIR;
 
-  if (!fs.existsSync(userDataDir)) {
-    console.error('❌ Erro: Pasta de sessao .tmp/ml_user_data nao encontrada. Faça o login primeiro.');
+  if (fs.readdirSync(userDataDir).length === 0) {
+    console.error(`Erro: perfil do Mercado Livre ausente em ${userDataDir}.`);
+    console.error('Faca o login primeiro ou configure MELI_PROFILE_DIR para o volume persistente.');
+    process.exit(1);
+  }
+
+  if (!browserPath) {
+    console.error('Erro: Chrome/Chromium nao encontrado. Configure BROWSER_EXECUTABLE_PATH.');
     process.exit(1);
   }
 
@@ -125,25 +138,26 @@ async function main() {
     }
 
     if (!affiliateLink) {
-      const debugScreen = path.join(__dirname, '..', '.tmp', 'affiliate_link_error.png');
+      const debugScreen = path.join(APP_RUNTIME_DIR, 'affiliate_link_error.png');
       await page.screenshot({ path: debugScreen });
-      throw new Error(`Link de afiliado nao encontrado. Print de erro salvo em .tmp/affiliate_link_error.png`);
+      throw new Error(`Link de afiliado nao encontrado. Print de erro salvo em ${debugScreen}`);
     }
 
     console.log(`\n💚 LINK DE AFILIADO ENCONTRADO: ${affiliateLink}\n`);
     
     // Escreve no caminho customizado ou no padrão
-    const outputPath = customOutputPath || path.join(__dirname, '..', '.tmp', 'last_affiliate_link.txt');
+    const outputPath = customOutputPath || path.join(APP_RUNTIME_DIR, 'last_affiliate_link.txt');
+    fs.mkdirSync(path.dirname(path.resolve(outputPath)), { recursive: true });
     fs.writeFileSync(outputPath, affiliateLink, 'utf-8');
     
   } catch (err) {
     console.error('❌ Erro durante a execucao:', err.message);
     try {
       if (typeof page !== 'undefined' && !page.isClosed()) {
-        const debugScreen = path.join(__dirname, '..', '.tmp', 'affiliate_link_error.png');
+        const debugScreen = path.join(APP_RUNTIME_DIR, 'affiliate_link_error.png');
         fs.mkdirSync(path.dirname(debugScreen), { recursive: true });
         await page.screenshot({ path: debugScreen });
-        console.log(`📸 Print do erro salvo em: .tmp/affiliate_link_error.png`);
+        console.log(`Print do erro salvo em: ${debugScreen}`);
       }
     } catch (screenErr) {
       console.error('⚠️ Nao foi possivel tirar o print de erro:', screenErr.message);

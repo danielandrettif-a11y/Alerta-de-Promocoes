@@ -2,10 +2,12 @@
   "name": "alerta-de-promocoes",
   "version": "1.0.0",
   "description": "",
-  "main": "scratch_script_17.js",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node execution/check_syntax.js && node --test test/session_config.test.js",
+    "test:smoke": "node execution/smoke_test.js",
+    "sessions:check": "node execution/check_sessions.js"
   },
   "engines": {
     "node": ">=22.12.0"

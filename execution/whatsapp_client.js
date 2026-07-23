@@ -12,9 +12,14 @@ const path = require('path');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcodeTerminal = require('qrcode-terminal');
 const { TAXONOMY, inferCategoryAndSub } = require('./category_helper.js');
+const {
+  WHATSAPP_SESSION_DIR,
+  ensureSessionDirectories
+} = require('./session_config.js');
 
 function findBrowserPath() {
   const possiblePaths = [
+    process.env.BROWSER_EXECUTABLE_PATH,
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     path.join(process.env.USERPROFILE || 'C:\\Users\\danie', 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
@@ -27,7 +32,7 @@ function findBrowserPath() {
   ];
 
   for (const executablePath of possiblePaths) {
-    if (fs.existsSync(executablePath)) {
+    if (executablePath && fs.existsSync(executablePath)) {
       return executablePath;
     }
   }
@@ -35,8 +40,8 @@ function findBrowserPath() {
 }
 
 // Configuração do Cliente
-const sessionPath = path.join(__dirname, '..', '.tmp', 'wpp_session');
-fs.mkdirSync(sessionPath, { recursive: true });
+ensureSessionDirectories();
+const sessionPath = WHATSAPP_SESSION_DIR;
 
 const browserPath = findBrowserPath();
 
@@ -57,8 +62,104 @@ const client = new Client({
   }
 });
 
+function readPositiveNumber(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+const reconnectBaseDelayMs = Math.max(
+  5000,
+  readPositiveNumber('WHATSAPP_RECONNECT_DELAY_MS', 15000)
+);
+const reconnectMaxDelayMs = Math.max(
+  reconnectBaseDelayMs,
+  readPositiveNumber('WHATSAPP_MAX_RECONNECT_DELAY_MS', 300000)
+);
+
+const connectionState = {
+  status: 'starting',
+  ready: false,
+  reconnectAttempts: 0,
+  updatedAt: new Date().toISOString(),
+  lastError: null
+};
+
+let reconnectTimer = null;
+let initializationInProgress = false;
+
+function updateConnectionState(status, details = {}) {
+  connectionState.status = status;
+  connectionState.ready = status === 'ready';
+  connectionState.updatedAt = new Date().toISOString();
+  Object.assign(connectionState, details);
+}
+
+function getConnectionStatus() {
+  return {
+    ...connectionState,
+    ready: connectionState.ready && Boolean(client.info)
+  };
+}
+
+function scheduleReconnect(reason) {
+  if (reconnectTimer) return;
+
+  connectionState.reconnectAttempts += 1;
+  const exponent = Math.min(connectionState.reconnectAttempts - 1, 6);
+  const delayMs = Math.min(
+    reconnectBaseDelayMs * (2 ** exponent),
+    reconnectMaxDelayMs
+  );
+
+  updateConnectionState('reconnect_wait', {
+    lastError: reason || null,
+    nextReconnectAt: new Date(Date.now() + delayMs).toISOString()
+  });
+
+  console.warn(
+    `[WhatsApp] Nova tentativa em ${Math.round(delayMs / 1000)}s ` +
+    `(tentativa ${connectionState.reconnectAttempts}).`
+  );
+
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    try {
+      await Promise.race([
+        client.destroy(),
+        new Promise(resolve => setTimeout(resolve, 5000))
+      ]);
+    } catch {
+      // O browser pode ja estar encerrado.
+    }
+    initializeClient();
+  }, delayMs);
+}
+
+async function initializeClient() {
+  if (initializationInProgress) return;
+  initializationInProgress = true;
+  updateConnectionState('connecting', {
+    lastError: null,
+    nextReconnectAt: null
+  });
+
+  try {
+    await client.initialize();
+  } catch (err) {
+    const message = err && err.message ? err.message : String(err);
+    console.error('Erro durante o bootstrap do WhatsApp Web:', message);
+    updateConnectionState('error', { lastError: message });
+    initializationInProgress = false;
+    scheduleReconnect(message);
+    return;
+  }
+
+  initializationInProgress = false;
+}
+
 // Eventos de Autenticação
 client.on('qr', (qr) => {
+  updateConnectionState('qr_required');
   console.log('\n======================================================================');
   console.log('🔒 AUTENTICAÇÃO DO WHATSAPP REQUERIDA');
   console.log('Escaneie o QR Code abaixo usando o aplicativo WhatsApp no seu celular:');
@@ -66,7 +167,17 @@ client.on('qr', (qr) => {
   qrcodeTerminal.generate(qr, { small: true });
 });
 
+client.on('authenticated', () => {
+  updateConnectionState('authenticated');
+  console.log('[WhatsApp] Autenticacao restaurada com sucesso.');
+});
+
 client.on('ready', async () => {
+  connectionState.reconnectAttempts = 0;
+  updateConnectionState('ready', {
+    lastError: null,
+    nextReconnectAt: null
+  });
   console.log('✅ Conexão com o WhatsApp estabelecida com sucesso!');
   
   // Tenta fechar qualquer modal de novidades/anúncios do WhatsApp Web que possa bloquear o envio
@@ -99,11 +210,15 @@ client.on('ready', async () => {
 });
 
 client.on('auth_failure', (msg) => {
+  updateConnectionState('auth_failure', { lastError: String(msg) });
   console.error('❌ Falha na autenticação do WhatsApp:', msg);
+  scheduleReconnect(String(msg));
 });
 
 client.on('disconnected', (reason) => {
+  updateConnectionState('disconnected', { lastError: String(reason) });
   console.log('⚠️ Sessão do WhatsApp desconectada:', reason);
+  scheduleReconnect(String(reason));
 });
 
 // Escuta de reações para moderação (foguinho 🔥 apaga o post para todos)
@@ -538,20 +653,11 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
   });
 }
 
-// Listeners de falha do cliente
-client.on('auth_failure', (msg) => {
-  console.error('❌ Falha na autenticação do WhatsApp Web:', msg);
-});
-client.on('disconnected', (reason) => {
-  console.warn('⚠️ WhatsApp Web desconectado:', reason);
-});
-
 // Inicializa de forma segura
-client.initialize().catch(err => {
-  console.error('💥 Erro durante o bootstrap do WhatsApp Web:', err.message);
-});
+initializeClient();
 
 module.exports = {
   client,
-  sendOffer
+  sendOffer,
+  getConnectionStatus
 };
