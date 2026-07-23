@@ -196,7 +196,10 @@ function scheduleReconnect(reason) {
         console.warn(
           '[WhatsApp] Perfil destravado. Reiniciando o processo para reconectar com um cliente limpo.'
         );
-        setTimeout(() => process.exit(1), 1000);
+        // 75 e um codigo reservado para recuperacao temporaria. O supervisor
+        // do container reinicia apenas neste caso; outras falhas continuam
+        // visiveis ao Coolify.
+        setTimeout(() => process.exit(75), 1000);
         return;
       }
     }

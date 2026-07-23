@@ -46,7 +46,13 @@ somente as travas transitorias `Singleton*` deixadas pelo Chrome antigo. Cookies
 Local Storage e demais dados de autenticacao nao sao removidos. Depois da limpeza,
 o processo e reiniciado automaticamente no ambiente de producao para criar um
 cliente Puppeteer novo, pois um cliente que falhou com `Code 21` pode nao ser
-reutilizavel.
+reutilizavel. O container executa `execution/supervise_server.js`, que reinicia
+o servidor somente para o codigo de recuperacao 75; falhas diferentes continuam
+visiveis ao Coolify.
+
+Ative tambem **Advanced > Consistent Container Names** na aplicacao. Essa opcao
+faz o Coolify encerrar o container anterior antes de criar o substituto e evita
+que dois Chromes abram simultaneamente o mesmo volume.
 
 ## Primeira autenticacao do Mercado Livre
 
