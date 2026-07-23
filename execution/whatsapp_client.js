@@ -148,6 +148,19 @@ async function initializeClient() {
     await client.initialize();
   } catch (err) {
     const message = err && err.message ? err.message : String(err);
+
+    // Algumas versoes do WhatsApp Web podem emitir "ready" e somente depois
+    // rejeitar uma chamada CDP secundaria. Se o cliente ja possui info, a
+    // conexao esta valida e nao deve ser destruida pelo reconector.
+    if (connectionState.ready || client.info) {
+      console.warn(
+        '[WhatsApp] Timeout tardio ignorado porque o cliente ja esta conectado:',
+        message
+      );
+      initializationInProgress = false;
+      return;
+    }
+
     console.error('Erro durante o bootstrap do WhatsApp Web:', message);
     updateConnectionState('error', { lastError: message });
     initializationInProgress = false;
