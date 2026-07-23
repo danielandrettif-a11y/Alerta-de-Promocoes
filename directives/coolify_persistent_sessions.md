@@ -54,6 +54,11 @@ Ative tambem **Advanced > Consistent Container Names** na aplicacao. Essa opcao
 faz o Coolify encerrar o container anterior antes de criar o substituto e evita
 que dois Chromes abram simultaneamente o mesmo volume.
 
+O `package-lock.json` fixa o `whatsapp-web.js` no commit oficial
+`1780711a1c86dfeca7c5ba6a66f950eac93dde28`. Esse commit registra o listener de
+sincronizacao e verifica `hasSynced` de forma atomica, evitando que uma sessao
+restaurada perca o evento `ready` e termine em `Runtime.callFunctionOn timed out`.
+
 ## Primeira autenticacao do Mercado Livre
 
 O perfil precisa ser autenticado diretamente no diretorio `MELI_PROFILE_DIR`.
