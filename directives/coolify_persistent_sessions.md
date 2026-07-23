@@ -18,6 +18,7 @@ entre reinicios e novos deploys do container.
    - `APP_RUNTIME_DIR=/data/runtime`
    - `WHATSAPP_ENABLED=true`
    - `WHATSAPP_PROTOCOL_TIMEOUT_MS=180000`
+   - `WHATSAPP_PROFILE_LOCK_GRACE_MS=90000`
    - `WHATSAPP_RECONNECT_DELAY_MS=15000`
    - `WHATSAPP_MAX_RECONNECT_DELAY_MS=300000`
 4. Mantenha **uma unica replica**. Perfis do Chrome e o LocalAuth do WhatsApp nao
@@ -39,6 +40,10 @@ servidor esta vivo sem forcar reinicios enquanto o WhatsApp aguarda o primeiro Q
 
 Em quedas de rede, o cliente tenta se reconectar automaticamente com espera
 progressiva entre 15 segundos e 5 minutos.
+
+Durante rolling updates, o container novo aguarda 90 segundos antes de remover
+somente as travas transitorias `Singleton*` deixadas pelo Chrome antigo. Cookies,
+Local Storage e demais dados de autenticacao nao sao removidos.
 
 ## Primeira autenticacao do Mercado Livre
 

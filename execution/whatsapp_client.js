@@ -47,12 +47,18 @@ function findBrowserPath() {
 // Configuração do Cliente
 ensureSessionDirectories();
 const sessionPath = WHATSAPP_SESSION_DIR;
+const whatsappClientId = process.env.WHATSAPP_CLIENT_ID || 'ml-affiliates';
+const whatsappChromeProfileDir = path.join(
+  WHATSAPP_SESSION_DIR,
+  `session-${whatsappClientId}`
+);
+const processStartedAt = Date.now();
 
 const browserPath = findBrowserPath();
 
 const client = new Client({
   authStrategy: new LocalAuth({
-    clientId: 'ml-affiliates',
+    clientId: whatsappClientId,
     dataPath: sessionPath
   }),
   puppeteer: {
@@ -76,6 +82,44 @@ const reconnectMaxDelayMs = Math.max(
   reconnectBaseDelayMs,
   readPositiveNumber('WHATSAPP_MAX_RECONNECT_DELAY_MS', 300000)
 );
+const profileLockGraceMs = Math.max(
+  60000,
+  readPositiveNumber('WHATSAPP_PROFILE_LOCK_GRACE_MS', 90000)
+);
+
+let profileLockDetected = false;
+
+function isChromeProfileLockError(message) {
+  return /profile appears to be in use|process_singleton|code:\s*21/i.test(
+    String(message || '')
+  );
+}
+
+function clearStaleChromeProfileLocks() {
+  const lockNames = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
+  const removed = [];
+
+  for (const lockName of lockNames) {
+    const lockPath = path.join(whatsappChromeProfileDir, lockName);
+    try {
+      const stat = fs.lstatSync(lockPath);
+      if (stat.isFile() || stat.isSymbolicLink() || stat.isSocket()) {
+        fs.unlinkSync(lockPath);
+        removed.push(lockName);
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.warn(`[WhatsApp] Nao foi possivel remover ${lockName}:`, err.message);
+      }
+    }
+  }
+
+  if (removed.length > 0) {
+    console.warn(
+      `[WhatsApp] Travas obsoletas do Chrome removidas: ${removed.join(', ')}.`
+    );
+  }
+}
 
 const connectionState = {
   status: 'starting',
@@ -107,10 +151,16 @@ function scheduleReconnect(reason) {
 
   connectionState.reconnectAttempts += 1;
   const exponent = Math.min(connectionState.reconnectAttempts - 1, 6);
-  const delayMs = Math.min(
+  let delayMs = Math.min(
     reconnectBaseDelayMs * (2 ** exponent),
     reconnectMaxDelayMs
   );
+
+  if (isChromeProfileLockError(reason)) {
+    profileLockDetected = true;
+    const elapsedMs = Date.now() - processStartedAt;
+    delayMs = Math.max(delayMs, profileLockGraceMs - elapsedMs);
+  }
 
   updateConnectionState('reconnect_wait', {
     lastError: reason || null,
@@ -124,6 +174,15 @@ function scheduleReconnect(reason) {
 
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
+
+    if (
+      profileLockDetected &&
+      Date.now() - processStartedAt >= profileLockGraceMs
+    ) {
+      clearStaleChromeProfileLocks();
+      profileLockDetected = false;
+    }
+
     try {
       await Promise.race([
         client.destroy(),
