@@ -43,7 +43,10 @@ progressiva entre 15 segundos e 5 minutos.
 
 Durante rolling updates, o container novo aguarda 90 segundos antes de remover
 somente as travas transitorias `Singleton*` deixadas pelo Chrome antigo. Cookies,
-Local Storage e demais dados de autenticacao nao sao removidos.
+Local Storage e demais dados de autenticacao nao sao removidos. Depois da limpeza,
+o processo e reiniciado automaticamente no ambiente de producao para criar um
+cliente Puppeteer novo, pois um cliente que falhou com `Code 21` pode nao ser
+reutilizavel.
 
 ## Primeira autenticacao do Mercado Livre
 

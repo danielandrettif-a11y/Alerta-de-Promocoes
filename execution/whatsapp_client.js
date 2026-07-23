@@ -119,6 +119,8 @@ function clearStaleChromeProfileLocks() {
       `[WhatsApp] Travas obsoletas do Chrome removidas: ${removed.join(', ')}.`
     );
   }
+
+  return removed;
 }
 
 const connectionState = {
@@ -179,8 +181,24 @@ function scheduleReconnect(reason) {
       profileLockDetected &&
       Date.now() - processStartedAt >= profileLockGraceMs
     ) {
-      clearStaleChromeProfileLocks();
+      const removedLocks = clearStaleChromeProfileLocks();
       profileLockDetected = false;
+
+      // O whatsapp-web.js/Puppeteer pode manter estado interno inutilizavel
+      // depois que o primeiro launch falha com Code 21. Reiniciar o processo
+      // cria um Client limpo e preserva toda a autenticacao no volume /data.
+      // No Coolify, a politica de restart do servico sobe o mesmo container
+      // novamente assim que as travas transitorias ja foram removidas.
+      if (
+        removedLocks.length > 0 &&
+        process.env.NODE_ENV === 'production'
+      ) {
+        console.warn(
+          '[WhatsApp] Perfil destravado. Reiniciando o processo para reconectar com um cliente limpo.'
+        );
+        setTimeout(() => process.exit(1), 1000);
+        return;
+      }
     }
 
     try {
