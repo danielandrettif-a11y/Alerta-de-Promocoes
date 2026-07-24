@@ -75,10 +75,50 @@ Storage sao preservados para manter a autenticacao.
 O perfil precisa ser autenticado diretamente no diretorio `MELI_PROFILE_DIR`.
 
 - Em uma instalacao Windows local, `abrir_login.bat` usa as mesmas variaveis.
-- No Coolify, use temporariamente um navegador Linux interativo/noVNC conectado
-  ao mesmo volume `/data`, faca o login e depois remova o acesso interativo.
+- No Coolify, use temporariamente o recurso definido em
+  `docker-compose.meli-login.yml`. Ele abre um Chromium Linux interativo e grava
+  o perfil diretamente em `/data/ml_user_data`.
 - Nao copie um perfil logado do Chrome entre Windows e Linux. Cookies e
   credenciais do navegador podem estar criptografados pelo sistema operacional.
+
+### Procedimento no Coolify
+
+1. Confirme que o aplicativo principal esta com apenas um container.
+2. No terminal do servidor, prepare somente a pasta do Mercado Livre:
+
+   ```sh
+   docker exec v13vybz3batitff5ukstrnse sh -lc \
+     'mkdir -p /data/ml_user_data && chown -R 1000:1000 /data/ml_user_data'
+   ```
+
+3. No mesmo projeto/ambiente, adicione um recurso **Docker Compose** e cole o
+   conteudo de `docker-compose.meli-login.yml`.
+4. Crie as variaveis do recurso temporario:
+   - `MELI_DATA_VOLUME_NAME=v13vybz3batitff5ukstrnse-alerta-promocoes-data`
+   - `MELI_VNC_PASSWORD=` uma senha temporaria de exatamente 8 caracteres
+5. Publique a porta `5800` em um dominio HTTPS temporario e faca o deploy.
+6. Abra o dominio, informe a senha VNC, entre no Mercado Livre e conclua qualquer
+   verificacao em duas etapas. Abra tambem uma pagina de produto e confirme que
+   a barra de afiliados aparece.
+7. Feche o Chromium pela interface e pare/remova o recurso temporario. Nunca
+   deixe esse navegador e o script de afiliados usando o mesmo perfil ao mesmo
+   tempo. Nao exclua o volume externo `alerta-promocoes-data`.
+8. No terminal do aplicativo principal, verifique:
+
+   ```sh
+   npm run sessions:check
+   ```
+
+9. Teste com uma URL real de produto:
+
+   ```sh
+   node execution/get_meli_affiliate_link.js 'URL_DO_PRODUTO'
+   ```
+
+O argumento `--password-store=basic` e usado tanto no login interativo quanto
+na automacao. Isso permite que o Chrome Linux reutilize os cookies salvos sem
+depender de um chaveiro grafico. O acesso noVNC deve existir apenas durante o
+login, pois ele permite controlar uma sessao autenticada.
 
 ## Verificacao
 

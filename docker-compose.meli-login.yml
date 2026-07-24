@@ -1,0 +1,28 @@
+services:
+  meli-login:
+    image: jlesage/chromium:v26.07.2
+    environment:
+      TZ: America/Sao_Paulo
+      DISPLAY_WIDTH: "1440"
+      DISPLAY_HEIGHT: "900"
+      KEEP_APP_RUNNING: "1"
+      VNC_PASSWORD: "${MELI_VNC_PASSWORD}"
+      CHROMIUM_APP_URL: "https://www.mercadolivre.com.br/"
+      CHROMIUM_CUSTOM_ARGS: >-
+        --user-data-dir=/data/ml_user_data
+        --password-store=basic
+        --no-first-run
+        --no-default-browser-check
+    volumes:
+      - alerta-data:/data:rw
+      - meli-browser-config:/config:rw
+    expose:
+      - "5800"
+    shm_size: "1gb"
+    restart: unless-stopped
+
+volumes:
+  alerta-data:
+    external: true
+    name: "${MELI_DATA_VOLUME_NAME:-v13vybz3batitff5ukstrnse-alerta-promocoes-data}"
+  meli-browser-config:

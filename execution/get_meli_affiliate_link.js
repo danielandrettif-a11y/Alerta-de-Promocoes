@@ -12,6 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const puppeteer = require('puppeteer-core');
 const {
   MELI_PROFILE_DIR,
@@ -43,6 +44,36 @@ function findBrowserPath() {
   return null;
 }
 
+function getBrowserUserAgent(executablePath) {
+  if (process.env.MELI_USER_AGENT) {
+    return process.env.MELI_USER_AGENT;
+  }
+
+  try {
+    const versionOutput = execFileSync(executablePath, ['--version'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true
+    });
+    const version = versionOutput.match(/(\d+\.\d+\.\d+\.\d+)/)?.[1];
+    if (!version) return undefined;
+
+    const platform = process.platform === 'win32'
+      ? 'Windows NT 10.0; Win64; x64'
+      : 'X11; Linux x86_64';
+    return (
+      `Mozilla/5.0 (${platform}) AppleWebKit/537.36 ` +
+      `(KHTML, like Gecko) Chrome/${version} Safari/537.36`
+    );
+  } catch (err) {
+    console.warn(
+      '[Mercado Livre] Nao foi possivel detectar a versao do navegador:',
+      err.message
+    );
+    return undefined;
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const productUrl = args[0];
@@ -69,19 +100,33 @@ async function main() {
     process.exit(1);
   }
 
+  const browserUserAgent = getBrowserUserAgent(browserPath);
+
   console.log(`📡 Abrindo navegador para extrair link de afiliado...`);
   const browser = await puppeteer.launch({
     executablePath: browserPath,
     headless: true, // Modo headless ativo para simular o ambiente de VPS
     userDataDir: userDataDir,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+    protocolTimeout: 180000,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--password-store=basic',
+      '--no-first-run',
+      '--no-default-browser-check'
+    ]
   });
 
   let page;
   try {
     page = await browser.newPage();
     await page.setViewport({ width: 1366, height: 768 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    if (browserUserAgent) {
+      await page.setUserAgent(browserUserAgent);
+      console.log(`[Mercado Livre] User-Agent: ${browserUserAgent}`);
+    }
 
     console.log(`🔗 Navegando para o produto: ${productUrl}`);
     await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
