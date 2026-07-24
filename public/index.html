@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   
   <!-- CSS Link -->
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
@@ -59,6 +59,37 @@
   </nav>
 
   <main class="dashboard-content">
+    <section class="marketplace-search-panel" aria-labelledby="marketplace-search-title">
+      <div class="marketplace-search-heading">
+        <div>
+          <span class="search-scope-badge">PESQUISA GERAL</span>
+          <h2 id="marketplace-search-title">Encontrar produtos nos grandes marketplaces</h2>
+          <p>
+            Procura no Mercado Livre, Amazon, Magalu e Casas Bahia.
+            Os resultados abaixo servem somente para consulta e não são enviados ao WhatsApp.
+          </p>
+        </div>
+        <span class="no-whatsapp-badge">Sem envio ao WhatsApp</span>
+      </div>
+      <form id="marketplace-search-form" class="marketplace-search-form">
+        <label class="marketplace-search-input" for="ipt-marketplace-search">
+          <span aria-hidden="true">🔎</span>
+          <input
+            id="ipt-marketplace-search"
+            type="search"
+            minlength="2"
+            maxlength="120"
+            autocomplete="off"
+            placeholder="Ex.: iPhone 15 128 GB, air fryer 5 litros..."
+          >
+        </label>
+        <button id="btn-marketplace-search" class="btn-marketplace-search" type="submit">
+          Pesquisar na internet
+        </button>
+      </form>
+      <p id="marketplace-search-status" class="marketplace-search-status" aria-live="polite"></p>
+      <div id="marketplace-search-results" class="marketplace-search-results"></div>
+    </section>
     
     <!-- Tab 1: Mercado Livre Panel -->
     <section id="panel-ml" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-ml">
@@ -87,7 +118,7 @@
       <div class="filter-bar">
         <div class="filter-group search-filter">
           <span class="filter-icon">🔍</span>
-          <input type="text" id="ipt-filter-name-ml" placeholder="Buscar nas ofertas do Mercado Livre..." title="Buscar produtos">
+          <input type="text" id="ipt-filter-name-ml" placeholder="Filtrar somente as ofertas já carregadas..." title="Filtrar ofertas carregadas">
         </div>
         <div class="filter-group category-filter">
           <span class="filter-icon">🏷️</span>
@@ -147,7 +178,7 @@
       <div class="filter-bar">
         <div class="filter-group search-filter">
           <span class="filter-icon">🔍</span>
-          <input type="text" id="ipt-filter-name-amazon" placeholder="Buscar nas ofertas da Amazon..." title="Buscar produtos">
+          <input type="text" id="ipt-filter-name-amazon" placeholder="Filtrar somente as ofertas já carregadas..." title="Filtrar ofertas carregadas">
         </div>
         <div class="filter-group category-filter">
           <span class="filter-icon">🏷️</span>
@@ -216,6 +247,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

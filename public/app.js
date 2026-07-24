@@ -56,6 +56,11 @@ const elTxtLastUpdate = document.getElementById('txt-last-update');
 const elTxtAutomationStatus = document.getElementById('txt-automation-status');
 const elLoadingOverlay = document.getElementById('loading-overlay');
 const elLoadingText = document.getElementById('loading-text');
+const elMarketplaceSearchForm = document.getElementById('marketplace-search-form');
+const elMarketplaceSearchInput = document.getElementById('ipt-marketplace-search');
+const elMarketplaceSearchButton = document.getElementById('btn-marketplace-search');
+const elMarketplaceSearchStatus = document.getElementById('marketplace-search-status');
+const elMarketplaceSearchResults = document.getElementById('marketplace-search-results');
 
 function parseBackendDate(dateStr) {
   if (!dateStr) return null;
@@ -218,6 +223,130 @@ function showLoading(text) {
 
 function hideLoading() {
   elLoadingOverlay.classList.add('hidden');
+}
+
+// ==========================================
+// Pesquisa geral (consulta apenas, sem WhatsApp)
+// ==========================================
+function createMarketplaceResultCard(result) {
+  const card = document.createElement('article');
+  card.className = 'marketplace-result-card';
+
+  if (result.image) {
+    const image = document.createElement('img');
+    image.className = 'marketplace-result-image';
+    image.src = result.image;
+    image.alt = '';
+    image.loading = 'lazy';
+    image.referrerPolicy = 'no-referrer';
+    card.appendChild(image);
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'marketplace-result-image is-placeholder';
+    placeholder.setAttribute('aria-hidden', 'true');
+    placeholder.textContent = '🛍️';
+    card.appendChild(placeholder);
+  }
+
+  const content = document.createElement('div');
+  content.className = 'marketplace-result-content';
+
+  const source = document.createElement('span');
+  source.className = 'marketplace-result-source';
+  source.textContent = result.marketplaceLabel;
+
+  const title = document.createElement('h3');
+  title.className = 'marketplace-result-title';
+  title.textContent = result.title;
+
+  const price = document.createElement('p');
+  price.className = 'marketplace-result-price';
+  price.textContent = result.priceText || 'Preço não exibido';
+
+  const link = document.createElement('a');
+  link.className = 'marketplace-result-link';
+  link.href = result.url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = 'Ver produto ↗';
+
+  content.append(source, title, price, link);
+  card.appendChild(content);
+  return card;
+}
+
+function createMarketplaceSourceLink(source) {
+  const link = document.createElement('a');
+  link.className = 'marketplace-source-link';
+  link.href = source.searchUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+
+  const label = document.createElement('strong');
+  label.textContent = source.marketplaceLabel;
+  const detail = document.createElement('span');
+  detail.textContent = source.count
+    ? `${source.count} resultado(s) exibido(s)`
+    : 'Abrir busca completa no site';
+  link.append(label, detail);
+  return link;
+}
+
+async function runMarketplaceSearch(event) {
+  event.preventDefault();
+  const query = elMarketplaceSearchInput.value.trim();
+  if (query.length < 2) {
+    elMarketplaceSearchStatus.textContent =
+      'Digite pelo menos 2 caracteres para pesquisar.';
+    elMarketplaceSearchStatus.classList.add('is-error');
+    elMarketplaceSearchInput.focus();
+    return;
+  }
+
+  elMarketplaceSearchButton.disabled = true;
+  elMarketplaceSearchButton.textContent = 'Pesquisando...';
+  elMarketplaceSearchStatus.classList.remove('is-error');
+  elMarketplaceSearchStatus.textContent =
+    'Consultando Mercado Livre, Amazon, Magalu e Casas Bahia...';
+  elMarketplaceSearchResults.replaceChildren();
+
+  try {
+    const response = await fetch(
+      `/api/marketplace-search?q=${encodeURIComponent(query)}`
+    );
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Não foi possível concluir a pesquisa.');
+    }
+
+    for (const result of data.results || []) {
+      elMarketplaceSearchResults.appendChild(
+        createMarketplaceResultCard(result)
+      );
+    }
+    const sourceLinks = document.createElement('div');
+    sourceLinks.className = 'marketplace-source-links';
+    for (const source of data.sources || []) {
+      sourceLinks.appendChild(createMarketplaceSourceLink(source));
+    }
+    elMarketplaceSearchResults.appendChild(sourceLinks);
+    const failedSources = (data.sources || [])
+      .filter(source => source.error)
+      .map(source => source.marketplaceLabel);
+    const cacheLabel = data.cached ? ' Resultado recuperado do cache.' : '';
+    const failureLabel = failedSources.length
+      ? ` Sem resposta de: ${failedSources.join(', ')}.`
+      : '';
+    elMarketplaceSearchStatus.textContent = data.results?.length
+      ? `${data.results.length} produto(s) encontrado(s).${cacheLabel}${failureLabel} Apenas consulta; nada foi enviado ao WhatsApp.`
+      : `Nenhum produto compatível foi extraído.${failureLabel} Tente informar marca e modelo.`;
+  } catch (error) {
+    elMarketplaceSearchStatus.classList.add('is-error');
+    elMarketplaceSearchStatus.textContent = error.message;
+  } finally {
+    elMarketplaceSearchButton.disabled = false;
+    elMarketplaceSearchButton.textContent = 'Pesquisar na internet';
+  }
 }
 
 // ==========================================
@@ -1349,6 +1478,8 @@ function switchTab(activeBtn, activePanel) {
 // Initialization & Listeners
 // ==========================================
 function init() {
+  elMarketplaceSearchForm.addEventListener('submit', runMarketplaceSearch);
+
   // Tab Switchers
   elTabML.addEventListener('click', () => switchTab(elTabML, elPanelML));
   elTabAmazon.addEventListener('click', () => switchTab(elTabAmazon, elPanelAmazon));

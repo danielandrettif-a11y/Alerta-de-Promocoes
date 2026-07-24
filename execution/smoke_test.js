@@ -117,6 +117,7 @@ async function run() {
 
     await expectResponse('/api/proxy-image', 400);
     await expectResponse('/api/compare-price', 400);
+    await expectResponse('/api/marketplace-search', 400);
     await expectResponse('/api/generate', 400, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -173,6 +174,9 @@ async function run() {
       '#panel-ml',
       '#panel-amazon',
       '#panel-coupons',
+      '#marketplace-search-form',
+      '#ipt-marketplace-search',
+      '#marketplace-search-results',
       '#grid-ml',
       '#grid-amazon',
       '#grid-coupons'
@@ -190,6 +194,23 @@ async function run() {
       input.value = '';
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
+
+    // A pesquisa geral fica visualmente separada do filtro local. O smoke não
+    // dispara consultas externas para permanecer determinístico.
+    const generalPlaceholder = await page.$eval(
+      '#ipt-marketplace-search',
+      input => input.placeholder
+    );
+    const localPlaceholder = await page.$eval(
+      '#ipt-filter-name-ml',
+      input => input.placeholder
+    );
+    if (
+      !generalPlaceholder.includes('iPhone') ||
+      !localPlaceholder.includes('ofertas já carregadas')
+    ) {
+      throw new Error('As duas modalidades de pesquisa não estão claras');
+    }
 
     await page.screenshot({ path: SCREENSHOT_PATH, fullPage: true });
 

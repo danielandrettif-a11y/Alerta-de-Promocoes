@@ -26,6 +26,9 @@ const {
   buildWhatsappComparison,
   compareProductPrices
 } = require('./execution/price_comparison.js');
+const {
+  searchMarketplaces
+} = require('./execution/marketplace_search.js');
 
 // puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
 // load Puppeteer lazily only when the price-comparison endpoint needs it.
@@ -63,6 +66,10 @@ const couponConfirmationsPath = path.join(
 const priceComparisonCachePath = path.join(
   APP_RUNTIME_DIR,
   'price_comparison_cache.json'
+);
+const marketplaceSearchCachePath = path.join(
+  APP_RUNTIME_DIR,
+  'marketplace_search_cache.json'
 );
 const GROUP_NAME = 'Alerta de Descontos';
 
@@ -510,6 +517,35 @@ app.get('/api/compare-price', async (req, res) => {
     zoom: comparison.providers?.zoom || null,
     bondfaro: comparison.providers?.bondfaro || null
   });
+});
+
+// Pesquisa manual e isolada em marketplaces. Esta rota apenas devolve links:
+// nao seleciona ofertas, nao cria Stories e nao chama o WhatsApp.
+app.get('/api/marketplace-search', async (req, res) => {
+  if (process.env.MARKETPLACE_SEARCH_ENABLED === 'false') {
+    return res.status(503).json({ error: 'Pesquisa geral desativada.' });
+  }
+  const query = String(req.query.q || '').trim();
+  if (query.length < 2 || query.length > 120) {
+    return res.status(400).json({
+      error: 'Informe um produto com 2 a 120 caracteres.'
+    });
+  }
+  const maxPerMarketplace = Math.min(
+    8,
+    Math.max(
+      1,
+      Number(process.env.MARKETPLACE_SEARCH_RESULTS_PER_SITE) || 4
+    )
+  );
+  const result = await searchMarketplaces({
+    query,
+    cachePath: marketplaceSearchCachePath,
+    cacheMinutes:
+      Number(process.env.MARKETPLACE_SEARCH_CACHE_MINUTES) || 30,
+    maxPerMarketplace
+  });
+  res.status(result.success ? 200 : 502).json(result);
 });
 
 // Mantido temporariamente para diagnóstico enquanto o comparador novo é
