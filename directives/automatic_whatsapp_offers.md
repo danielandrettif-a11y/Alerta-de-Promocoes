@@ -3,13 +3,13 @@
 ## Goal
 
 Keep product collection independent from WhatsApp publishing. Refresh offer
-data once per hour and distribute 15 to 20 unique offers per hour, each with a
+data every 30 minutes and distribute 15 to 20 unique offers per hour, each with a
 generated Story image and a text description.
 
 ## Configuration
 
 - `DEALS_REFRESH_ENABLED=true`: enables product refresh.
-- `DEALS_REFRESH_INTERVAL_MINUTES=60`: refresh cadence.
+- `DEALS_REFRESH_INTERVAL_MINUTES=30`: refresh cadence.
 - `DEALS_STALE_AFTER_MINUTES=90`: age at which the dashboard warns that data
   is stale.
 - `AUTO_RUN_ENABLED=false`: safety switch for WhatsApp publishing. Change to

@@ -1362,7 +1362,7 @@ app.listen(PORT, HOST, () => {
     const env = readEnv();
     const refreshMinutes = Math.max(
       15,
-      Number(env.DEALS_REFRESH_INTERVAL_MINUTES) || 60
+      Number(env.DEALS_REFRESH_INTERVAL_MINUTES) || 30
     );
     refreshDealsData().catch(err => {
       console.error(`Falha na atualização inicial: ${err.message}`);
