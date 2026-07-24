@@ -65,6 +65,11 @@ correspondente. Isso evita que o WhatsApp Web receba a identificacao antiga
 Chrome 101 definida por padrao na biblioteca. `WHATSAPP_USER_AGENT` pode ser
 usada apenas se for necessario sobrescrever manualmente essa deteccao.
 
+Antes de inicializar, o cliente remove apenas caches regeneraveis do Chrome
+(`Cache`, `Code Cache`, `GPUCache`, `Service Worker` e caches de shaders), desde
+que o perfil nao esteja bloqueado. Cookies, IndexedDB, Local Storage e Session
+Storage sao preservados para manter a autenticacao.
+
 ## Primeira autenticacao do Mercado Livre
 
 O perfil precisa ser autenticado diretamente no diretorio `MELI_PROFILE_DIR`.

@@ -87,12 +87,66 @@ const whatsappChromeProfileDir = path.join(
 );
 const processStartedAt = Date.now();
 
+function hasChromeProfileLock() {
+  return fs.existsSync(path.join(whatsappChromeProfileDir, 'SingletonLock'));
+}
+
+function clearTransientChromeCaches() {
+  if (hasChromeProfileLock()) {
+    console.log(
+      '[WhatsApp] Limpeza de cache adiada: outro Chrome ainda mantem o perfil bloqueado.'
+    );
+    return [];
+  }
+
+  // Preserva Cookies, IndexedDB, Local Storage e Session Storage, que contem
+  // a autenticacao. Remove somente arquivos regeneraveis pelo Chrome.
+  const transientPaths = [
+    ['Default', 'Cache'],
+    ['Default', 'Code Cache'],
+    ['Default', 'GPUCache'],
+    ['Default', 'DawnCache'],
+    ['Default', 'blob_storage'],
+    ['Default', 'Service Worker'],
+    ['GPUCache'],
+    ['ShaderCache'],
+    ['GrShaderCache'],
+    ['GraphiteDawnCache']
+  ];
+  const removed = [];
+
+  for (const pathParts of transientPaths) {
+    const target = path.join(whatsappChromeProfileDir, ...pathParts);
+    if (!fs.existsSync(target)) continue;
+
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+      removed.push(pathParts.join('/'));
+    } catch (err) {
+      console.warn(
+        `[WhatsApp] Nao foi possivel limpar ${pathParts.join('/')}:`,
+        err.message
+      );
+    }
+  }
+
+  if (removed.length > 0) {
+    console.log(
+      `[WhatsApp] Cache temporario do Chrome limpo: ${removed.join(', ')}.`
+    );
+  }
+
+  return removed;
+}
+
 const browserPath = findBrowserPath();
 const browserUserAgent = getBrowserUserAgent(browserPath);
 
 if (browserUserAgent) {
   console.log(`[WhatsApp] User-Agent do navegador: ${browserUserAgent}`);
 }
+
+clearTransientChromeCaches();
 
 const client = new Client({
   authStrategy: new LocalAuth({
