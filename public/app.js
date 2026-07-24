@@ -174,10 +174,19 @@ async function fetchDataStatus() {
   try {
     const response = await fetch('/api/data-status');
     const status = await response.json();
+    const previousMLUpdate = lastUpdateML;
+    const previousAmazonUpdate = lastUpdateAmazon;
     freshnessML = status.mercadoLivre || freshnessML;
     freshnessAmazon = status.amazon || freshnessAmazon;
     lastUpdateML = status.mercadoLivre?.generatedAt || lastUpdateML;
     lastUpdateAmazon = status.amazon?.generatedAt || lastUpdateAmazon;
+    if (previousMLUpdate && lastUpdateML !== previousMLUpdate) fetchMLDeals();
+    if (
+      previousAmazonUpdate &&
+      lastUpdateAmazon !== previousAmazonUpdate
+    ) {
+      fetchAmazonDeals();
+    }
 
     const publishing = status.publishing;
     if (publishing) {
