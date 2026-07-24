@@ -215,6 +215,9 @@ async function run() {
     }
 
     await page.waitForSelector('#grid-ml .deal-card', { timeout: 5000 });
+    if (await page.evaluate(() => amazonDealsLoaded)) {
+      throw new Error('Amazon foi carregada antes de abrir sua aba');
+    }
     const historySyncPreservedCards = await page.evaluate(async () => {
       const firstCard = document.querySelector('#grid-ml .deal-card');
       await syncPublicationHistory();
@@ -224,13 +227,37 @@ async function run() {
       throw new Error('Historico inalterado reconstruiu todos os cards');
     }
 
+    await page.click('#btn-tab-amazon');
+    await page.waitForFunction(() => amazonDealsLoaded, { timeout: 5000 });
+
     for (const tab of [
-      '#btn-tab-amazon',
       '#btn-tab-coupons',
       '#btn-tab-queue',
       '#btn-tab-ml'
     ]) {
       await page.click(tab);
+    }
+
+    const sharedFileName = await page.evaluate(async () => {
+      Object.defineProperty(navigator, 'share', {
+        configurable: true,
+        value: async data => {
+          window.__smokeSharedFileName = data.files[0].name;
+        }
+      });
+      Object.defineProperty(navigator, 'canShare', {
+        configurable: true,
+        value: () => true
+      });
+      await shareQueueStory({
+        id: 'smoke',
+        title: 'Story de teste',
+        storyUrl: '/style.css'
+      });
+      return window.__smokeSharedFileName;
+    });
+    if (sharedFileName !== 'story-smoke.jpg') {
+      throw new Error('Story nao foi enviado ao compartilhamento nativo');
     }
 
     await page.type('#ipt-filter-name-ml', 'produto-que-nao-existe-smoke-test');

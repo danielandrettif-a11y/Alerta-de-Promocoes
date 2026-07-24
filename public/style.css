@@ -1303,6 +1303,28 @@ button {
    Responsive adjustments
    ========================================== */
 @media(max-width: 768px) {
+  .background-glow {
+    display: none;
+  }
+
+  .main-header,
+  .marketplace-search-panel,
+  .filter-bar,
+  .deal-card,
+  .queue-hero,
+  .queue-card,
+  .progress-modal {
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  .tab-panel,
+  .deal-card,
+  .queue-card {
+    animation: none;
+    transition: none;
+  }
+
   .main-header {
     flex-direction: column;
     gap: 20px;
@@ -2416,6 +2438,8 @@ button {
 }
 
 .queue-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 520px;
   display: grid;
   grid-template-columns: minmax(170px, 240px) minmax(0, 1fr);
   gap: 24px;
@@ -2646,13 +2670,21 @@ button {
   }
 
   .queue-card {
-    grid-template-columns: 96px minmax(0, 1fr);
-    gap: 14px;
-    padding: 14px;
+    grid-template-columns: 82px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
   }
 
   .queue-story-preview {
-    width: 96px;
+    width: 82px;
+  }
+
+  .queue-content h3 {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 16px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
 
   .queue-card-heading,

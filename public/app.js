@@ -12,6 +12,7 @@ let publicationQueueEnabled = false;
 let publicationQueueItems = [];
 let publicationQueueSummary = {};
 let publicationHistorySignature = '';
+let amazonDealsLoaded = false;
 
 // DOM elements - Tabs
 const elTabML = document.getElementById('btn-tab-ml');
@@ -182,11 +183,12 @@ async function fetchDataStatus() {
     lastUpdateML = status.mercadoLivre?.generatedAt || lastUpdateML;
     lastUpdateAmazon = status.amazon?.generatedAt || lastUpdateAmazon;
     if (previousMLUpdate && lastUpdateML !== previousMLUpdate) fetchMLDeals();
-    if (
-      previousAmazonUpdate &&
-      lastUpdateAmazon !== previousAmazonUpdate
-    ) {
-      fetchAmazonDeals();
+    if (previousAmazonUpdate && lastUpdateAmazon !== previousAmazonUpdate) {
+      if (elTabAmazon.classList.contains('active')) {
+        fetchAmazonDeals();
+      } else {
+        amazonDealsLoaded = false;
+      }
     }
 
     const publishing = status.publishing;
@@ -521,6 +523,7 @@ async function fetchAmazonDeals() {
     allAmazonDeals = (data.deals || []).map(deal =>
       addPublicationState(deal, 'amazon', publishedEntries)
     );
+    amazonDealsLoaded = true;
     freshnessAmazon = data.freshness || null;
     renderAmazonDeals(allAmazonDeals);
     
@@ -1035,13 +1038,13 @@ function renderPublicationQueue() {
       ? `
         <div class="queue-ready-actions">
           <button type="button" data-queue-action="copy-link">
-            Copiar link
+            2. Copiar link afiliado
           </button>
           <button type="button" class="is-primary" data-queue-action="share-story">
-            Compartilhar Story
+            3. Enviar Story ao Instagram
           </button>
           <button type="button" data-queue-action="published">
-            Marcar publicada
+            4. Marcar publicada
           </button>
         </div>
       `
@@ -1080,6 +1083,8 @@ function renderPublicationQueue() {
           src="${escapeQueueHtml(item.storyUrl || '')}"
           alt="Story preparado para ${escapeQueueHtml(item.title)}"
           loading="lazy"
+          decoding="async"
+          fetchpriority="low"
         >
       </div>
       <div class="queue-content">
@@ -1115,6 +1120,7 @@ function renderPublicationQueue() {
 
 async function fetchPublicationQueue(options = {}) {
   try {
+    const wasEnabled = publicationQueueEnabled;
     const response = await fetch('/api/publication-queue');
     const data = await response.json();
     publicationQueueEnabled = data.enabled === true;
@@ -1129,8 +1135,14 @@ async function fetchPublicationQueue(options = {}) {
 
     publicationQueueItems = data.items || [];
     publicationQueueSummary = data.summary || {};
-    renderPublicationQueue();
-    if (allMLDeals.length) renderMLDeals(allMLDeals);
+    if (elPanelQueue.classList.contains('active') || options.render) {
+      renderPublicationQueue();
+    } else {
+      updateQueueSummary();
+    }
+    if (wasEnabled !== publicationQueueEnabled && allMLDeals.length) {
+      renderMLDeals(allMLDeals);
+    }
     if (options.feedback) {
       setQueueFeedback(options.feedback, options.type || 'success');
     }
@@ -1204,6 +1216,7 @@ async function enqueueDealsForPublication(deals) {
   selectedMLIndices.clear();
   updateMLSelectionUI();
   await fetchPublicationQueue({
+    render: true,
     feedback:
       `${created} adicionada(s), ${reused} já existente(s), ` +
       `${failed} com falha.`,
@@ -1228,33 +1241,32 @@ async function copyQueueText(text) {
 }
 
 async function shareQueueStory(item) {
-  await copyQueueText(item.affiliateLink);
+  if (!window.isSecureContext || !navigator.share) {
+    throw new Error(
+      'O envio direto exige HTTPS válido. Ative o certificado do site no Coolify.'
+    );
+  }
   const response = await fetch(item.storyUrl);
-  if (!response.ok) throw new Error('Não foi possível baixar o Story.');
+  if (!response.ok) throw new Error('Não foi possível carregar o Story.');
   const blob = await response.blob();
   const file = new File(
     [blob],
     `story-${item.id}.jpg`,
     { type: blob.type || 'image/jpeg' }
   );
-  if (
-    navigator.share &&
-    (!navigator.canShare || navigator.canShare({ files: [file] }))
-  ) {
-    await navigator.share({
-      files: [file],
-      title: item.title,
-      text: 'O link afiliado já foi copiado. Adicione-o ao sticker do Story.'
-    });
-    return true;
+  if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: item.title
+      });
+      return true;
+    } catch (err) {
+      if (err.name === 'AbortError') return false;
+      throw err;
+    }
   }
-
-  const download = document.createElement('a');
-  download.href = URL.createObjectURL(blob);
-  download.download = file.name;
-  download.click();
-  setTimeout(() => URL.revokeObjectURL(download.href), 1000);
-  return false;
+  throw new Error('Este navegador não permite compartilhar imagens.');
 }
 
 async function updateQueueItemStatus(itemId, status) {
@@ -1903,7 +1915,10 @@ function init() {
 
   // Tab Switchers
   elTabML.addEventListener('click', () => switchTab(elTabML, elPanelML));
-  elTabAmazon.addEventListener('click', () => switchTab(elTabAmazon, elPanelAmazon));
+  elTabAmazon.addEventListener('click', () => {
+    switchTab(elTabAmazon, elPanelAmazon);
+    if (!amazonDealsLoaded) fetchAmazonDeals();
+  });
   elTabCoupons.addEventListener('click', () => switchTab(elTabCoupons, elPanelCoupons));
   elTabQueue.addEventListener('click', () => {
     switchTab(elTabQueue, elPanelQueue);
@@ -1978,11 +1993,10 @@ function init() {
   elFilterDiscountAmazon.addEventListener('change', applyAmazonFilters);
 
   // Initial loads
-  fetchCategories().then(() => {
+  fetchCategories().then(async () => {
+    await fetchPublicationQueue();
     fetchMLDeals();
-    fetchAmazonDeals();
     fetchDataStatus();
-    fetchPublicationQueue();
   });
   setInterval(fetchDataStatus, 60000);
   setInterval(syncPublicationHistory, 30000);
@@ -2215,8 +2229,8 @@ document.addEventListener('click', async (event) => {
       const shared = await shareQueueStory(item);
       setQueueFeedback(
         shared
-          ? 'Story enviado ao compartilhamento. O link já está copiado.'
-          : 'Imagem baixada e link copiado. Abra o Instagram para finalizar.',
+          ? 'Escolha Instagram e depois Stories no menu de compartilhamento.'
+          : 'Compartilhamento cancelado.',
         'success'
       );
       return;

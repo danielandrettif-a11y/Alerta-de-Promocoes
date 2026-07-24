@@ -40,9 +40,10 @@ Both paths must live inside the persistent Coolify volume.
 3. Open each product in Mercado Livre and generate the affiliate link manually.
 4. Paste the `https://meli.la/...` link into the queue.
 5. The server validates the link and rechecks the current catalog entry.
-6. Copy the link and share the prepared image through the phone share sheet.
-7. Add the Instagram link sticker manually and publish.
-8. Mark the queue item as published.
+6. Copy the link and tap **Send Story to Instagram**.
+7. In the phone share sheet, choose Instagram and then Stories.
+8. Add the Instagram link sticker manually and publish.
+9. Mark the queue item as published.
 
 ## Validation rules
 
@@ -52,6 +53,8 @@ Both paths must live inside the persistent Coolify volume.
 - A price change moves the item to `needs_review`.
 - A queue item can only be marked `published` from `ready`.
 - Active duplicates for the same product reuse the existing queue item.
+- File sharing requires a valid HTTPS origin and a browser that supports the
+  Web Share API. The button must not silently fall back to downloading.
 
 ## Rollback
 
