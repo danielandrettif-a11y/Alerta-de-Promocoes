@@ -21,6 +21,10 @@ const {
   selectBestUnpublished,
   getFreshness
 } = require('./execution/automation_state.js');
+const {
+  buildWhatsappComparison,
+  compareProductPrices
+} = require('./execution/price_comparison.js');
 
 // puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
 // load Puppeteer lazily only when the price-comparison endpoint needs it.
@@ -54,6 +58,10 @@ const legacyHistoryPath = path.join(__dirname, '.tmp', 'published_history.json')
 const couponConfirmationsPath = path.join(
   APP_RUNTIME_DIR,
   'coupon_confirmations.json'
+);
+const priceComparisonCachePath = path.join(
+  APP_RUNTIME_DIR,
+  'price_comparison_cache.json'
 );
 const GROUP_NAME = 'Alerta de Descontos';
 
@@ -482,8 +490,30 @@ function cleanSearchQuery(title) {
   return keywords.join(' ');
 }
 
-// GET /api/compare-price - Consulta o menor preço de um produto no Buscapé/Zoom/Bondfaro on-the-fly
+// Comparador principal: valida similaridade, reutiliza cache persistente e
+// deixa claro que o resultado é uma estimativa automática.
 app.get('/api/compare-price', async (req, res) => {
+  const query = String(req.query.q || '').trim();
+  if (!query) {
+    return res.status(400).json({ error: 'Parâmetro q é obrigatório' });
+  }
+  const comparison = await compareProductPrices({
+    title: query,
+    currentPrice: req.query.price,
+    cachePath: priceComparisonCachePath,
+    cacheMinutes: Number(process.env.PRICE_COMPARISON_CACHE_MINUTES) || 360
+  });
+  res.json({
+    ...comparison,
+    buscape: comparison.providers?.buscape || null,
+    zoom: comparison.providers?.zoom || null,
+    bondfaro: comparison.providers?.bondfaro || null
+  });
+});
+
+// Mantido temporariamente para diagnóstico enquanto o comparador novo é
+// validado em produção. O painel e o publicador não chamam esta rota.
+app.get('/api/compare-price-legacy', async (req, res) => {
   const query = req.query.q;
   const currentPrice = parseFloat(req.query.price) || 0;
   
@@ -693,29 +723,25 @@ app.post('/api/generate', async (req, res) => {
       const platformTag = deal.platform === 'amazon' ? '🟡 *AMAZON*' : '🛍️ *MERCADO LIVRE*';
       const category = inferCategory(deal.title);
       
-      // Injeta estatísticas do comparador se houver
-      let comparisonText = '';
-      if (deal.comparison && deal.comparison.priceText) {
-        const cleanCurrentPriceStr = deal.currentPrice.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-        const currentPriceVal = parseFloat(cleanCurrentPriceStr) || 0;
-        const compPriceVal = deal.comparison.minPrice || 0;
-        
-        comparisonText = `\n\n📊 *Comparador de Preços (Buscapé):*\n• Menor preço no mercado: *${deal.comparison.priceText}*`;
-        
-        if (currentPriceVal > 0 && compPriceVal > 0) {
-          const diff = compPriceVal - currentPriceVal;
-          const tolerance = currentPriceVal * 0.02; // tolerância de 2%
-          
-          if (diff > tolerance) {
-            comparisonText += `\n• Economia Real nesta oferta: *R$ ${diff.toFixed(2).replace('.', ',')}*! 📉`;
-            comparisonText += `\n• Status: ✅ *Desconto Comprovado!*`;
-          } else if (diff < -tolerance) {
-            comparisonText += `\n• Status: ⚠️ *Alerta:* Encontrado mais barato no mercado!`;
-          } else {
-            comparisonText += `\n• Status: ⚖️ *Preço Equivalente ao mercado*`;
-          }
-        }
+      let comparison = deal.comparison?.priceText
+        ? { success: true, sourcesCount: 1, ...deal.comparison }
+        : null;
+      if (
+        !comparison &&
+        process.env.PRICE_COMPARISON_ENABLED !== 'false'
+      ) {
+        comparison = await compareProductPrices({
+          title: deal.title,
+          currentPrice: deal.currentPrice,
+          cachePath: priceComparisonCachePath,
+          cacheMinutes:
+            Number(process.env.PRICE_COMPARISON_CACHE_MINUTES) || 360
+        });
       }
+      const comparisonText = buildWhatsappComparison(
+        comparison,
+        deal.currentPrice
+      );
       
       const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*${comparisonText}\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
 
@@ -757,7 +783,13 @@ app.post('/api/generate', async (req, res) => {
             affiliateLink: deal.link,
             publishedAt: new Date().toISOString(),
             msgId: msgId,
-            source: 'manual'
+            source: 'manual',
+            comparison: comparison?.success ? {
+              minPrice: comparison.minPrice,
+              priceText: comparison.priceText,
+              sourcesCount: comparison.sourcesCount,
+              checkedAt: comparison.checkedAt
+            } : null
           });
           saveHistory(historyPath, history);
         } catch (histErr) {
@@ -1020,12 +1052,25 @@ async function publishNextAutomaticOffer() {
       return;
     }
 
+    const comparison = env.PRICE_COMPARISON_ENABLED === 'false'
+      ? { success: false, error: 'Comparação desativada.' }
+      : await compareProductPrices({
+          title: deal.title,
+          currentPrice: deal.currentPrice,
+          cachePath: priceComparisonCachePath,
+          cacheMinutes:
+            Number(env.PRICE_COMPARISON_CACHE_MINUTES) || 360
+        });
+    const comparisonText = buildWhatsappComparison(
+      comparison,
+      deal.currentPrice
+    );
     const storyImagePath = generateAutomaticStory(deal, coupons);
     const platformTag = deal.platform === 'amazon'
       ? '🟡 *AMAZON*'
       : '🛍️ *MERCADO LIVRE*';
     const category = inferCategory(deal.title);
-    const wppMessage = `🔥 *OFERTA ENCONTRADA!*\n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
+    const wppMessage = `🔥 *OFERTA ENCONTRADA!*\n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*${comparisonText}\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
     const msgId = await whatsapp.sendOffer(
       GROUP_NAME,
       wppMessage,
@@ -1045,7 +1090,13 @@ async function publishNextAutomaticOffer() {
       msgId,
       source: 'auto',
       dealType: deal.dealType || 'Ofertas de Campanha',
-      timeLeft: deal.timeLeft || ''
+      timeLeft: deal.timeLeft || '',
+      comparison: comparison?.success ? {
+        minPrice: comparison.minPrice,
+        priceText: comparison.priceText,
+        sourcesCount: comparison.sourcesCount,
+        checkedAt: comparison.checkedAt
+      } : null
     });
     saveHistory(historyPath, history);
     console.log(

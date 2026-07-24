@@ -1405,7 +1405,9 @@ document.addEventListener('click', async (e) => {
         deal.comparison = {
           minPrice: data.minPrice,
           priceText: data.priceText,
-          url: data.url
+          url: data.url,
+          sourcesCount: data.sourcesCount,
+          checkedAt: data.checkedAt
         };
         
         // Calcula a economia
@@ -1462,7 +1464,10 @@ document.addEventListener('click', async (e) => {
               ${bondfaroHtml}
             </div>
             <div class="comparison-summary">
-              <p class="comp-price-row">Melhor preço absoluto: <strong>${data.priceText}</strong></p>
+              <p class="comp-price-row">Menor preço semelhante encontrado: <strong>${data.priceText}</strong></p>
+              <p class="comparison-note">
+                Estimativa com ${data.sourcesCount || 1} comparador(es). Confirme modelo, frete e vendedor.
+              </p>
               ${statusHtml}
             </div>
           </div>

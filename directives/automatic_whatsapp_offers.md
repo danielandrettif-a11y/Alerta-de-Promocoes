@@ -18,6 +18,10 @@ generated Story image and a text description.
 - `MAX_PRODUCTS=400`: catalog size needed for up to 360 unique posts/day at
   15 per hour.
 - `ML_MAX_PAGES=15`: Mercado Livre pagination limit, capped at 30.
+- `PRICE_COMPARISON_ENABLED=true`: adds a basic market-price estimate to
+  every WhatsApp description.
+- `PRICE_COMPARISON_CACHE_MINUTES=360`: reuses validated comparisons for six
+  hours to avoid unnecessary browser traffic.
 
 ## Execution
 
@@ -29,6 +33,12 @@ The server starts two independent timers:
    chooses one item not sent during the current São Paulo calendar day,
    generates its Story, sends the Story and description, then records the
    result.
+
+Before sending, the publisher compares sufficiently similar products in
+Buscapé, Zoom and Bondfaro. Model/specification tokens such as `130A`, `220V`
+or `128GB` must match, and prices outside 45%–250% of the offer price are
+discarded. When no trustworthy match remains, the message explicitly says the
+comparison was inconclusive instead of claiming a saving.
 
 ## Persistent state
 
