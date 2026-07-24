@@ -147,16 +147,6 @@
       "maxLimit": "N/A"
     },
     {
-      "code": "QUEROOFF",
-      "rules": "10% OFF em seus pedidos com cupom Mercado Livre - Para compras acima de R$79, com desconto máximo limitado a R$60.",
-      "maxLimit": "N/A"
-    },
-    {
-      "code": "MEUSMIMOS",
-      "rules": "Ganhe 15% OFF com cupom Mercado Livre - Para compras acima de R$79, com desconto máximo de R$60.",
-      "maxLimit": "N/A"
-    },
-    {
       "code": "SALDAOCASA",
       "rules": "Desconto imperdível de 25% com cupom Mercado Livre - Para compras acima de R$29, com desconto máximo de R$100.",
       "maxLimit": "N/A"

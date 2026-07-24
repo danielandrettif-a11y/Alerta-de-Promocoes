@@ -48,7 +48,9 @@ async function main() {
   }
 
   // Cria pasta output para as imagens se não existir
-  const storiesDir = path.join(__dirname, '..', 'stories');
+  const storiesDir = process.env.STORIES_OUTPUT_DIR
+    ? path.resolve(process.env.STORIES_OUTPUT_DIR)
+    : path.join(__dirname, '..', 'stories');
   if (!fs.existsSync(storiesDir)) {
     fs.mkdirSync(storiesDir, { recursive: true });
     console.log(`Diretório criado: ${storiesDir}`);

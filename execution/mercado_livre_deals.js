@@ -1,6 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const {
+  APP_RUNTIME_DIR,
+  ensureSessionDirectories
+} = require('./session_config.js');
+
+ensureSessionDirectories();
+const couponConfirmationsPath = path.join(
+  APP_RUNTIME_DIR,
+  'coupon_confirmations.json'
+);
 
 // Helper to perform HTTP GET request
 function fetchHtml(url) {
@@ -64,6 +74,7 @@ function decodeHtmlEntities(str) {
 async function scrapeLiveCoupons() {
   console.log("Buscando cupons ativos na Cuponomia...");
   const scraped = [];
+  const checkedAt = new Date().toISOString();
   try {
     const html = await fetchHtml('https://www.cuponomia.com.br/desconto/mercado-livre');
     const liSplits = html.split('<li');
@@ -97,16 +108,26 @@ async function scrapeLiveCoupons() {
           scraped.push({
             code,
             rules: decodeHtmlEntities(rules).substring(0, 150),
-            maxLimit
+            maxLimit,
+            source: 'cuponomia',
+            verificationStatus: 'unverified',
+            lastCheckedAt: checkedAt,
+            lastConfirmedAt: null
           });
         }
       }
     });
     console.log(`Sucesso: Puxamos ${scraped.length} cupons ativos da Cuponomia.`);
+    return { success: true, coupons: scraped, checkedAt };
   } catch (err) {
     console.error("Falha ao puxar cupons na Cuponomia:", err.message);
+    return {
+      success: false,
+      coupons: [],
+      checkedAt,
+      error: err.message
+    };
   }
-  return scraped;
 }
 
 async function main() {
@@ -130,7 +151,11 @@ async function main() {
 
   // Configurations
   const minDiscount = parseInt(envVars['MIN_DISCOUNT'] || '30', 10);
-  const maxProducts = parseInt(envVars['MAX_PRODUCTS'] || '10', 10);
+  const maxProducts = parseInt(envVars['MAX_PRODUCTS'] || '400', 10);
+  const maxPages = Math.max(
+    1,
+    Math.min(30, parseInt(envVars['ML_MAX_PAGES'] || '15', 10))
+  );
   const outputPath = envVars['OUTPUT_PATH'] || 'mercado_livre_deals_report.md';
 
   console.log("Mercado Livre Daily Deals & Coupons Automation");
@@ -141,8 +166,6 @@ async function main() {
   try {
     const products = [];
     let page = 1;
-    const maxPages = 8;
-
   while (page <= maxPages) {
     console.log(`Fetching live deals page ${page}...`);
     const url = page === 1 
@@ -281,19 +304,64 @@ async function main() {
     // Active Coupons Database (Retrieved dynamically from coupons.json)
     const couponsPath = path.join(__dirname, '..', 'coupons.json');
     let coupons = [];
+    let previousCoupons = [];
+    let couponConfirmations = {};
+    if (fs.existsSync(couponsPath)) {
+      try {
+        previousCoupons = JSON.parse(fs.readFileSync(couponsPath, 'utf-8'));
+      } catch {
+        previousCoupons = [];
+      }
+    }
+    if (fs.existsSync(couponConfirmationsPath)) {
+      try {
+        couponConfirmations = JSON.parse(
+          fs.readFileSync(couponConfirmationsPath, 'utf-8')
+        );
+      } catch {
+        couponConfirmations = {};
+      }
+    }
 
     // Busca os cupons ativos em tempo real da internet
     console.log("Buscando cupons reais da web...");
-    const liveCoupons = await scrapeLiveCoupons();
-    
-    // Mantém apenas os cupons raspados ativos (sem cupons manuais)
-    coupons = liveCoupons || [];
+    const couponResult = await scrapeLiveCoupons();
+    const previousByCode = new Map(
+      previousCoupons.map(coupon => [coupon.code, coupon])
+    );
 
-    if (coupons.length === 0) {
-      coupons = [
-        { code: 'QUEROOFF', rules: '10% OFF em seus pedidos com cupom Mercado Livre - Para compras acima de R$79', maxLimit: 'R$ 60' },
-        { code: 'MEUSMIMOS', rules: 'Ganhe 15% OFF com cupom Mercado Livre - Para compras acima de R$79', maxLimit: 'R$ 60' }
-      ];
+    if (couponResult.success) {
+      coupons = couponResult.coupons.map(coupon => {
+        const previous = previousByCode.get(coupon.code);
+        const lastConfirmedAt =
+          couponConfirmations[coupon.code] ||
+          previous?.lastConfirmedAt ||
+          null;
+        return {
+          ...coupon,
+          lastConfirmedAt,
+          verificationStatus: lastConfirmedAt
+            ? 'manually_confirmed'
+            : 'unverified'
+        };
+      });
+    } else {
+      // Preserva a lista anterior de forma transparente; nunca injeta códigos
+      // fixos que possam estar vencidos.
+      coupons = previousCoupons.map(coupon => {
+        const lastConfirmedAt =
+          couponConfirmations[coupon.code] ||
+          coupon.lastConfirmedAt ||
+          null;
+        return {
+          ...coupon,
+          lastConfirmedAt,
+          verificationStatus: lastConfirmedAt
+            ? 'manually_confirmed'
+            : 'unverified',
+          sourceUnavailableAt: couponResult.checkedAt
+        };
+      });
     }
     
     try {
@@ -351,7 +419,8 @@ Ordenados por **Avaliação (Estrelas)** e depois por **Percentual de Desconto**
     // Salva o JSON estruturado para consumo por outros scripts (ex: gerador de stories)
     const jsonOutputPath = absoluteOutputPath.replace(/\.md$/, '.json');
     const jsonData = {
-      generatedAt: nowStr,
+      generatedAt: new Date().toISOString(),
+      generatedAtDisplay: nowStr,
       coupons: coupons,
       deals: topDeals
     };

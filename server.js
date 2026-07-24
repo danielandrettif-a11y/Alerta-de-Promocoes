@@ -8,8 +8,19 @@ const { exec, execSync } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./execution/category_helper.js');
 const {
   printSessionStatus,
-  getSessionStatus
+  getSessionStatus,
+  APP_RUNTIME_DIR,
+  ensureSessionDirectories
 } = require('./execution/session_config.js');
+const {
+  generateDealId,
+  loadHistory,
+  saveHistory,
+  getTodayPublishedIds,
+  countAutomaticPostsSince,
+  selectBestUnpublished,
+  getFreshness
+} = require('./execution/automation_state.js');
 
 // puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
 // load Puppeteer lazily only when the price-comparison endpoint needs it.
@@ -37,7 +48,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 const mlDealsReportPath = path.join(__dirname, 'mercado_livre_deals_report.json');
 const amazonDealsReportPath = path.join(__dirname, 'amazon_deals_report.json');
 const couponsPath = path.join(__dirname, 'coupons.json');
-const historyPath = path.join(__dirname, '.tmp', 'published_history.json');
+ensureSessionDirectories();
+const historyPath = path.join(APP_RUNTIME_DIR, 'published_history.json');
+const legacyHistoryPath = path.join(__dirname, '.tmp', 'published_history.json');
+const couponConfirmationsPath = path.join(
+  APP_RUNTIME_DIR,
+  'coupon_confirmations.json'
+);
 const GROUP_NAME = 'Alerta de Descontos';
 
 // Liveness do processo + estado informativo das integracoes.
@@ -56,6 +73,58 @@ app.get('/api/health', (req, res) => {
     sessions: {
       whatsapp: persistedSessions.whatsapp.available,
       mercadoLivre: persistedSessions.mercadoLivre.available
+    }
+  });
+});
+
+app.get('/api/data-status', (req, res) => {
+  const readGeneratedAt = filePath => {
+    if (!fs.existsSync(filePath)) return null;
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8')).generatedAt || null;
+    } catch {
+      return null;
+    }
+  };
+  const staleAfterMinutes =
+    Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90;
+  const history = loadHistory(historyPath, legacyHistoryPath);
+  const todayPublishedIds = getTodayPublishedIds(history);
+  const targetPerHour = Math.min(
+    20,
+    Math.max(15, Number(process.env.WPP_POSTS_PER_HOUR) || 15)
+  );
+  const { deals } = loadAvailableDeals();
+  const uniqueCatalog = new Map(
+    deals.map(deal => [generateDealId(deal), deal])
+  );
+  const availableToday = [...uniqueCatalog.keys()]
+    .filter(dealId => !todayPublishedIds.has(dealId))
+    .length;
+
+  res.json({
+    mercadoLivre: getFreshness(
+      readGeneratedAt(mlDealsReportPath),
+      staleAfterMinutes
+    ),
+    amazon: getFreshness(
+      readGeneratedAt(amazonDealsReportPath),
+      staleAfterMinutes
+    ),
+    publishing: {
+      enabled: process.env.AUTO_RUN_ENABLED === 'true',
+      targetPerHour,
+      sentLastHour: countAutomaticPostsSince(
+        history,
+        new Date(Date.now() - 60 * 60 * 1000)
+      ),
+      uniqueSentToday: todayPublishedIds.size,
+      catalogSize: uniqueCatalog.size,
+      availableToday,
+      requiredUniquePerDay: targetPerHour * 24,
+      estimatedCoverageHours: Number(
+        (availableToday / targetPerHour).toFixed(1)
+      )
     }
   });
 });
@@ -98,17 +167,6 @@ if (whatsappEnabled) {
   console.log('[Painel Web] WhatsApp Web desativado por WHATSAPP_ENABLED=false.');
 }
 
-// ID determinístico para ofertas
-function generateDealId(deal) {
-  const base = `${deal.title}_${deal.currentPrice}_${deal.discount}`;
-  let hash = 0;
-  for (let i = 0; i < base.length; i++) {
-    hash = ((hash << 5) - hash) + base.charCodeAt(i);
-    hash |= 0;
-  }
-  return `deal_${Math.abs(hash)}`;
-}
-
 // Inferência de Categoria e Subcategoria via Helper unificado
 function inferCategory(title) {
   const info = inferCategoryAndSub(title);
@@ -144,8 +202,50 @@ app.get('/api/deals', (req, res) => {
   res.json({
     deals,
     coupons,
-    generatedAt
+    generatedAt,
+    freshness: getFreshness(
+      generatedAt,
+      Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
+    )
   });
+});
+
+// Confirmação manual: o usuário testou o cupom no checkout.
+app.post('/api/coupons/:code/confirm', (req, res) => {
+  const code = String(req.params.code || '').trim().toUpperCase();
+  if (!code || !fs.existsSync(couponsPath)) {
+    return res.status(404).json({ error: 'Cupom nao encontrado.' });
+  }
+
+  try {
+    const coupons = JSON.parse(fs.readFileSync(couponsPath, 'utf-8'));
+    const coupon = coupons.find(item => item.code === code);
+    if (!coupon) {
+      return res.status(404).json({ error: 'Cupom nao encontrado.' });
+    }
+    coupon.verificationStatus = 'manually_confirmed';
+    coupon.lastConfirmedAt = new Date().toISOString();
+    fs.writeFileSync(couponsPath, JSON.stringify(coupons, null, 2), 'utf-8');
+    let confirmations = {};
+    if (fs.existsSync(couponConfirmationsPath)) {
+      try {
+        confirmations = JSON.parse(
+          fs.readFileSync(couponConfirmationsPath, 'utf-8')
+        );
+      } catch {
+        confirmations = {};
+      }
+    }
+    confirmations[code] = coupon.lastConfirmedAt;
+    fs.writeFileSync(
+      couponConfirmationsPath,
+      JSON.stringify(confirmations, null, 2),
+      'utf-8'
+    );
+    res.json({ success: true, coupon });
+  } catch (err) {
+    res.status(500).json({ error: `Falha ao confirmar cupom: ${err.message}` });
+  }
 });
 
 // GET /api/categories - Retorna a taxonomia de categorias e subcategorias
@@ -171,7 +271,11 @@ app.get('/api/amazon-deals', (req, res) => {
 
   res.json({
     deals,
-    generatedAt
+    generatedAt,
+    freshness: getFreshness(
+      generatedAt,
+      Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
+    )
   });
 });
 
@@ -199,7 +303,11 @@ app.post('/api/scrape', (req, res) => {
         data: {
           deals: parsedData.deals || [],
           coupons,
-          generatedAt: parsedData.generatedAt || null
+          generatedAt: parsedData.generatedAt || null,
+          freshness: getFreshness(
+            parsedData.generatedAt,
+            Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
+          )
         }
       });
     } catch (e) {
@@ -225,7 +333,11 @@ app.post('/api/scrape-amazon', (req, res) => {
         success: true,
         data: {
           deals: parsedData.deals || [],
-          generatedAt: parsedData.generatedAt || null
+          generatedAt: parsedData.generatedAt || null,
+          freshness: getFreshness(
+            parsedData.generatedAt,
+            Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
+          )
         }
       });
     } catch (e) {
@@ -630,14 +742,13 @@ app.post('/api/generate', async (req, res) => {
       }
 
       // Registra no histórico de publicados
-      const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+      const dealId = generateDealId(deal);
       if (sentSuccess && msgId) {
         try {
-          let history = { publishedIds: [], entries: [] };
-          if (fs.existsSync(historyPath)) {
-            history = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+          const history = loadHistory(historyPath, legacyHistoryPath);
+          if (!history.publishedIds.includes(dealId)) {
+            history.publishedIds.push(dealId);
           }
-          history.publishedIds.push(dealId);
           history.entries.push({
             dealId,
             title: deal.title.substring(0, 80),
@@ -648,7 +759,7 @@ app.post('/api/generate', async (req, res) => {
             msgId: msgId,
             source: 'manual'
           });
-          fs.writeFileSync(historyPath, JSON.stringify(history, null, 2), 'utf-8');
+          saveHistory(historyPath, history);
         } catch (histErr) {
           console.error('   ❌ Falha ao gravar histórico local:', histErr.message);
         }
@@ -704,7 +815,7 @@ app.post('/api/delete-deal', async (req, res) => {
         // Remove do histórico de publicados local
         try {
           if (fs.existsSync(historyPath)) {
-            const history = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+            const history = loadHistory(historyPath, legacyHistoryPath);
             
             // Acha a entrada correspondente no histórico
             const entryIndex = history.entries.findIndex(e => e.msgId === msgId);
@@ -716,7 +827,7 @@ app.post('/api/delete-deal', async (req, res) => {
               // Remove a entrada da lista de entries
               history.entries.splice(entryIndex, 1);
               
-              fs.writeFileSync(historyPath, JSON.stringify(history, null, 2), 'utf-8');
+              saveHistory(historyPath, history);
               console.log(`   ✅ [API Excluir] ID ${entry.dealId} removido do histórico de publicados.`);
             }
           }
@@ -741,12 +852,8 @@ app.post('/api/delete-deal', async (req, res) => {
 
 // GET /api/publish-history - Retorna o histórico de publicações
 app.get('/api/publish-history', (req, res) => {
-  if (!fs.existsSync(historyPath)) {
-    return res.json({ publishedIds: [], entries: [] });
-  }
   try {
-    const data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
-    res.json(data);
+    res.json(loadHistory(historyPath, legacyHistoryPath));
   } catch (err) {
     res.json({ publishedIds: [], entries: [] });
   }
@@ -755,129 +862,200 @@ app.get('/api/publish-history', (req, res) => {
 // =======================================================================
 // 🤖 CICLO AUTOMÁTICO DE POSTAGENS (Pronto no código para ativação fácil)
 // =======================================================================
-async function runAutomaticCycle() {
+let dealsRefreshInProgress = false;
+let automaticPublishInProgress = false;
+
+function runExecutionScript(scriptName) {
+  return new Promise((resolve, reject) => {
+    exec(
+      `node execution/${scriptName}`,
+      { cwd: __dirname, maxBuffer: 10 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) {
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr });
+      }
+    );
+  });
+}
+
+async function refreshDealsData() {
   const env = readEnv();
-  const autoEnabled = env['AUTO_RUN_ENABLED'] === 'true';
+  if (env.DEALS_REFRESH_ENABLED === 'false' || dealsRefreshInProgress) return;
 
-  if (!autoEnabled) {
-    console.log(`⏰ [${new Date().toLocaleTimeString('pt-BR')}] Ciclo automático pulado (AUTO_RUN_ENABLED=false).`);
-    return;
-  }
-
-  const limit = parseInt(env['DAILY_WPP_POSTS_LIMIT'] || '30', 10);
-  const maxPerCycle = parseInt(env['MAX_POSTS_PER_CYCLE'] || '2', 10);
-
-  console.log(`\n⏰ [${new Date().toLocaleTimeString('pt-BR')}] Executando ciclo automático de ofertas...`);
-
-  // Varredura concorrente
+  dealsRefreshInProgress = true;
+  console.log(`\n🔄 [${new Date().toLocaleTimeString('pt-BR')}] Atualizando bases de ofertas...`);
   try {
-    execSync('node execution/mercado_livre_deals.js', { cwd: __dirname, stdio: 'ignore' });
-    execSync('node execution/amazon_deals.js', { cwd: __dirname, stdio: 'ignore' });
-  } catch (e) {
-    console.warn('⚠️ Falha ao rodar scrapers no ciclo automático. Usando dados existentes...');
+    const results = await Promise.allSettled([
+      runExecutionScript('mercado_livre_deals.js'),
+      runExecutionScript('amazon_deals.js')
+    ]);
+    const failed = results.filter(result => result.status === 'rejected');
+    if (failed.length > 0) {
+      failed.forEach(result => {
+        console.error(`⚠️ Falha em uma fonte de ofertas: ${result.reason.message}`);
+      });
+    } else {
+      console.log('✅ Mercado Livre e Amazon atualizados sem publicar mensagens.');
+    }
+  } finally {
+    dealsRefreshInProgress = false;
   }
+}
 
-  // Carrega e mescla ofertas
-  let history = { publishedIds: [], entries: [] };
-  if (fs.existsSync(historyPath)) {
-    try { history = JSON.parse(fs.readFileSync(historyPath, 'utf-8')); } catch (e) {}
-  }
+function loadAvailableDeals() {
+  const deals = [];
+  let coupons = [];
 
-  const todayStr = new Date().toISOString().substring(0, 10);
-  const autoPostsToday = (history.entries || []).filter(entry => {
-    if (entry.source !== 'auto') return false;
-    const pubDateStr = new Date(entry.publishedAt).toISOString().substring(0, 10);
-    return pubDateStr === todayStr;
-  }).length;
-
-  if (autoPostsToday >= limit) {
-    console.log(`⚠️ Limite de postagens automáticas (${limit}) atingido hoje.`);
-    return;
-  }
-
-  const postsToSend = Math.min(maxPerCycle, limit - autoPostsToday);
-  if (postsToSend <= 0) return;
-
-  // Unifica e filtra ofertas
-  let deals = [];
   if (fs.existsSync(mlDealsReportPath)) {
     try {
       const data = JSON.parse(fs.readFileSync(mlDealsReportPath, 'utf-8'));
-      if (data.deals) deals = deals.concat(data.deals.map(d => ({ ...d, platform: 'mercado_livre' })));
-    } catch(e) {}
+      deals.push(...(data.deals || []).map(deal => ({
+        ...deal,
+        platform: 'mercado_livre'
+      })));
+      coupons = data.coupons || [];
+    } catch (err) {
+      console.error(`Erro ao carregar ofertas do Mercado Livre: ${err.message}`);
+    }
   }
   if (fs.existsSync(amazonDealsReportPath)) {
     try {
       const data = JSON.parse(fs.readFileSync(amazonDealsReportPath, 'utf-8'));
-      if (data.deals) deals = deals.concat(data.deals.map(d => ({ ...d, platform: 'amazon' })));
-    } catch(e) {}
+      deals.push(...(data.deals || []).map(deal => ({
+        ...deal,
+        platform: 'amazon'
+      })));
+    } catch (err) {
+      console.error(`Erro ao carregar ofertas da Amazon: ${err.message}`);
+    }
   }
 
-  const publishedIdsSet = new Set(history.publishedIds || []);
-  const pending = deals
-    .map(d => ({ ...d, dealId: `deal_${Math.abs(d.title.length + d.discount)}` }))
-    .filter(d => !publishedIdsSet.has(d.dealId))
-    .sort((a, b) => b.discount - a.discount);
-
-  const selected = pending.slice(0, postsToSend);
-
-  for (const deal of selected) {
-    const dealId = `wpp_auto_${Math.abs(deal.title.length + deal.discount)}`;
-    const singleSelectionPath = path.join(__dirname, '.tmp', `wpp_single_deal_${dealId}.json`);
-    const storiesDir = path.join(__dirname, 'stories');
-
+  if (fs.existsSync(couponsPath)) {
     try {
-      // Gera a imagem no backend com o Puppeteer de fallback para ciclos automáticos
-      const tempSelectionData = {
-        generatedAt: new Date().toISOString(),
-        deals: [{ ...deal, link: deal.link }],
-        selectedCoupon: null
-      };
-      fs.writeFileSync(singleSelectionPath, JSON.stringify(tempSelectionData, null, 2), 'utf-8');
-
-      if (fs.existsSync(storiesDir)) {
-        fs.readdirSync(storiesDir)
-          .filter(f => f.endsWith('.jpg'))
-          .forEach(f => {
-            try { fs.unlinkSync(path.join(storiesDir, f)); } catch (e) {}
-          });
-      }
-
-      execSync(`node execution/generate_stories.js "${singleSelectionPath}"`, {
-        cwd: __dirname,
-        stdio: 'ignore'
-      });
-
-      fs.unlinkSync(singleSelectionPath);
-
-      const generatedFiles = fs.readdirSync(storiesDir).filter(f => f.endsWith('.jpg'));
-      if (generatedFiles.length > 0) {
-        const storyImagePath = path.join(storiesDir, generatedFiles[0]);
-        const platformTag = deal.platform === 'amazon' ? '🟡 *AMAZON*' : '🛍️ *MERCADO LIVRE*';
-        const category = inferCategory(deal.title);
-        const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
-
-        const msgId = await whatsapp.sendOffer(GROUP_NAME, wppMessage, storyImagePath);
-        console.log(`   ✅ Oferta automática postada: ${deal.title.substring(0, 30)}`);
-
-        history.publishedIds.push(deal.dealId);
-        history.entries.push({
-          dealId: deal.dealId,
-          title: deal.title.substring(0, 80),
-          discount: deal.discount,
-          price: deal.currentPrice,
-          affiliateLink: deal.link,
-          publishedAt: new Date().toISOString(),
-          msgId: msgId,
-          source: 'auto'
-        });
-        fs.writeFileSync(historyPath, JSON.stringify(history, null, 2), 'utf-8');
-      }
+      coupons = JSON.parse(fs.readFileSync(couponsPath, 'utf-8'));
     } catch (err) {
-      console.error(`Erro ao postar automático: ${err.message}`);
+      console.error(`Erro ao carregar cupons: ${err.message}`);
+    }
+  }
+
+  return { deals, coupons };
+}
+
+function generateAutomaticStory(deal, coupons) {
+  const storiesDir = path.join(APP_RUNTIME_DIR, 'automatic_stories');
+  const selectionPath = path.join(
+    APP_RUNTIME_DIR,
+    `automatic_story_${process.pid}.json`
+  );
+  const confirmedCoupon = coupons.find(
+    coupon => coupon.verificationStatus === 'manually_confirmed'
+  ) || null;
+
+  fs.writeFileSync(selectionPath, JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    deals: [deal],
+    selectedCoupon: confirmedCoupon
+  }, null, 2), 'utf-8');
+
+  try {
+    if (fs.existsSync(storiesDir)) {
+      fs.readdirSync(storiesDir)
+        .filter(file => file.endsWith('.jpg'))
+        .forEach(file => {
+          try { fs.unlinkSync(path.join(storiesDir, file)); } catch {}
+        });
+    }
+    execSync(`node execution/generate_stories.js "${selectionPath}"`, {
+      cwd: __dirname,
+      env: {
+        ...process.env,
+        STORIES_OUTPUT_DIR: storiesDir
+      },
+      stdio: 'ignore',
+      timeout: 120000
+    });
+    const generated = fs.readdirSync(storiesDir)
+      .filter(file => file.endsWith('.jpg'));
+    if (generated.length === 0) {
+      throw new Error('Nenhum arquivo de Story foi gerado.');
+    }
+    return path.join(storiesDir, generated[0]);
+  } finally {
+    try { fs.unlinkSync(selectionPath); } catch {}
+  }
+}
+
+async function publishNextAutomaticOffer() {
+  const env = readEnv();
+  if (env.AUTO_RUN_ENABLED !== 'true' || automaticPublishInProgress) return;
+
+  const targetPerHour = Math.min(
+    20,
+    Math.max(15, Number(env.WPP_POSTS_PER_HOUR) || 15)
+  );
+  const whatsappStatus = whatsapp?.getConnectionStatus?.();
+  if (!whatsapp || !whatsappStatus?.ready) {
+    console.warn('⏸️ Publicação automática aguardando WhatsApp ficar pronto.');
+    return;
+  }
+
+  automaticPublishInProgress = true;
+  try {
+    const history = loadHistory(historyPath, legacyHistoryPath);
+    const postsLastHour = countAutomaticPostsSince(
+      history,
+      new Date(Date.now() - 60 * 60 * 1000)
+    );
+    if (postsLastHour >= targetPerHour) return;
+
+    const { deals, coupons } = loadAvailableDeals();
+    const [deal] = selectBestUnpublished(deals, history, 1);
+    if (!deal) {
+      console.warn('⏸️ Nenhuma oferta inédita disponível para hoje.');
+      return;
     }
 
-    await new Promise(r => setTimeout(r, 2000));
+    const storyImagePath = generateAutomaticStory(deal, coupons);
+    const platformTag = deal.platform === 'amazon'
+      ? '🟡 *AMAZON*'
+      : '🛍️ *MERCADO LIVRE*';
+    const category = inferCategory(deal.title);
+    const wppMessage = `🔥 *OFERTA ENCONTRADA!*\n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
+    const msgId = await whatsapp.sendOffer(
+      GROUP_NAME,
+      wppMessage,
+      storyImagePath
+    );
+
+    if (!history.publishedIds.includes(deal.dealId)) {
+      history.publishedIds.push(deal.dealId);
+    }
+    history.entries.push({
+      dealId: deal.dealId,
+      title: deal.title.substring(0, 80),
+      discount: deal.discount,
+      price: deal.currentPrice,
+      affiliateLink: deal.link,
+      publishedAt: new Date().toISOString(),
+      msgId,
+      source: 'auto',
+      dealType: deal.dealType || 'Ofertas de Campanha',
+      timeLeft: deal.timeLeft || ''
+    });
+    saveHistory(historyPath, history);
+    console.log(
+      `✅ Oferta automática enviada (${postsLastHour + 1}/${targetPerHour} na última hora): ` +
+      deal.title.substring(0, 60)
+    );
+  } catch (err) {
+    console.error(`Erro ao publicar oferta automática: ${err.message}`);
+  } finally {
+    automaticPublishInProgress = false;
   }
 }
 
@@ -887,18 +1065,42 @@ app.listen(PORT, HOST, () => {
   console.log(` Dashboard rodando em http://${HOST}:${PORT}`);
   console.log(`=================================================`);
 
-  // Configura ciclos automáticos periódicos (desativados por padrão via env)
-  setTimeout(async () => {
-    try {
-      await runAutomaticCycle();
-    } catch (e) {}
-
+  // Atualização de dados e publicação são ciclos independentes.
+  setTimeout(() => {
     const env = readEnv();
-    const minutes = parseInt(env['AUTO_RUN_INTERVAL_MINUTES'] || '30', 10);
-    setInterval(async () => {
-      try {
-        await runAutomaticCycle();
-      } catch (e) {}
-    }, minutes * 60 * 1000);
+    const refreshMinutes = Math.max(
+      15,
+      Number(env.DEALS_REFRESH_INTERVAL_MINUTES) || 60
+    );
+    refreshDealsData().catch(err => {
+      console.error(`Falha na atualização inicial: ${err.message}`);
+    });
+    setInterval(() => {
+      refreshDealsData().catch(err => {
+        console.error(`Falha na atualização agendada: ${err.message}`);
+      });
+    }, refreshMinutes * 60 * 1000);
+
+    const postsPerHour = Math.min(
+      20,
+      Math.max(15, Number(env.WPP_POSTS_PER_HOUR) || 15)
+    );
+    const publishIntervalMs = Math.floor(60 * 60 * 1000 / postsPerHour);
+    setTimeout(() => {
+      publishNextAutomaticOffer().catch(err => {
+        console.error(`Falha na publicação inicial: ${err.message}`);
+      });
+    }, 30000);
+    setInterval(() => {
+      publishNextAutomaticOffer().catch(err => {
+        console.error(`Falha na publicação agendada: ${err.message}`);
+      });
+    }, publishIntervalMs);
+
+    console.log(
+      `[Automação] Atualização a cada ${refreshMinutes} min; ` +
+      `publicação configurada para ${postsPerHour} ofertas/hora ` +
+      `(AUTO_RUN_ENABLED=${env.AUTO_RUN_ENABLED === 'true'}).`
+    );
   }, 15000);
 });

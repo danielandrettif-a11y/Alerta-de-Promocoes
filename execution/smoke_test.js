@@ -91,6 +91,7 @@ async function run() {
     const amazon = await (await expectResponse('/api/amazon-deals', 200)).json();
     const categories = await (await expectResponse('/api/categories', 200)).json();
     const history = await (await expectResponse('/api/publish-history', 200)).json();
+    const dataStatus = await (await expectResponse('/api/data-status', 200)).json();
 
     if (!Array.isArray(deals.deals) || !Array.isArray(deals.coupons)) {
       throw new Error('/api/deals retornou formato invalido');
@@ -106,6 +107,12 @@ async function run() {
     }
     if (!Array.isArray(history.publishedIds) || !Array.isArray(history.entries)) {
       throw new Error('/api/publish-history retornou formato invalido');
+    }
+    if (
+      typeof dataStatus.publishing?.targetPerHour !== 'number' ||
+      typeof dataStatus.publishing?.availableToday !== 'number'
+    ) {
+      throw new Error('/api/data-status retornou formato invalido');
     }
 
     await expectResponse('/api/proxy-image', 400);

@@ -6,6 +6,8 @@ const selectedMLIndices = new Set();
 const selectedAmazonIndices = new Set();
 let lastUpdateML = '';
 let lastUpdateAmazon = '';
+let freshnessML = null;
+let freshnessAmazon = null;
 
 // DOM elements - Tabs
 const elTabML = document.getElementById('btn-tab-ml');
@@ -51,6 +53,7 @@ let globalTaxonomy = {};
 
 // General
 const elTxtLastUpdate = document.getElementById('txt-last-update');
+const elTxtAutomationStatus = document.getElementById('txt-automation-status');
 const elLoadingOverlay = document.getElementById('loading-overlay');
 const elLoadingText = document.getElementById('loading-text');
 
@@ -70,17 +73,93 @@ function parseBackendDate(dateStr) {
   return isNaN(fallbackDate.getTime()) ? null : fallbackDate;
 }
 
+function generateClientDealId(deal, platform) {
+  const rawPlatform = String(platform || deal.platform || 'unknown').toLowerCase();
+  const normalizedPlatform = ['ml', 'mercado livre', 'mercado_livre'].includes(rawPlatform)
+    ? 'mercado_livre'
+    : ['amz', 'amazon'].includes(rawPlatform)
+      ? 'amazon'
+      : rawPlatform;
+  let normalizedLink = String(deal.link || '').split(/[?#]/)[0].replace(/\/+$/, '');
+  try {
+    const parsed = new URL(deal.link);
+    normalizedLink = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+  } catch {}
+  const itemId = normalizedLink.match(/\b(MLB\d+|B0[A-Z0-9]+)\b/i)?.[1];
+  const identity = itemId || normalizedLink || String(deal.title || '').trim().toLowerCase();
+  const value = `${normalizedPlatform}:${identity}`;
+  let hash = 0;
+  for (let index = 0; index < value.length; index++) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return `deal_${Math.abs(hash)}`;
+}
+
 function updateLastUpdateUI(platform) {
   const currentUpdateStr = platform === 'amazon' ? lastUpdateAmazon : lastUpdateML;
+  const freshness = platform === 'amazon' ? freshnessAmazon : freshnessML;
   if (currentUpdateStr) {
     const date = parseBackendDate(currentUpdateStr);
     if (date) {
-      elTxtLastUpdate.textContent = `Última atualização: ${date.toLocaleString('pt-BR')}`;
+      const ageMinutes = Math.max(
+        0,
+        Math.floor((Date.now() - date.getTime()) / 60000)
+      );
+      const staleAfter = freshness?.staleAfterMinutes || 90;
+      const isStale = ageMinutes > staleAfter;
+      const ageText = ageMinutes < 60
+        ? `${ageMinutes} min`
+        : `${Math.floor(ageMinutes / 60)}h ${ageMinutes % 60}min`;
+      elTxtLastUpdate.textContent = isStale
+        ? `Dados desatualizados há ${ageText} — última coleta: ${date.toLocaleString('pt-BR')}`
+        : `Dados atualizados há ${ageText} — ${date.toLocaleString('pt-BR')}`;
+      elTxtLastUpdate.classList.toggle('status-stale', isStale);
+      elTxtLastUpdate.classList.toggle('status-fresh', !isStale);
     } else {
       elTxtLastUpdate.textContent = `Última atualização: ${currentUpdateStr}`;
     }
   } else {
-    elTxtLastUpdate.textContent = 'Última atualização: N/A';
+    elTxtLastUpdate.textContent = 'Dados indisponíveis — nenhuma atualização registrada';
+    elTxtLastUpdate.classList.add('status-stale');
+    elTxtLastUpdate.classList.remove('status-fresh');
+  }
+}
+
+async function fetchDataStatus() {
+  try {
+    const response = await fetch('/api/data-status');
+    const status = await response.json();
+    freshnessML = status.mercadoLivre || freshnessML;
+    freshnessAmazon = status.amazon || freshnessAmazon;
+    lastUpdateML = status.mercadoLivre?.generatedAt || lastUpdateML;
+    lastUpdateAmazon = status.amazon?.generatedAt || lastUpdateAmazon;
+
+    const publishing = status.publishing;
+    if (publishing) {
+      if (publishing.enabled) {
+        const capacityWarning = publishing.availableToday <
+          publishing.targetPerHour
+          ? ' · estoque de ofertas insuficiente'
+          : '';
+        elTxtAutomationStatus.textContent =
+          `WhatsApp: ${publishing.sentLastHour}/${publishing.targetPerHour} na última hora · ` +
+          `${publishing.uniqueSentToday} enviados hoje · ` +
+          `${publishing.availableToday} inéditos disponíveis` +
+          capacityWarning;
+        elTxtAutomationStatus.classList.toggle(
+          'status-stale',
+          publishing.availableToday < publishing.targetPerHour
+        );
+      } else {
+        elTxtAutomationStatus.textContent = 'Publicação automática desativada';
+        elTxtAutomationStatus.classList.remove('status-stale');
+      }
+    }
+    const platform = elTabAmazon.classList.contains('active') ? 'amazon' : 'ml';
+    updateLastUpdateUI(platform);
+  } catch (err) {
+    console.error('Erro ao consultar estado das atualizações:', err);
   }
 }
 
@@ -206,7 +285,7 @@ async function fetchMLDeals() {
     const data = await response.json();
     
     allMLDeals = (data.deals || []).map(deal => {
-      const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+      const dealId = generateClientDealId(deal, 'mercado_livre');
       const pub = publishedEntries.find(e => e.dealId === dealId);
       return {
         ...deal,
@@ -214,6 +293,7 @@ async function fetchMLDeals() {
       };
     });
     allCoupons = data.coupons || [];
+    freshnessML = data.freshness || null;
     
     renderMLDeals(allMLDeals);
     renderCoupons(allCoupons);
@@ -239,13 +319,14 @@ async function fetchAmazonDeals() {
     const data = await response.json();
     
     allAmazonDeals = (data.deals || []).map(deal => {
-      const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+      const dealId = generateClientDealId(deal, 'amazon');
       const pub = publishedEntries.find(e => e.dealId === dealId);
       return {
         ...deal,
         publishedMsgId: pub ? pub.msgId : null
       };
     });
+    freshnessAmazon = data.freshness || null;
     renderAmazonDeals(allAmazonDeals);
     
     if (data.generatedAt) {
@@ -273,7 +354,7 @@ async function triggerMLScraper() {
       const publishedEntries = historyData.entries || [];
 
       allMLDeals = (data.data.deals || []).map(deal => {
-        const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+        const dealId = generateClientDealId(deal, 'mercado_livre');
         const pub = publishedEntries.find(e => e.dealId === dealId);
         return {
           ...deal,
@@ -281,6 +362,7 @@ async function triggerMLScraper() {
         };
       });
       allCoupons = data.data.coupons || [];
+      freshnessML = data.data.freshness || null;
       selectedMLIndices.clear();
       updateMLSelectionUI();
       renderMLDeals(allMLDeals);
@@ -314,13 +396,14 @@ async function triggerAmazonScraper() {
       const publishedEntries = historyData.entries || [];
 
       allAmazonDeals = (data.data.deals || []).map(deal => {
-        const dealId = `deal_${Math.abs(deal.title.length + deal.discount)}`;
+        const dealId = generateClientDealId(deal, 'amazon');
         const pub = publishedEntries.find(e => e.dealId === dealId);
         return {
           ...deal,
           publishedMsgId: pub ? pub.msgId : null
         };
       });
+      freshnessAmazon = data.data.freshness || null;
       selectedAmazonIndices.clear();
       updateAmazonSelectionUI();
       renderAmazonDeals(allAmazonDeals);
@@ -595,7 +678,9 @@ async function postSelectedDeals(platform) {
       result.results.forEach(resItem => {
         if (resItem.success && resItem.msgId) {
           const dealList = platform === 'ml' ? allMLDeals : allAmazonDeals;
-          const found = dealList.find(d => `deal_${Math.abs(d.title.length + d.discount)}` === resItem.dealId);
+          const found = dealList.find(d =>
+            generateClientDealId(d, platform) === resItem.dealId
+          );
           if (found) {
             found.publishedMsgId = resItem.msgId;
           }
@@ -656,6 +741,7 @@ function renderMLDeals(deals) {
 
     // Cupons compatíveis
     const compatibleCoupons = allCoupons.filter(coupon => {
+      if (coupon.verificationStatus !== 'manually_confirmed') return false;
       const comp = findCompatibleDealsForCoupon(coupon, [deal]);
       return comp.length > 0;
     });
@@ -856,11 +942,14 @@ function renderCoupons(coupons) {
   }
   
   coupons.forEach((coupon) => {
-    // Só mostra o cupom se houver pelo menos um produto compatível nas ofertas do Mercado Livre do dia!
     const compatibleDeals = findCompatibleDealsForCoupon(coupon, allMLDeals);
     const compCount = compatibleDeals.length;
-    
-    if (compCount === 0) return; // Filtra apenas cupons utilizáveis e válidos hoje
+    const isConfirmed = coupon.verificationStatus === 'manually_confirmed';
+    const checkedAt = parseBackendDate(coupon.lastCheckedAt);
+    const confirmedAt = parseBackendDate(coupon.lastConfirmedAt);
+    const verificationLabel = isConfirmed
+      ? `Confirmado manualmente${confirmedAt ? ` em ${confirmedAt.toLocaleString('pt-BR')}` : ''}`
+      : 'Não verificado no checkout';
 
     const item = document.createElement('div');
     item.className = 'coupon-ticket';
@@ -870,8 +959,15 @@ function renderCoupons(coupons) {
         <div class="coupon-code">${coupon.code}</div>
         <div class="coupon-rule">${coupon.rules}</div>
         <div class="coupon-limit">Limite: ${coupon.maxLimit || 'N/A'}</div>
-        <div class="coupon-compatible-status status-active">
-          🎯 Aplicável em <strong>${compCount}</strong> ofertas do dia
+        <div class="coupon-verification ${isConfirmed ? 'is-confirmed' : 'is-unverified'}">
+          ${verificationLabel}
+        </div>
+        <div class="coupon-verification-dates">
+          Consultado na fonte: ${checkedAt ? checkedAt.toLocaleString('pt-BR') : 'não informado'}<br>
+          Última confirmação: ${confirmedAt ? confirmedAt.toLocaleString('pt-BR') : 'nunca'}
+        </div>
+        <div class="coupon-compatible-status ${compCount > 0 ? 'status-active' : 'status-inactive'}">
+          🎯 Compatibilidade estimada com <strong>${compCount}</strong> ofertas
         </div>
         <div class="coupon-filter-row">
           <input type="text" class="ipt-mini-filter" placeholder="Filtrar produtos compatíveis..." title="Filtrar produtos">
@@ -883,7 +979,12 @@ function renderCoupons(coupons) {
           <div class="compatible-products-grid"></div>
         </div>
       </div>
-      <button class="btn-copy" data-code="${coupon.code}">Copiar Código</button>
+      <div class="coupon-actions">
+        <button class="btn-copy" data-code="${coupon.code}">Copiar Código</button>
+        <button class="btn-confirm-coupon" data-code="${coupon.code}">
+          ${isConfirmed ? 'Confirmado ✓' : 'Confirmar após testar'}
+        </button>
+      </div>
     `;
     
     const gridContainer = item.querySelector('.compatible-products-grid');
@@ -971,6 +1072,29 @@ function renderCoupons(coupons) {
           copyBtn.classList.remove('copied');
         }, 2000);
       });
+    });
+
+    const confirmBtn = item.querySelector('.btn-confirm-coupon');
+    confirmBtn.addEventListener('click', async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Salvando...';
+      try {
+        const response = await fetch(
+          `/api/coupons/${encodeURIComponent(coupon.code)}/confirm`,
+          { method: 'POST' }
+        );
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || 'Falha na confirmação');
+        }
+        Object.assign(coupon, result.coupon);
+        renderCoupons(coupons);
+        renderMLDeals(allMLDeals);
+      } catch (err) {
+        alert(`Não foi possível confirmar o cupom: ${err.message}`);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirmar após testar';
+      }
     });
 
     elGridCoupons.appendChild(item);
@@ -1245,7 +1369,9 @@ function init() {
   fetchCategories().then(() => {
     fetchMLDeals();
     fetchAmazonDeals();
+    fetchDataStatus();
   });
+  setInterval(fetchDataStatus, 60000);
 }
 
 // Listener de clique para o comparador de preços

@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node execution/check_syntax.js && node --test test/session_config.test.js",
+    "test": "node execution/check_syntax.js && node --test test/*.test.js",
     "test:smoke": "node execution/smoke_test.js",
     "sessions:check": "node execution/check_sessions.js"
   },

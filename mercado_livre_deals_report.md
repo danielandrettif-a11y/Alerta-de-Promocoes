@@ -39,8 +39,6 @@ Use esses códigos no checkout do carrinho de compras para obter descontos adici
 | **MEUVALE** | A chance de economizar 15% aplicando cupom Mercado Livre - Para compras acima de R$29. | N/A |
 | **SUPERPROMO** | Compre com cupom Mercado Livre e ganhe 10% OFF - Para compras acima de R$79, com desconto máximo limitado a R$60. | N/A |
 | **MLMELHOROFERTA** | Use cupom Mercado Livre e tenha 15% de economia - Para compras acima de R$79, com desconto máximo limitado a R$60. | N/A |
-| **QUEROOFF** | 10% OFF em seus pedidos com cupom Mercado Livre - Para compras acima de R$79, com desconto máximo limitado a R$60. | N/A |
-| **MEUSMIMOS** | Ganhe 15% OFF com cupom Mercado Livre - Para compras acima de R$79, com desconto máximo de R$60. | N/A |
 | **SALDAOCASA** | Desconto imperdível de 25% com cupom Mercado Livre - Para compras acima de R$29, com desconto máximo de R$100. | N/A |
 | **CUPOMTOP** | Mercado Livre garante 15% OFF com cupom - 15% OFF em compras a partir de R$79, limitado a R$60. | N/A |
 | **COMPRAML** | 20% OFF utilizando cupom Mercado Livre - 20% OFF em compras a partir de R$99, limitado a R$80. | N/A |
