@@ -14,7 +14,7 @@ services:
         --no-first-run
         --no-default-browser-check
     volumes:
-      - alerta-data:/data:rw
+      - v13vybz3batitff5ukstrnse-alerta-promocoes-data:/data:rw
       - meli-browser-config:/config:rw
     expose:
       - "5800"
@@ -22,7 +22,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  alerta-data:
+  v13vybz3batitff5ukstrnse-alerta-promocoes-data:
     external: true
-    name: "${MELI_DATA_VOLUME_NAME:-v13vybz3batitff5ukstrnse-alerta-promocoes-data}"
   meli-browser-config:

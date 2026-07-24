@@ -93,9 +93,10 @@ O perfil precisa ser autenticado diretamente no diretorio `MELI_PROFILE_DIR`.
 
 3. No mesmo projeto/ambiente, adicione um recurso **Docker Compose** e cole o
    conteudo de `docker-compose.meli-login.yml`.
-4. Crie as variaveis do recurso temporario:
-   - `MELI_DATA_VOLUME_NAME=v13vybz3batitff5ukstrnse-alerta-promocoes-data`
-   - `MELI_VNC_PASSWORD=` uma senha temporaria de exatamente 8 caracteres
+4. Crie `MELI_VNC_PASSWORD` com uma senha temporaria de exatamente 8
+   caracteres. O volume externo deve aparecer no Compose diretamente com o nome
+   `v13vybz3batitff5ukstrnse-alerta-promocoes-data`; usar um apelido com a
+   propriedade `name` faz algumas versoes do Coolify criarem outro volume.
 5. Publique a porta `5800` em um dominio HTTPS temporario e faca o deploy.
 6. Abra o dominio, informe a senha VNC, entre no Mercado Livre e conclua qualquer
    verificacao em duas etapas. Abra tambem uma pagina de produto e confirme que
