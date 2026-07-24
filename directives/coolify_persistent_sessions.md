@@ -60,6 +60,11 @@ O `package-lock.json` fixa o `whatsapp-web.js` no commit oficial
 sincronizacao e verifica `hasSynced` de forma atomica, evitando que uma sessao
 restaurada perca o evento `ready` e termine em `Runtime.callFunctionOn timed out`.
 
+O cliente detecta a versao real do Chrome instalado e gera o `User-Agent`
+correspondente. Isso evita que o WhatsApp Web receba a identificacao antiga
+Chrome 101 definida por padrao na biblioteca. `WHATSAPP_USER_AGENT` pode ser
+usada apenas se for necessario sobrescrever manualmente essa deteccao.
+
 ## Primeira autenticacao do Mercado Livre
 
 O perfil precisa ser autenticado diretamente no diretorio `MELI_PROFILE_DIR`.

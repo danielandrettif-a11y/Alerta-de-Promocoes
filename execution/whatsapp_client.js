@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcodeTerminal = require('qrcode-terminal');
 const { TAXONOMY, inferCategoryAndSub } = require('./category_helper.js');
@@ -45,6 +46,38 @@ function findBrowserPath() {
 }
 
 // Configuração do Cliente
+function getBrowserUserAgent(executablePath) {
+  if (process.env.WHATSAPP_USER_AGENT) {
+    return process.env.WHATSAPP_USER_AGENT;
+  }
+
+  if (!executablePath) return undefined;
+
+  try {
+    const versionOutput = execFileSync(executablePath, ['--version'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true
+    });
+    const version = versionOutput.match(/(\d+\.\d+\.\d+\.\d+)/)?.[1];
+    if (!version) return undefined;
+
+    const platform = process.platform === 'win32'
+      ? 'Windows NT 10.0; Win64; x64'
+      : 'X11; Linux x86_64';
+    return (
+      `Mozilla/5.0 (${platform}) AppleWebKit/537.36 ` +
+      `(KHTML, like Gecko) Chrome/${version} Safari/537.36`
+    );
+  } catch (err) {
+    console.warn(
+      '[WhatsApp] Nao foi possivel detectar a versao do navegador:',
+      err.message
+    );
+    return undefined;
+  }
+}
+
 ensureSessionDirectories();
 const sessionPath = WHATSAPP_SESSION_DIR;
 const whatsappClientId = process.env.WHATSAPP_CLIENT_ID || 'ml-affiliates';
@@ -55,6 +88,11 @@ const whatsappChromeProfileDir = path.join(
 const processStartedAt = Date.now();
 
 const browserPath = findBrowserPath();
+const browserUserAgent = getBrowserUserAgent(browserPath);
+
+if (browserUserAgent) {
+  console.log(`[WhatsApp] User-Agent do navegador: ${browserUserAgent}`);
+}
 
 const client = new Client({
   authStrategy: new LocalAuth({
@@ -62,6 +100,7 @@ const client = new Client({
     dataPath: sessionPath
   }),
   authTimeoutMs: readPositiveNumber('WHATSAPP_AUTH_TIMEOUT_MS', 120000),
+  userAgent: browserUserAgent,
   puppeteer: {
     executablePath: browserPath || undefined,
     headless: true,
