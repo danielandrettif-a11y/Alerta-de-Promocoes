@@ -80,6 +80,20 @@ async function run() {
     await waitForServer(server);
 
     const indexResponse = await expectResponse('/', 200);
+    for (const header of [
+      'content-security-policy',
+      'permissions-policy',
+      'referrer-policy',
+      'x-content-type-options',
+      'x-frame-options'
+    ]) {
+      if (!indexResponse.headers.has(header)) {
+        throw new Error(`Cabecalho de seguranca ausente: ${header}`);
+      }
+    }
+    if (indexResponse.headers.has('x-powered-by')) {
+      throw new Error('O servidor expos o cabecalho X-Powered-By');
+    }
     const indexHtml = await indexResponse.text();
     if (!indexHtml.includes('Promo Automator')) {
       throw new Error('HTML principal nao contem o titulo esperado');
@@ -198,6 +212,16 @@ async function run() {
     ];
     for (const selector of requiredSelectors) {
       await page.waitForSelector(selector, { timeout: 5000 });
+    }
+
+    await page.waitForSelector('#grid-ml .deal-card', { timeout: 5000 });
+    const historySyncPreservedCards = await page.evaluate(async () => {
+      const firstCard = document.querySelector('#grid-ml .deal-card');
+      await syncPublicationHistory();
+      return firstCard === document.querySelector('#grid-ml .deal-card');
+    });
+    if (!historySyncPreservedCards) {
+      throw new Error('Historico inalterado reconstruiu todos os cards');
     }
 
     for (const tab of [

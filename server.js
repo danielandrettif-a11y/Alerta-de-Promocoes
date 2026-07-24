@@ -58,9 +58,40 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.set({
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "connect-src 'self'",
+      "font-src 'self' https://fonts.gstatic.com",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data: blob: https:",
+      "object-src 'none'",
+      "script-src 'self'",
+      "style-src 'self' https://fonts.googleapis.com"
+    ].join('; '),
+    'Permissions-Policy': 'camera=(), geolocation=(), microphone=()',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY'
+  });
+  next();
+});
+
 // Middleware para JSON com limite aumentado para aceitar imagens em Base64 do Canvas
 app.use(express.json({ limit: '100mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  maxAge: '1h',
+  setHeaders(res, filePath) {
+    if (path.extname(filePath) === '.html') {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
 
 const mlDealsReportPath = path.join(__dirname, 'mercado_livre_deals_report.json');
 const amazonDealsReportPath = path.join(__dirname, 'amazon_deals_report.json');

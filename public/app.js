@@ -11,6 +11,7 @@ let freshnessAmazon = null;
 let publicationQueueEnabled = false;
 let publicationQueueItems = [];
 let publicationQueueSummary = {};
+let publicationHistorySignature = '';
 
 // DOM elements - Tabs
 const elTabML = document.getElementById('btn-tab-ml');
@@ -221,6 +222,9 @@ async function syncPublicationHistory() {
     const response = await fetch('/api/publish-history');
     const history = await response.json();
     const entries = history.entries || [];
+    const signature = JSON.stringify(entries);
+    if (signature === publicationHistorySignature) return;
+    publicationHistorySignature = signature;
     if (allMLDeals.length) {
       allMLDeals = allMLDeals.map(deal =>
         addPublicationState(deal, 'mercado_livre', entries)
@@ -479,6 +483,7 @@ async function fetchMLDeals() {
     const historyRes = await fetch('/api/publish-history');
     const historyData = await historyRes.json();
     const publishedEntries = historyData.entries || [];
+    publicationHistorySignature = JSON.stringify(publishedEntries);
 
     const response = await fetch('/api/deals');
     const data = await response.json();
@@ -508,6 +513,7 @@ async function fetchAmazonDeals() {
     const historyRes = await fetch('/api/publish-history');
     const historyData = await historyRes.json();
     const publishedEntries = historyData.entries || [];
+    publicationHistorySignature = JSON.stringify(publishedEntries);
 
     const response = await fetch('/api/amazon-deals');
     const data = await response.json();
@@ -1891,6 +1897,9 @@ function switchTab(activeBtn, activePanel) {
 // ==========================================
 function init() {
   elMarketplaceSearchForm.addEventListener('submit', runMarketplaceSearch);
+  document.getElementById('btn-close-progress').addEventListener('click', () => {
+    document.getElementById('progress-modal').classList.add('hidden');
+  });
 
   // Tab Switchers
   elTabML.addEventListener('click', () => switchTab(elTabML, elPanelML));

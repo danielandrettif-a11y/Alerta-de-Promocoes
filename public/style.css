@@ -668,6 +668,8 @@ button {
 }
 
 .deal-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 520px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 25px;
