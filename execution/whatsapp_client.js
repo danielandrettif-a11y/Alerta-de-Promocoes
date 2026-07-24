@@ -15,8 +15,23 @@ const qrcodeTerminal = require('qrcode-terminal');
 const { TAXONOMY, inferCategoryAndSub } = require('./category_helper.js');
 const {
   WHATSAPP_SESSION_DIR,
+  APP_RUNTIME_DIR,
   ensureSessionDirectories
 } = require('./session_config.js');
+const {
+  loadHistory,
+  saveHistory,
+  markPublishedEntryRemovedByMessageId
+} = require('./automation_state.js');
+
+const offerHistoryPath = path.join(APP_RUNTIME_DIR, 'published_history.json');
+const legacyOfferHistoryPath = path.join(
+  __dirname,
+  '..',
+  '.tmp',
+  'published_history.json'
+);
+const reactionDeletionInProgress = new Set();
 
 function readPositiveNumber(name, fallback) {
   const value = Number(process.env[name]);
@@ -409,38 +424,67 @@ client.on('disconnected', (reason) => {
   scheduleReconnect(String(reason));
 });
 
-// Escuta de reações para moderação (foguinho 🔥 apaga o post para todos)
+function serializeMessageId(messageId) {
+  if (!messageId) return '';
+  if (typeof messageId === 'string') return messageId;
+  if (messageId._serialized) return messageId._serialized;
+  const remote = messageId.remote?._serialized || messageId.remote || '';
+  if (!remote || !messageId.id) return '';
+  return `${messageId.fromMe}_${remote}_${messageId.id}`;
+}
+
+// Qualquer reação não vazia apaga somente uma oferta registrada pelo bot.
 client.on('message_reaction', async (reaction) => {
-  if (!reaction || !reaction.msgId) return;
+  if (process.env.WHATSAPP_DELETE_ON_REACTION === 'false') return;
+  if (!reaction?.msgId || !String(reaction.reaction || '').trim()) return;
 
+  const msgSerialized = serializeMessageId(reaction.msgId);
+  if (!msgSerialized || reactionDeletionInProgress.has(msgSerialized)) return;
   try {
-    const chatId = reaction.msgId.remote._serialized || reaction.msgId.remote;
-    const msgSerialized = reaction.msgId._serialized || `${reaction.msgId.fromMe}_${chatId}_${reaction.msgId.id}`;
-
-    console.log(`🤖 [WhatsApp Reaction] Reação recebida: "${reaction.reaction}" de ${reaction.senderId} na msg: ${msgSerialized}`);
-
-    if (reaction.reaction === '🔥') {
-      console.log(`🔥 Reação de foguinho detectada no chat: ${chatId}. Processando exclusão via wwebjs...`);
-      
-      try {
-        const message = await client.getMessageById(msgSerialized);
-        if (message) {
-          if (message.fromMe) {
-            console.log(`   Apagando mensagem ID: ${msgSerialized} para todos no grupo...`);
-            await message.delete(true);
-            console.log('   ✅ [Moderação] Mensagem excluída com sucesso via reação!');
-          } else {
-            console.log('   ⚠️ [Moderação] A mensagem reagida não foi enviada pelo bot. Ignorando.');
-          }
-        } else {
-          console.warn(`   ⚠️ [Moderação] Mensagem não encontrada no cache do WhatsApp para exclusão.`);
-        }
-      } catch (errEx) {
-        console.error(`   ❌ [Moderação] Erro ao deletar mensagem via wwebjs:`, errEx.message);
-      }
+    const history = loadHistory(offerHistoryPath, legacyOfferHistoryPath);
+    const registeredOffer = history.entries.find(
+      entry => String(entry.msgId || '') === msgSerialized
+    );
+    if (!registeredOffer) {
+      console.log(
+        `🤖 [Reação] Mensagem ${msgSerialized} não é uma oferta registrada. Ignorando.`
+      );
+      return;
     }
+
+    reactionDeletionInProgress.add(msgSerialized);
+    console.log(
+      `🤖 [Reação] "${reaction.reaction}" de ${reaction.senderId}; ` +
+      `apagando oferta ${registeredOffer.dealId}.`
+    );
+    const message = await client.getMessageById(msgSerialized);
+    if (!message?.fromMe) {
+      console.warn(
+        `⚠️ [Reação] Oferta ${msgSerialized} não foi encontrada como mensagem do bot.`
+      );
+      return;
+    }
+
+    await message.delete(true);
+    const removal = markPublishedEntryRemovedByMessageId(
+      history,
+      msgSerialized,
+      {
+        removalReason: 'reaction',
+        reaction: reaction.reaction,
+        reactedBy: reaction.senderId
+      }
+    );
+    if (removal.updatedEntry) {
+      saveHistory(offerHistoryPath, removal.history);
+    }
+    console.log(
+      '✅ [Reação] Oferta apagada para todos e mantida como publicada hoje.'
+    );
   } catch (err) {
-    console.error('   ❌ Erro no processamento da reação:', err);
+    console.error('❌ [Reação] Falha ao apagar oferta:', err.message);
+  } finally {
+    reactionDeletionInProgress.delete(msgSerialized);
   }
 });
 

@@ -1973,6 +1973,12 @@ button {
   border: 1px solid rgba(0, 230, 118, 0.1);
 }
 
+.published-badge.removed-by-reaction {
+  color: #ffcc66;
+  border-color: rgba(255, 204, 102, 0.35);
+  background: rgba(255, 204, 102, 0.08);
+}
+
 .btn-delete-wpp {
   background: rgba(255, 23, 68, 0.08);
   color: #ff1744;

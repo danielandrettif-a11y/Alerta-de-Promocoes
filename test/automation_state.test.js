@@ -8,6 +8,7 @@ const {
   generateDealId,
   loadHistory,
   saveHistory,
+  markPublishedEntryRemovedByMessageId,
   getTodayPublishedIds,
   countAutomaticPostsSince,
   selectBestUnpublished,
@@ -31,7 +32,7 @@ test('mantem o mesmo ID quando preco e desconto mudam', () => {
   assert.equal(generateDealId(first), generateDealId(second));
 });
 
-test('deduplica somente publicacoes do dia atual', () => {
+test('não repete no mesmo dia e libera somente no dia seguinte', () => {
   const now = new Date('2026-07-23T15:00:00-03:00');
   const deal = {
     platform: 'mercado_livre',
@@ -103,4 +104,42 @@ test('marca dados acima do limite como antigos', () => {
     getFreshness('2026-07-23T11:00:00Z', 90, now).isStale,
     false
   );
+});
+
+test('marca mensagem removida sem liberar o produto', () => {
+  const history = {
+    publishedIds: ['deal_1'],
+    entries: [{
+      dealId: 'deal_1',
+      msgId: 'true_120@g.us_ABC',
+      publishedAt: '2026-07-23T12:00:00Z'
+    }]
+  };
+  const result = markPublishedEntryRemovedByMessageId(
+    history,
+    'true_120@g.us_ABC',
+    {
+      removalReason: 'reaction',
+      reaction: '👍',
+      reactedBy: 'participant'
+    }
+  );
+  assert.equal(result.updatedEntry.dealId, 'deal_1');
+  assert.equal(result.updatedEntry.removalReason, 'reaction');
+  assert.equal(result.updatedEntry.reaction, '👍');
+  assert.deepEqual(result.history.publishedIds, ['deal_1']);
+  assert.equal(result.history.entries.length, 1);
+});
+
+test('não altera histórico para reação em mensagem que não é oferta', () => {
+  const history = {
+    publishedIds: ['deal_1'],
+    entries: [{ dealId: 'deal_1', msgId: 'offer_message' }]
+  };
+  const result = markPublishedEntryRemovedByMessageId(
+    history,
+    'other_message'
+  );
+  assert.equal(result.updatedEntry, null);
+  assert.deepEqual(result.history.publishedIds, ['deal_1']);
 });

@@ -22,6 +22,8 @@ generated Story image and a text description.
   every WhatsApp description.
 - `PRICE_COMPARISON_CACHE_MINUTES=360`: reuses validated comparisons for six
   hours to avoid unnecessary browser traffic.
+- `WHATSAPP_DELETE_ON_REACTION=true`: any non-empty reaction from any group
+  participant removes that offer message for everyone.
 
 ## Execution
 
@@ -39,6 +41,15 @@ Buscapé, Zoom and Bondfaro. Model/specification tokens such as `130A`, `220V`
 or `128GB` must match, and prices outside 45%–250% of the offer price are
 discarded. When no trustworthy match remains, the message explicitly says the
 comparison was inconclusive instead of claiming a saving.
+
+## Reaction cleanup
+
+Only messages registered in `published_history.json` as offers are eligible.
+Any emoji reaction removes the message for everyone and records the reaction,
+participant and removal time. The product remains marked as already published
+for the current São Paulo calendar day, preventing reposts on that day. It can
+be considered again on the following day if it is still present in the offer
+catalog.
 
 ## Persistent state
 

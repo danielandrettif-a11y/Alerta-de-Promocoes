@@ -16,6 +16,7 @@ const {
   generateDealId,
   loadHistory,
   saveHistory,
+  markPublishedEntryRemovedByMessageId,
   getTodayPublishedIds,
   countAutomaticPostsSince,
   selectBestUnpublished,
@@ -849,18 +850,17 @@ app.post('/api/delete-deal', async (req, res) => {
           if (fs.existsSync(historyPath)) {
             const history = loadHistory(historyPath, legacyHistoryPath);
             
-            // Acha a entrada correspondente no histórico
-            const entryIndex = history.entries.findIndex(e => e.msgId === msgId);
-            if (entryIndex !== -1) {
-              const entry = history.entries[entryIndex];
-              
-              // Remove o ID da lista de publishedIds
-              history.publishedIds = history.publishedIds.filter(id => id !== entry.dealId);
-              // Remove a entrada da lista de entries
-              history.entries.splice(entryIndex, 1);
-              
-              saveHistory(historyPath, history);
-              console.log(`   ✅ [API Excluir] ID ${entry.dealId} removido do histórico de publicados.`);
+            const removal = markPublishedEntryRemovedByMessageId(
+              history,
+              msgId,
+              { removalReason: 'manual' }
+            );
+            if (removal.updatedEntry) {
+              saveHistory(historyPath, removal.history);
+              console.log(
+                `   ✅ [API Excluir] ${removal.updatedEntry.dealId} ` +
+                'mantido como publicado hoje.'
+              );
             }
           }
         } catch (histErr) {

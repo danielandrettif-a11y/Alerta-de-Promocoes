@@ -87,6 +87,31 @@ function saveHistory(historyPath, history) {
   );
 }
 
+function markPublishedEntryRemovedByMessageId(
+  history,
+  messageId,
+  removal = {}
+) {
+  const normalized = normalizeHistory(history);
+  const targetId = String(messageId || '');
+  const entry = normalized.entries.find(
+    entry => String(entry.msgId || '') === targetId
+  );
+  if (!entry) {
+    return { history: normalized, updatedEntry: null };
+  }
+  Object.assign(entry, {
+    removedFromWhatsAppAt: removal.removedFromWhatsAppAt ||
+      new Date().toISOString(),
+    removalReason: removal.removalReason || 'manual',
+    ...removal
+  });
+  if (entry.dealId && !normalized.publishedIds.includes(entry.dealId)) {
+    normalized.publishedIds.push(entry.dealId);
+  }
+  return { history: normalized, updatedEntry: entry };
+}
+
 function getTodayPublishedIds(history, now = new Date()) {
   const today = getDateKey(now);
   return new Set(
@@ -178,6 +203,7 @@ module.exports = {
   normalizeHistory,
   loadHistory,
   saveHistory,
+  markPublishedEntryRemovedByMessageId,
   getTodayPublishedIds,
   countAutomaticPostsSince,
   selectBestUnpublished,

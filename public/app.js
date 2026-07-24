@@ -96,6 +96,29 @@ function generateClientDealId(deal, platform) {
   return `deal_${Math.abs(hash)}`;
 }
 
+function findTodayPublication(entries, dealId) {
+  const now = new Date();
+  return entries.find(entry => {
+    if (entry.dealId !== dealId || !entry.publishedAt) return false;
+    const publishedAt = new Date(entry.publishedAt);
+    return !isNaN(publishedAt.getTime()) &&
+      publishedAt.getFullYear() === now.getFullYear() &&
+      publishedAt.getMonth() === now.getMonth() &&
+      publishedAt.getDate() === now.getDate();
+  });
+}
+
+function addPublicationState(deal, platform, publishedEntries) {
+  const dealId = generateClientDealId(deal, platform);
+  const publication = findTodayPublication(publishedEntries, dealId);
+  return {
+    ...deal,
+    publishedMsgId: publication?.msgId || null,
+    removedFromWhatsAppAt: publication?.removedFromWhatsAppAt || null,
+    removalReaction: publication?.reaction || null
+  };
+}
+
 function updateLastUpdateUI(platform) {
   const currentUpdateStr = platform === 'amazon' ? lastUpdateAmazon : lastUpdateML;
   const freshness = platform === 'amazon' ? freshnessAmazon : freshnessML;
@@ -160,6 +183,28 @@ async function fetchDataStatus() {
     updateLastUpdateUI(platform);
   } catch (err) {
     console.error('Erro ao consultar estado das atualizações:', err);
+  }
+}
+
+async function syncPublicationHistory() {
+  try {
+    const response = await fetch('/api/publish-history');
+    const history = await response.json();
+    const entries = history.entries || [];
+    if (allMLDeals.length) {
+      allMLDeals = allMLDeals.map(deal =>
+        addPublicationState(deal, 'mercado_livre', entries)
+      );
+      renderMLDeals(allMLDeals);
+    }
+    if (allAmazonDeals.length) {
+      allAmazonDeals = allAmazonDeals.map(deal =>
+        addPublicationState(deal, 'amazon', entries)
+      );
+      renderAmazonDeals(allAmazonDeals);
+    }
+  } catch (err) {
+    console.error('Erro ao sincronizar histórico de publicações:', err);
   }
 }
 
@@ -284,14 +329,9 @@ async function fetchMLDeals() {
     const response = await fetch('/api/deals');
     const data = await response.json();
     
-    allMLDeals = (data.deals || []).map(deal => {
-      const dealId = generateClientDealId(deal, 'mercado_livre');
-      const pub = publishedEntries.find(e => e.dealId === dealId);
-      return {
-        ...deal,
-        publishedMsgId: pub ? pub.msgId : null
-      };
-    });
+    allMLDeals = (data.deals || []).map(deal =>
+      addPublicationState(deal, 'mercado_livre', publishedEntries)
+    );
     allCoupons = data.coupons || [];
     freshnessML = data.freshness || null;
     
@@ -318,14 +358,9 @@ async function fetchAmazonDeals() {
     const response = await fetch('/api/amazon-deals');
     const data = await response.json();
     
-    allAmazonDeals = (data.deals || []).map(deal => {
-      const dealId = generateClientDealId(deal, 'amazon');
-      const pub = publishedEntries.find(e => e.dealId === dealId);
-      return {
-        ...deal,
-        publishedMsgId: pub ? pub.msgId : null
-      };
-    });
+    allAmazonDeals = (data.deals || []).map(deal =>
+      addPublicationState(deal, 'amazon', publishedEntries)
+    );
     freshnessAmazon = data.freshness || null;
     renderAmazonDeals(allAmazonDeals);
     
@@ -353,14 +388,9 @@ async function triggerMLScraper() {
       const historyData = await historyRes.json();
       const publishedEntries = historyData.entries || [];
 
-      allMLDeals = (data.data.deals || []).map(deal => {
-        const dealId = generateClientDealId(deal, 'mercado_livre');
-        const pub = publishedEntries.find(e => e.dealId === dealId);
-        return {
-          ...deal,
-          publishedMsgId: pub ? pub.msgId : null
-        };
-      });
+      allMLDeals = (data.data.deals || []).map(deal =>
+        addPublicationState(deal, 'mercado_livre', publishedEntries)
+      );
       allCoupons = data.data.coupons || [];
       freshnessML = data.data.freshness || null;
       selectedMLIndices.clear();
@@ -395,14 +425,9 @@ async function triggerAmazonScraper() {
       const historyData = await historyRes.json();
       const publishedEntries = historyData.entries || [];
 
-      allAmazonDeals = (data.data.deals || []).map(deal => {
-        const dealId = generateClientDealId(deal, 'amazon');
-        const pub = publishedEntries.find(e => e.dealId === dealId);
-        return {
-          ...deal,
-          publishedMsgId: pub ? pub.msgId : null
-        };
-      });
+      allAmazonDeals = (data.data.deals || []).map(deal =>
+        addPublicationState(deal, 'amazon', publishedEntries)
+      );
       freshnessAmazon = data.data.freshness || null;
       selectedAmazonIndices.clear();
       updateAmazonSelectionUI();
@@ -732,6 +757,7 @@ function renderMLDeals(deals) {
   deals.forEach((deal, index) => {
     const isSelected = selectedMLIndices.has(index);
     const isPublished = !!deal.publishedMsgId;
+    const wasRemoved = !!deal.removedFromWhatsAppAt;
     const card = document.createElement('article');
     card.className = `deal-card ${isSelected ? 'selected' : ''} ${isPublished ? 'published-card' : ''}`;
     card.dataset.index = index;
@@ -768,14 +794,22 @@ function renderMLDeals(deals) {
       `;
     } else {
       checkboxHtml = `
-        <div class="card-checkbox published-tick" title="Já publicado no WhatsApp">
+        <div class="card-checkbox published-tick" title="Já publicado hoje">
           ✅
         </div>
       `;
     }
 
     let deleteBtnHtml = '';
-    if (isPublished) {
+    if (wasRemoved) {
+      deleteBtnHtml = `
+        <div class="card-published-area">
+          <span class="published-badge removed-by-reaction">
+            Encerrado por reação ${deal.removalReaction || '✅'}
+          </span>
+        </div>
+      `;
+    } else if (isPublished) {
       deleteBtnHtml = `
         <div class="card-published-area">
           <span class="published-badge">WhatsApp Ativo ✅</span>
@@ -847,6 +881,7 @@ function renderAmazonDeals(deals) {
   deals.forEach((deal, index) => {
     const isSelected = selectedAmazonIndices.has(index);
     const isPublished = !!deal.publishedMsgId;
+    const wasRemoved = !!deal.removedFromWhatsAppAt;
     const card = document.createElement('article');
     card.className = `deal-card amazon-theme ${isSelected ? 'selected' : ''} ${isPublished ? 'published-card' : ''}`;
     card.dataset.index = index;
@@ -866,14 +901,22 @@ function renderAmazonDeals(deals) {
       `;
     } else {
       checkboxHtml = `
-        <div class="card-checkbox published-tick" title="Já publicado no WhatsApp">
+        <div class="card-checkbox published-tick" title="Já publicado hoje">
           ✅
         </div>
       `;
     }
 
     let deleteBtnHtml = '';
-    if (isPublished) {
+    if (wasRemoved) {
+      deleteBtnHtml = `
+        <div class="card-published-area">
+          <span class="published-badge removed-by-reaction">
+            Encerrado por reação ${deal.removalReaction || '✅'}
+          </span>
+        </div>
+      `;
+    } else if (isPublished) {
       deleteBtnHtml = `
         <div class="card-published-area">
           <span class="published-badge">WhatsApp Ativo ✅</span>
@@ -1372,6 +1415,7 @@ function init() {
     fetchDataStatus();
   });
   setInterval(fetchDataStatus, 60000);
+  setInterval(syncPublicationHistory, 30000);
 }
 
 // Listener de clique para o comparador de preços
@@ -1523,7 +1567,8 @@ document.addEventListener('click', async (e) => {
           // Atualiza o estado local
           const deal = platform === 'ml' ? allMLDeals[index] : allAmazonDeals[index];
           if (deal) {
-            deal.publishedMsgId = null;
+            deal.removedFromWhatsAppAt = new Date().toISOString();
+            deal.removalReaction = '🗑️';
           }
           // Recarrega o grid da plataforma correspondente
           if (platform === 'ml') {
