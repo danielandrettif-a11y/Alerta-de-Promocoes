@@ -61,6 +61,7 @@ const client = new Client({
     clientId: whatsappClientId,
     dataPath: sessionPath
   }),
+  authTimeoutMs: readPositiveNumber('WHATSAPP_AUTH_TIMEOUT_MS', 120000),
   puppeteer: {
     executablePath: browserPath || undefined,
     headless: true,

@@ -152,7 +152,12 @@ async function run() {
       }
     });
 
-    await page.goto(BASE_URL, { waitUntil: 'networkidle0', timeout: 30000 });
+    // O painel carrega imagens externas das ofertas, que podem manter a rede
+    // ocupada indefinidamente. O teste valida o DOM e os seletores abaixo.
+    await page.goto(BASE_URL, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000
+    });
 
     const requiredSelectors = [
       '#btn-tab-ml',

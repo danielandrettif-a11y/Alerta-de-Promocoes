@@ -17,6 +17,7 @@ entre reinicios e novos deploys do container.
    - `MELI_PROFILE_DIR=/data/ml_user_data`
    - `APP_RUNTIME_DIR=/data/runtime`
    - `WHATSAPP_ENABLED=true`
+   - `WHATSAPP_AUTH_TIMEOUT_MS=120000`
    - `WHATSAPP_PROTOCOL_TIMEOUT_MS=180000`
    - `WHATSAPP_PROFILE_LOCK_GRACE_MS=90000`
    - `WHATSAPP_RECONNECT_DELAY_MS=15000`
