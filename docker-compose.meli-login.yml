@@ -14,7 +14,7 @@ services:
         --no-first-run
         --no-default-browser-check
     volumes:
-      - v13vybz3batitff5ukstrnse-alerta-promocoes-data:/data:rw
+      - /var/lib/docker/volumes/v13vybz3batitff5ukstrnse-alerta-promocoes-data/_data:/data:rw
       - meli-browser-config:/config:rw
     expose:
       - "5800"
@@ -22,6 +22,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  v13vybz3batitff5ukstrnse-alerta-promocoes-data:
-    external: true
   meli-browser-config:

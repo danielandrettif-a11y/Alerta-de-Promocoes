@@ -94,23 +94,29 @@ O perfil precisa ser autenticado diretamente no diretorio `MELI_PROFILE_DIR`.
 3. No mesmo projeto/ambiente, adicione um recurso **Docker Compose** e cole o
    conteudo de `docker-compose.meli-login.yml`.
 4. Crie `MELI_VNC_PASSWORD` com uma senha temporaria de exatamente 8
-   caracteres. O volume externo deve aparecer no Compose diretamente com o nome
-   `v13vybz3batitff5ukstrnse-alerta-promocoes-data`; usar um apelido com a
-   propriedade `name` faz algumas versoes do Coolify criarem outro volume.
-5. Publique a porta `5800` em um dominio HTTPS temporario e faca o deploy.
-6. Abra o dominio, informe a senha VNC, entre no Mercado Livre e conclua qualquer
+   caracteres. Nao compartilhe essa senha.
+5. Confira em **Show Deployable Compose** que o primeiro mount continua sendo:
+
+   ```text
+   /var/lib/docker/volumes/v13vybz3batitff5ukstrnse-alerta-promocoes-data/_data:/data:rw
+   ```
+
+   O caminho absoluto e necessario porque algumas versoes do Coolify prefixam
+   ate volumes marcados como externos e acabam criando um volume vazio separado.
+6. Publique a porta `5800` em um dominio HTTPS temporario e faca o deploy.
+7. Abra o dominio, informe a senha VNC, entre no Mercado Livre e conclua qualquer
    verificacao em duas etapas. Abra tambem uma pagina de produto e confirme que
    a barra de afiliados aparece.
-7. Feche o Chromium pela interface e pare/remova o recurso temporario. Nunca
+8. Feche o Chromium pela interface e pare/remova o recurso temporario. Nunca
    deixe esse navegador e o script de afiliados usando o mesmo perfil ao mesmo
    tempo. Nao exclua o volume externo `alerta-promocoes-data`.
-8. No terminal do aplicativo principal, verifique:
+9. No terminal do aplicativo principal, verifique:
 
    ```sh
    npm run sessions:check
    ```
 
-9. Teste com uma URL real de produto:
+10. Teste com uma URL real de produto:
 
    ```sh
    node execution/get_meli_affiliate_link.js 'URL_DO_PRODUTO'
