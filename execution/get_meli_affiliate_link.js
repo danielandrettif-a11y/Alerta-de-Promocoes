@@ -136,33 +136,40 @@ async function main() {
     await new Promise(r => setTimeout(r, 1000)); // Espera apenas 1s para o widget se assentar
 
     console.log('🔍 Localizando botao "Compartilhar" na barra...');
-    const buttonInfo = await page.evaluate(() => {
-      const stripe = document.querySelector('#stripe');
-      if (!stripe) return null;
-      
-      const elements = Array.from(stripe.querySelectorAll('button, a, div, span'));
-      const shareBtn = elements.find(el => el.textContent?.trim() === 'Compartilhar');
-      
-      if (!shareBtn) return null;
-      
-      const rect = shareBtn.getBoundingClientRect();
-      return {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height
-      };
-    });
+    const candidates = await page.$$('#stripe button, #stripe a');
+    let shareButton = null;
+    let shareButtonBox = null;
 
-    if (!buttonInfo) {
+    for (const candidate of candidates) {
+      const info = await candidate.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return {
+          text: element.textContent?.trim(),
+          visible:
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden'
+        };
+      });
+
+      if (info.text === 'Compartilhar' && info.visible) {
+        shareButton = candidate;
+        shareButtonBox = await candidate.boundingBox();
+        break;
+      }
+    }
+
+    if (!shareButton || !shareButtonBox) {
       throw new Error('Botao "Compartilhar" nao encontrado no DOM da barra.');
     }
 
-    const clickX = Math.round(buttonInfo.x + buttonInfo.width / 2);
-    const clickY = Math.round(buttonInfo.y + buttonInfo.height / 2);
-    
+    const clickX = Math.round(shareButtonBox.x + shareButtonBox.width / 2);
+    const clickY = Math.round(shareButtonBox.y + shareButtonBox.height / 2);
+
     console.log(`🖱️ Clicando no botao nas coordenadas (${clickX}, ${clickY})...`);
-    await page.mouse.click(clickX, clickY);
+    await shareButton.click();
 
     console.log('⏳ Aguardando geracao do link...');
     let affiliateLink = null;
