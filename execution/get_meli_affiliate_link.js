@@ -108,11 +108,14 @@ async function main() {
     headless: true, // Modo headless ativo para simular o ambiente de VPS
     userDataDir: userDataDir,
     protocolTimeout: 180000,
+    ignoreDefaultArgs: ['--enable-automation'],
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      '--disable-blink-features=AutomationControlled',
+      '--lang=pt-BR,pt',
       '--password-store=basic',
       '--no-first-run',
       '--no-default-browser-check'
@@ -122,6 +125,14 @@ async function main() {
   let page;
   try {
     page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined
+      });
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['pt-BR', 'pt']
+      });
+    });
     await page.setViewport({ width: 1366, height: 768 });
     if (browserUserAgent) {
       await page.setUserAgent(browserUserAgent);
@@ -132,7 +143,24 @@ async function main() {
     await page.goto(productUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
     console.log('⏳ Aguardando a barra de afiliados (#stripe)...');
-    await page.waitForSelector('#stripe', { timeout: 15000 });
+    try {
+      await page.waitForSelector('#stripe', { timeout: 15000 });
+    } catch (err) {
+      const requiresLogin = await page.evaluate(() => {
+        const text = document.body?.innerText || '';
+        return (
+          text.includes('Para continuar, acesse sua conta') ||
+          text.includes('Ja tenho conta') ||
+          text.includes('Já tenho conta')
+        );
+      });
+      if (requiresLogin) {
+        throw new Error(
+          'Sessao do Mercado Livre expirada. Autentique novamente no navegador temporario.'
+        );
+      }
+      throw err;
+    }
     await new Promise(r => setTimeout(r, 1000)); // Espera apenas 1s para o widget se assentar
 
     console.log('🔍 Localizando botao "Compartilhar" na barra...');
