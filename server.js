@@ -29,6 +29,15 @@ const {
 const {
   searchMarketplaces
 } = require('./execution/marketplace_search.js');
+const {
+  STATUSES: PUBLICATION_QUEUE_STATUSES,
+  loadQueue: loadPublicationQueue,
+  saveQueue: savePublicationQueue,
+  enqueueOffer,
+  setAffiliateLink,
+  updateItemStatus,
+  summarizeQueue
+} = require('./execution/publication_queue.js');
 
 // puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
 // load Puppeteer lazily only when the price-comparison endpoint needs it.
@@ -71,6 +80,16 @@ const marketplaceSearchCachePath = path.join(
   APP_RUNTIME_DIR,
   'marketplace_search_cache.json'
 );
+const publicationQueuePath = path.join(
+  APP_RUNTIME_DIR,
+  'publication_queue.json'
+);
+const publicationQueueAssetsPath = path.join(
+  APP_RUNTIME_DIR,
+  'publication_queue_assets'
+);
+const publicationQueueEnabled =
+  readEnv().PUBLICATION_QUEUE_ENABLED !== 'false';
 const GROUP_NAME = 'Alerta de Descontos';
 
 // Liveness do processo + estado informativo das integracoes.
@@ -294,6 +313,192 @@ app.get('/api/amazon-deals', (req, res) => {
     )
   });
 });
+
+function queueItemForResponse(item) {
+  return {
+    ...item,
+    storyUrl: item.storyFile
+      ? `/api/publication-queue/assets/${encodeURIComponent(item.storyFile)}`
+      : null
+  };
+}
+
+function requirePublicationQueue(req, res, next) {
+  if (!publicationQueueEnabled) {
+    return res.status(404).json({
+      enabled: false,
+      error: 'Fila de publicacao desativada.'
+    });
+  }
+  next();
+}
+
+function decodeStoryImage(dataUrl) {
+  const match = String(dataUrl || '').match(
+    /^data:image\/(?:jpeg|jpg|png);base64,([A-Za-z0-9+/=\r\n]+)$/
+  );
+  if (!match) {
+    throw new Error('Imagem do Story ausente ou invalida.');
+  }
+  const buffer = Buffer.from(match[1], 'base64');
+  if (buffer.length === 0 || buffer.length > 15 * 1024 * 1024) {
+    throw new Error('Imagem do Story vazia ou maior que 15 MB.');
+  }
+  return buffer;
+}
+
+// Fila assistida: organiza o Story, mas nunca gera o link afiliado.
+app.get('/api/publication-queue', (req, res) => {
+  if (!publicationQueueEnabled) {
+    return res.json({
+      enabled: false,
+      items: [],
+      summary: summarizeQueue({ items: [] })
+    });
+  }
+  const queue = loadPublicationQueue(publicationQueuePath);
+  res.json({
+    enabled: true,
+    items: queue.items.map(queueItemForResponse),
+    summary: summarizeQueue(queue)
+  });
+});
+
+app.post(
+  '/api/publication-queue',
+  requirePublicationQueue,
+  (req, res) => {
+    try {
+      const deal = req.body?.deal || {};
+      const platform = String(req.body?.platform || '').toLowerCase();
+      const normalizedPlatform = ['ml', 'mercado livre', 'mercado_livre']
+        .includes(platform)
+        ? 'mercado_livre'
+        : platform;
+      const queue = loadPublicationQueue(publicationQueuePath);
+      const result = enqueueOffer(queue, {
+        dealId: generateDealId({
+          ...deal,
+          platform: normalizedPlatform
+        }),
+        platform: normalizedPlatform,
+        title: deal.title,
+        originalPrice: deal.originalPrice,
+        currentPrice: deal.currentPrice,
+        discount: deal.discount,
+        image: deal.image,
+        productLink: deal.link
+      });
+
+      if (result.created) {
+        const storyImage = decodeStoryImage(req.body?.imageBuffer);
+        fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
+        result.item.storyFile = `${result.item.id}.jpg`;
+        fs.writeFileSync(
+          path.join(publicationQueueAssetsPath, result.item.storyFile),
+          storyImage
+        );
+        savePublicationQueue(publicationQueuePath, result.queue);
+      }
+
+      res.status(result.created ? 201 : 200).json({
+        success: true,
+        created: result.created,
+        item: queueItemForResponse(result.item)
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.get(
+  '/api/publication-queue/assets/:fileName',
+  requirePublicationQueue,
+  (req, res) => {
+    const fileName = path.basename(String(req.params.fileName || ''));
+    const queue = loadPublicationQueue(publicationQueuePath);
+    const ownsAsset = queue.items.some(item => item.storyFile === fileName);
+    if (!fileName || !ownsAsset) {
+      return res.status(404).send('Story nao encontrado.');
+    }
+    res.sendFile(
+      path.join(publicationQueueAssetsPath, fileName),
+      { dotfiles: 'allow' }
+    );
+  }
+);
+
+app.patch(
+  '/api/publication-queue/:itemId/affiliate',
+  requirePublicationQueue,
+  (req, res) => {
+    try {
+      const queue = loadPublicationQueue(publicationQueuePath);
+      const item = queue.items.find(entry => entry.id === req.params.itemId);
+      if (!item) {
+        return res.status(404).json({ error: 'Item da fila nao encontrado.' });
+      }
+
+      const { deals } = loadAvailableDeals();
+      const currentDeal = deals.find(deal =>
+        deal.platform === 'mercado_livre' &&
+        generateDealId(deal) === item.dealId
+      );
+      let reviewReason = null;
+      let latestPrice = null;
+      if (!currentDeal) {
+        reviewReason =
+          'O produto nao aparece mais no catalogo atual. Atualize as ofertas antes de publicar.';
+      } else if (
+        String(currentDeal.currentPrice || '') !==
+        String(item.currentPrice || '')
+      ) {
+        latestPrice = String(currentDeal.currentPrice || '');
+        reviewReason =
+          `O preco mudou de ${item.currentPrice} para ${latestPrice}. ` +
+          'Gere um novo Story antes de publicar.';
+      }
+
+      const result = setAffiliateLink(
+        queue,
+        item.id,
+        req.body?.affiliateLink,
+        { reviewReason, latestPrice }
+      );
+      savePublicationQueue(publicationQueuePath, result.queue);
+      res.json({
+        success: true,
+        ready: result.item.status === PUBLICATION_QUEUE_STATUSES.READY,
+        item: queueItemForResponse(result.item)
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.patch(
+  '/api/publication-queue/:itemId/status',
+  requirePublicationQueue,
+  (req, res) => {
+    try {
+      const queue = loadPublicationQueue(publicationQueuePath);
+      const result = updateItemStatus(
+        queue,
+        req.params.itemId,
+        req.body?.status
+      );
+      savePublicationQueue(publicationQueuePath, result.queue);
+      res.json({
+        success: true,
+        item: queueItemForResponse(result.item)
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
 
 // POST /api/scrape - Dispara scraping do Mercado Livre + Cupons (concorrente)
 app.post('/api/scrape', (req, res) => {

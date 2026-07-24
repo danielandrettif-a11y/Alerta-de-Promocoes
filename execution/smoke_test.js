@@ -68,7 +68,9 @@ async function run() {
       HOST: '127.0.0.1',
       APP_DATA_DIR: path.join(OUTPUT_DIR, 'data'),
       WHATSAPP_ENABLED: 'false',
-      AUTO_RUN_ENABLED: 'false'
+      AUTO_RUN_ENABLED: 'false',
+      DEALS_REFRESH_ENABLED: 'false',
+      PUBLICATION_QUEUE_ENABLED: 'true'
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -92,6 +94,9 @@ async function run() {
     const categories = await (await expectResponse('/api/categories', 200)).json();
     const history = await (await expectResponse('/api/publish-history', 200)).json();
     const dataStatus = await (await expectResponse('/api/data-status', 200)).json();
+    const publicationQueue = await (
+      await expectResponse('/api/publication-queue', 200)
+    ).json();
 
     if (!Array.isArray(deals.deals) || !Array.isArray(deals.coupons)) {
       throw new Error('/api/deals retornou formato invalido');
@@ -113,6 +118,13 @@ async function run() {
       typeof dataStatus.publishing?.availableToday !== 'number'
     ) {
       throw new Error('/api/data-status retornou formato invalido');
+    }
+    if (
+      publicationQueue.enabled !== true ||
+      !Array.isArray(publicationQueue.items) ||
+      typeof publicationQueue.summary?.total !== 'number'
+    ) {
+      throw new Error('/api/publication-queue retornou formato invalido');
     }
 
     await expectResponse('/api/proxy-image', 400);
@@ -171,21 +183,29 @@ async function run() {
       '#btn-tab-ml',
       '#btn-tab-amazon',
       '#btn-tab-coupons',
+      '#btn-tab-queue',
       '#panel-ml',
       '#panel-amazon',
       '#panel-coupons',
+      '#panel-queue',
       '#marketplace-search-form',
       '#ipt-marketplace-search',
       '#marketplace-search-results',
       '#grid-ml',
       '#grid-amazon',
-      '#grid-coupons'
+      '#grid-coupons',
+      '#grid-queue'
     ];
     for (const selector of requiredSelectors) {
       await page.waitForSelector(selector, { timeout: 5000 });
     }
 
-    for (const tab of ['#btn-tab-amazon', '#btn-tab-coupons', '#btn-tab-ml']) {
+    for (const tab of [
+      '#btn-tab-amazon',
+      '#btn-tab-coupons',
+      '#btn-tab-queue',
+      '#btn-tab-ml'
+    ]) {
       await page.click(tab);
     }
 
@@ -210,6 +230,18 @@ async function run() {
       !localPlaceholder.includes('ofertas já carregadas')
     ) {
       throw new Error('As duas modalidades de pesquisa não estão claras');
+    }
+
+    await page.setViewport({ width: 390, height: 844 });
+    const mobileWidth = await page.evaluate(() => ({
+      viewport: window.innerWidth,
+      document: document.documentElement.scrollWidth
+    }));
+    if (mobileWidth.document > mobileWidth.viewport) {
+      throw new Error(
+        `Interface excede a tela movel: ${mobileWidth.document}px ` +
+        `para viewport de ${mobileWidth.viewport}px`
+      );
     }
 
     await page.screenshot({ path: SCREENSHOT_PATH, fullPage: true });

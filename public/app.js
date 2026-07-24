@@ -8,20 +8,26 @@ let lastUpdateML = '';
 let lastUpdateAmazon = '';
 let freshnessML = null;
 let freshnessAmazon = null;
+let publicationQueueEnabled = false;
+let publicationQueueItems = [];
+let publicationQueueSummary = {};
 
 // DOM elements - Tabs
 const elTabML = document.getElementById('btn-tab-ml');
 const elTabAmazon = document.getElementById('btn-tab-amazon');
 const elTabCoupons = document.getElementById('btn-tab-coupons');
+const elTabQueue = document.getElementById('btn-tab-queue');
 
 const elPanelML = document.getElementById('panel-ml');
 const elPanelAmazon = document.getElementById('panel-amazon');
 const elPanelCoupons = document.getElementById('panel-coupons');
+const elPanelQueue = document.getElementById('panel-queue');
 
 // DOM elements - Grids
 const elGridML = document.getElementById('grid-ml');
 const elGridAmazon = document.getElementById('grid-amazon');
 const elGridCoupons = document.getElementById('grid-coupons');
+const elGridQueue = document.getElementById('grid-queue');
 
 // DOM elements - ML Actions
 const elBtnUpdateML = document.getElementById('btn-update-ml');
@@ -29,6 +35,8 @@ const elBtnGenerateML = document.getElementById('btn-generate-ml');
 const elChkSelectAllML = document.getElementById('chk-select-all-ml');
 const elBtnClearSelectionML = document.getElementById('btn-clear-selection-ml');
 const elTxtSelectedCountML = document.getElementById('txt-selected-count-ml');
+const elBtnQueueML = document.getElementById('btn-queue-ml');
+const elTxtQueueCountML = document.getElementById('txt-queue-count-ml');
 
 // DOM elements - Amazon Actions
 const elBtnUpdateAmazon = document.getElementById('btn-update-amazon');
@@ -61,6 +69,14 @@ const elMarketplaceSearchInput = document.getElementById('ipt-marketplace-search
 const elMarketplaceSearchButton = document.getElementById('btn-marketplace-search');
 const elMarketplaceSearchStatus = document.getElementById('marketplace-search-status');
 const elMarketplaceSearchResults = document.getElementById('marketplace-search-results');
+const elQueueTabCount = document.getElementById('queue-tab-count');
+const elQueueStatusFilter = document.getElementById('queue-status-filter');
+const elQueueFeedback = document.getElementById('queue-feedback');
+const elBtnRefreshQueue = document.getElementById('btn-refresh-queue');
+const elQueueSummaryAwaiting = document.getElementById('queue-summary-awaiting');
+const elQueueSummaryReady = document.getElementById('queue-summary-ready');
+const elQueueSummaryReview = document.getElementById('queue-summary-review');
+const elQueueSummaryPublished = document.getElementById('queue-summary-published');
 
 function parseBackendDate(dateStr) {
   if (!dateStr) return null;
@@ -764,9 +780,11 @@ async function postSelectedDeals(platform) {
   if (targetDeals.length === 0) return;
 
   const modal = document.getElementById('progress-modal');
+  const title = document.getElementById('progress-title');
   const logEl = document.getElementById('progress-log');
   const spinner = modal.querySelector('.progress-spinner');
   
+  title.textContent = 'Postando Stories no WhatsApp...';
   modal.classList.remove('hidden');
   spinner.style.display = 'block';
   logEl.innerHTML = '';
@@ -869,6 +887,376 @@ async function postSelectedDeals(platform) {
 }
 
 // ==========================================
+// Assisted Instagram publication queue
+// ==========================================
+function escapeQueueHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function setQueueFeedback(message, type = 'info') {
+  elQueueFeedback.textContent = message || '';
+  elQueueFeedback.classList.toggle('is-error', type === 'error');
+  elQueueFeedback.classList.toggle('is-success', type === 'success');
+}
+
+function getQueueStatusMeta(status) {
+  const metadata = {
+    awaiting_affiliate: {
+      label: 'Aguardando link afiliado',
+      className: 'is-awaiting'
+    },
+    ready: {
+      label: 'Pronta para publicar',
+      className: 'is-ready'
+    },
+    needs_review: {
+      label: 'Precisa de revisão',
+      className: 'is-review'
+    },
+    published: {
+      label: 'Publicada',
+      className: 'is-published'
+    },
+    discarded: {
+      label: 'Descartada',
+      className: 'is-discarded'
+    },
+    expired: {
+      label: 'Expirada',
+      className: 'is-review'
+    }
+  };
+  return metadata[status] || {
+    label: status,
+    className: ''
+  };
+}
+
+function updateQueueSummary() {
+  const summary = publicationQueueSummary || {};
+  elQueueSummaryAwaiting.textContent = summary.awaitingAffiliate || 0;
+  elQueueSummaryReady.textContent = summary.ready || 0;
+  elQueueSummaryReview.textContent = summary.needsReview || 0;
+  elQueueSummaryPublished.textContent = summary.published || 0;
+  const activeCount =
+    (summary.awaitingAffiliate || 0) +
+    (summary.ready || 0) +
+    (summary.needsReview || 0);
+  elQueueTabCount.textContent = activeCount;
+}
+
+function queueItemMatchesFilter(item) {
+  const filter = elQueueStatusFilter.value;
+  if (filter === 'all') return true;
+  if (filter === 'active') {
+    return [
+      'awaiting_affiliate',
+      'ready',
+      'needs_review'
+    ].includes(item.status);
+  }
+  return item.status === filter;
+}
+
+function renderPublicationQueue() {
+  updateQueueSummary();
+  const visibleItems = publicationQueueItems.filter(queueItemMatchesFilter);
+  elGridQueue.replaceChildren();
+
+  if (visibleItems.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.innerHTML = '<p>Nenhuma oferta corresponde a este filtro.</p>';
+    elGridQueue.appendChild(empty);
+    return;
+  }
+
+  for (const item of visibleItems) {
+    const status = getQueueStatusMeta(item.status);
+    const card = document.createElement('article');
+    card.className = `queue-card ${status.className}`;
+    card.dataset.itemId = item.id;
+
+    const affiliateForm = ['awaiting_affiliate', 'needs_review']
+      .includes(item.status)
+      ? `
+        <div class="queue-affiliate-form">
+          <label for="affiliate-${escapeQueueHtml(item.id)}">
+            Link gerado manualmente no Mercado Livre
+          </label>
+          <div class="queue-affiliate-row">
+            <input
+              id="affiliate-${escapeQueueHtml(item.id)}"
+              class="queue-affiliate-input"
+              type="url"
+              inputmode="url"
+              autocomplete="off"
+              placeholder="https://meli.la/..."
+              value="${escapeQueueHtml(item.affiliateLink || '')}"
+            >
+            <button type="button" data-queue-action="save-link">
+              Validar link
+            </button>
+          </div>
+        </div>
+      `
+      : '';
+
+    const reviewMessage = item.reviewReason
+      ? `
+        <div class="queue-review-message">
+          <strong>Revisão necessária:</strong>
+          ${escapeQueueHtml(item.reviewReason)}
+        </div>
+      `
+      : '';
+
+    const readyActions = item.status === 'ready'
+      ? `
+        <div class="queue-ready-actions">
+          <button type="button" data-queue-action="copy-link">
+            Copiar link
+          </button>
+          <button type="button" class="is-primary" data-queue-action="share-story">
+            Compartilhar Story
+          </button>
+          <button type="button" data-queue-action="published">
+            Marcar publicada
+          </button>
+        </div>
+      `
+      : '';
+
+    const secondaryAction = [
+      'awaiting_affiliate',
+      'ready',
+      'needs_review'
+    ].includes(item.status)
+      ? `
+        <button type="button" class="queue-text-action" data-queue-action="discarded">
+          Descartar oferta
+        </button>
+      `
+      : item.status === 'discarded'
+        ? `
+          <button type="button" class="queue-text-action" data-queue-action="restore">
+            Restaurar oferta
+          </button>
+        `
+        : '';
+
+    const completedDetails = item.status === 'published'
+      ? `
+        <p class="queue-completed-at">
+          Publicada em ${new Date(item.publishedAt).toLocaleString('pt-BR')}
+        </p>
+      `
+      : '';
+
+    card.innerHTML = `
+      <div class="queue-story-column">
+        <img
+          class="queue-story-preview"
+          src="${escapeQueueHtml(item.storyUrl || '')}"
+          alt="Story preparado para ${escapeQueueHtml(item.title)}"
+          loading="lazy"
+        >
+      </div>
+      <div class="queue-content">
+        <div class="queue-card-heading">
+          <span class="queue-status ${status.className}">
+            ${escapeQueueHtml(status.label)}
+          </span>
+          <span class="queue-discount">${Number(item.discount) || 0}% OFF</span>
+        </div>
+        <h3>${escapeQueueHtml(item.title)}</h3>
+        <div class="queue-price">
+          <span>De ${escapeQueueHtml(item.originalPrice)}</span>
+          <strong>Por ${escapeQueueHtml(item.currentPrice)}</strong>
+        </div>
+        <a
+          class="queue-product-link"
+          href="${escapeQueueHtml(item.productLink)}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          1. Abrir produto no Mercado Livre
+        </a>
+        ${reviewMessage}
+        ${affiliateForm}
+        ${readyActions}
+        ${completedDetails}
+        <div class="queue-secondary-actions">${secondaryAction}</div>
+      </div>
+    `;
+    elGridQueue.appendChild(card);
+  }
+}
+
+async function fetchPublicationQueue(options = {}) {
+  try {
+    const response = await fetch('/api/publication-queue');
+    const data = await response.json();
+    publicationQueueEnabled = data.enabled === true;
+    elTabQueue.hidden = !publicationQueueEnabled;
+    elBtnQueueML.hidden = !publicationQueueEnabled;
+
+    if (!publicationQueueEnabled) {
+      publicationQueueItems = [];
+      publicationQueueSummary = {};
+      return;
+    }
+
+    publicationQueueItems = data.items || [];
+    publicationQueueSummary = data.summary || {};
+    renderPublicationQueue();
+    if (allMLDeals.length) renderMLDeals(allMLDeals);
+    if (options.feedback) {
+      setQueueFeedback(options.feedback, options.type || 'success');
+    }
+  } catch (err) {
+    console.error('Erro ao carregar fila de publicação:', err);
+    setQueueFeedback('Não foi possível carregar a fila.', 'error');
+  }
+}
+
+async function enqueueDealsForPublication(deals) {
+  if (!publicationQueueEnabled || deals.length === 0) return;
+  const modal = document.getElementById('progress-modal');
+  const title = document.getElementById('progress-title');
+  const logEl = document.getElementById('progress-log');
+  const spinner = modal.querySelector('.progress-spinner');
+  title.textContent = 'Preparando fila de publicação...';
+  modal.classList.remove('hidden');
+  spinner.style.display = 'block';
+  logEl.replaceChildren();
+
+  const addLog = (message, type = 'info') => {
+    const line = document.createElement('div');
+    line.className = `progress-line progress-${type}`;
+    line.textContent = message;
+    logEl.appendChild(line);
+  };
+
+  let created = 0;
+  let reused = 0;
+  let failed = 0;
+  for (let index = 0; index < deals.length; index++) {
+    const deal = deals[index];
+    addLog(
+      `[${index + 1}/${deals.length}] Gerando Story: ` +
+      `${deal.title.substring(0, 45)}...`
+    );
+    try {
+      const imageBuffer = await drawStoryOnCanvas(deal, 'ml');
+      const response = await fetch('/api/publication-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: 'mercado_livre',
+          deal: {
+            title: deal.title,
+            originalPrice: deal.originalPrice,
+            currentPrice: deal.currentPrice,
+            discount: deal.discount,
+            image: deal.image,
+            link: deal.link
+          },
+          imageBuffer
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Falha ao adicionar.');
+      if (data.created) {
+        created += 1;
+        addLog('Story adicionado à fila.', 'success');
+      } else {
+        reused += 1;
+        addLog('A oferta já estava na fila.', 'warning');
+      }
+    } catch (err) {
+      failed += 1;
+      addLog(`Falha: ${err.message}`, 'error');
+    }
+  }
+
+  spinner.style.display = 'none';
+  selectedMLIndices.clear();
+  updateMLSelectionUI();
+  await fetchPublicationQueue({
+    feedback:
+      `${created} adicionada(s), ${reused} já existente(s), ` +
+      `${failed} com falha.`,
+    type: failed ? 'error' : 'success'
+  });
+  switchTab(elTabQueue, elPanelQueue);
+}
+
+async function copyQueueText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const helper = document.createElement('textarea');
+  helper.value = text;
+  helper.style.position = 'fixed';
+  helper.style.opacity = '0';
+  document.body.appendChild(helper);
+  helper.select();
+  document.execCommand('copy');
+  helper.remove();
+}
+
+async function shareQueueStory(item) {
+  await copyQueueText(item.affiliateLink);
+  const response = await fetch(item.storyUrl);
+  if (!response.ok) throw new Error('Não foi possível baixar o Story.');
+  const blob = await response.blob();
+  const file = new File(
+    [blob],
+    `story-${item.id}.jpg`,
+    { type: blob.type || 'image/jpeg' }
+  );
+  if (
+    navigator.share &&
+    (!navigator.canShare || navigator.canShare({ files: [file] }))
+  ) {
+    await navigator.share({
+      files: [file],
+      title: item.title,
+      text: 'O link afiliado já foi copiado. Adicione-o ao sticker do Story.'
+    });
+    return true;
+  }
+
+  const download = document.createElement('a');
+  download.href = URL.createObjectURL(blob);
+  download.download = file.name;
+  download.click();
+  setTimeout(() => URL.revokeObjectURL(download.href), 1000);
+  return false;
+}
+
+async function updateQueueItemStatus(itemId, status) {
+  const response = await fetch(
+    `/api/publication-queue/${encodeURIComponent(itemId)}/status`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    }
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Falha ao atualizar status.');
+  await fetchPublicationQueue();
+}
+
+// ==========================================
 // Rendering Methods (Cards & UI)
 // ==========================================
 function renderMLDeals(deals) {
@@ -967,6 +1355,14 @@ function renderMLDeals(deals) {
           <span class="card-promo-price">Por: ${deal.currentPrice}</span>
         </div>
         ${couponBadgeHtml}
+        <button
+          type="button"
+          class="btn-add-queue-card"
+          data-index="${index}"
+          ${publicationQueueEnabled ? '' : 'hidden'}
+        >
+          Preparar para Instagram
+        </button>
         <div class="price-comparison-area" data-title="${displayTitle}">
           <button type="button" class="btn-compare-buscape" data-title="${displayTitle}">
             🔍 Comparar Preços
@@ -1414,7 +1810,9 @@ function updateMLSelectionUI() {
 
   const count = selectedMLIndices.size;
   elTxtSelectedCountML.textContent = count;
+  elTxtQueueCountML.textContent = count;
   elBtnGenerateML.disabled = count === 0;
+  elBtnQueueML.disabled = count === 0;
   elBtnClearSelectionML.disabled = count === 0;
 
   const visibleCards = elGridML.querySelectorAll('.deal-card:not(.hidden-filter)');
@@ -1464,11 +1862,16 @@ function updateAmazonSelectionUI() {
 // Tabs Management
 // ==========================================
 function switchTab(activeBtn, activePanel) {
-  [elTabML, elTabAmazon, elTabCoupons].forEach(btn => btn.classList.remove('active'));
-  [elPanelML, elPanelAmazon, elPanelCoupons].forEach(panel => panel.classList.remove('active'));
+  [elTabML, elTabAmazon, elTabCoupons, elTabQueue]
+    .forEach(btn => btn.classList.remove('active'));
+  [elPanelML, elPanelAmazon, elPanelCoupons, elPanelQueue]
+    .forEach(panel => panel.classList.remove('active'));
   
   activeBtn.classList.add('active');
   activePanel.classList.add('active');
+  [elTabML, elTabAmazon, elTabCoupons, elTabQueue].forEach(btn => {
+    btn.setAttribute('aria-selected', String(btn === activeBtn));
+  });
   
   const platform = activeBtn === elTabAmazon ? 'amazon' : 'ml';
   updateLastUpdateUI(platform);
@@ -1484,6 +1887,10 @@ function init() {
   elTabML.addEventListener('click', () => switchTab(elTabML, elPanelML));
   elTabAmazon.addEventListener('click', () => switchTab(elTabAmazon, elPanelAmazon));
   elTabCoupons.addEventListener('click', () => switchTab(elTabCoupons, elPanelCoupons));
+  elTabQueue.addEventListener('click', () => {
+    switchTab(elTabQueue, elPanelQueue);
+    fetchPublicationQueue();
+  });
 
   // Scrapers
   elBtnUpdateML.addEventListener('click', triggerMLScraper);
@@ -1492,6 +1899,19 @@ function init() {
   // Generate / Post Triggers
   elBtnGenerateML.addEventListener('click', () => postSelectedDeals('ml'));
   elBtnGenerateAmazon.addEventListener('click', () => postSelectedDeals('amazon'));
+  elBtnQueueML.addEventListener('click', () => {
+    const deals = allMLDeals.filter((_, index) =>
+      selectedMLIndices.has(index)
+    );
+    enqueueDealsForPublication(deals);
+  });
+  elBtnRefreshQueue.addEventListener('click', () =>
+    fetchPublicationQueue({
+      feedback: 'Fila atualizada.',
+      type: 'success'
+    })
+  );
+  elQueueStatusFilter.addEventListener('change', renderPublicationQueue);
 
   // Select All ML Toggle
   elChkSelectAllML.addEventListener('change', () => {
@@ -1544,6 +1964,7 @@ function init() {
     fetchMLDeals();
     fetchAmazonDeals();
     fetchDataStatus();
+    fetchPublicationQueue();
   });
   setInterval(fetchDataStatus, 60000);
   setInterval(syncPublicationHistory, 30000);
@@ -1718,6 +2139,95 @@ document.addEventListener('click', async (e) => {
         btn.innerHTML = '🗑️ Excluir do WhatsApp';
       }
     }
+  }
+});
+
+document.addEventListener('click', async (event) => {
+  const addButton = event.target.closest('.btn-add-queue-card');
+  if (addButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const deal = allMLDeals[Number(addButton.dataset.index)];
+    if (deal) await enqueueDealsForPublication([deal]);
+    return;
+  }
+
+  const actionButton = event.target.closest('[data-queue-action]');
+  if (!actionButton) return;
+  const card = actionButton.closest('.queue-card');
+  const item = publicationQueueItems.find(entry =>
+    entry.id === card?.dataset.itemId
+  );
+  if (!item) return;
+
+  event.preventDefault();
+  actionButton.disabled = true;
+  const action = actionButton.dataset.queueAction;
+  try {
+    if (action === 'save-link') {
+      const input = card.querySelector('.queue-affiliate-input');
+      const response = await fetch(
+        `/api/publication-queue/${encodeURIComponent(item.id)}/affiliate`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ affiliateLink: input.value })
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Não foi possível validar o link.');
+      }
+      await fetchPublicationQueue({
+        feedback: data.ready
+          ? 'Link validado. A oferta está pronta para publicar.'
+          : data.item.reviewReason,
+        type: data.ready ? 'success' : 'error'
+      });
+      return;
+    }
+
+    if (action === 'copy-link') {
+      await copyQueueText(item.affiliateLink);
+      setQueueFeedback('Link afiliado copiado.', 'success');
+      return;
+    }
+
+    if (action === 'share-story') {
+      const shared = await shareQueueStory(item);
+      setQueueFeedback(
+        shared
+          ? 'Story enviado ao compartilhamento. O link já está copiado.'
+          : 'Imagem baixada e link copiado. Abra o Instagram para finalizar.',
+        'success'
+      );
+      return;
+    }
+
+    if (action === 'published') {
+      if (!confirm('Confirma que este Story foi publicado no Instagram?')) {
+        return;
+      }
+      await updateQueueItemStatus(item.id, 'published');
+      setQueueFeedback('Oferta marcada como publicada.', 'success');
+      return;
+    }
+
+    if (action === 'discarded') {
+      if (!confirm('Descartar esta oferta da fila?')) return;
+      await updateQueueItemStatus(item.id, 'discarded');
+      setQueueFeedback('Oferta descartada.', 'success');
+      return;
+    }
+
+    if (action === 'restore') {
+      await updateQueueItemStatus(item.id, 'restore');
+      setQueueFeedback('Oferta restaurada.', 'success');
+    }
+  } catch (err) {
+    setQueueFeedback(err.message, 'error');
+  } finally {
+    actionButton.disabled = false;
   }
 });
 

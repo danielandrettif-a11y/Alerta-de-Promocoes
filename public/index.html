@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   
   <!-- CSS Link -->
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 
@@ -55,6 +55,9 @@
     </button>
     <button id="btn-tab-coupons" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-coupons">
       🎟️ Cupons do Dia
+    </button>
+    <button id="btn-tab-queue" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-queue" hidden>
+      Fila de publicação <span id="queue-tab-count" class="queue-tab-count">0</span>
     </button>
   </nav>
 
@@ -107,6 +110,9 @@
         <div class="primary-actions">
           <button id="btn-update-ml" class="btn-refresh">
             <span class="icon-sync">🔄</span> Atualizar Mercado Livre
+          </button>
+          <button id="btn-queue-ml" class="btn-queue" disabled hidden>
+            Adicionar à fila (<span id="txt-queue-count-ml">0</span>)
           </button>
           <button id="btn-generate-ml" class="btn-cta" disabled>
             Postar no WhatsApp (<span id="txt-selected-count-ml">0</span>) 🚀
@@ -228,6 +234,62 @@
       </div>
     </section>
 
+    <!-- Tab 4: Assisted Instagram publication queue -->
+    <section id="panel-queue" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-queue">
+      <div class="queue-hero">
+        <div>
+          <span class="queue-eyebrow">FLUXO ASSISTIDO E SEGURO</span>
+          <h2>Fila de publicação</h2>
+          <p>
+            O sistema prepara o Story. Você gera o link afiliado manualmente,
+            cola aqui e finaliza o sticker no Instagram.
+          </p>
+        </div>
+        <button id="btn-refresh-queue" class="btn-secondary" type="button">
+          Atualizar fila
+        </button>
+      </div>
+
+      <div class="queue-summary" aria-label="Resumo da fila">
+        <div class="queue-summary-card">
+          <strong id="queue-summary-awaiting">0</strong>
+          <span>Aguardando link</span>
+        </div>
+        <div class="queue-summary-card is-ready">
+          <strong id="queue-summary-ready">0</strong>
+          <span>Prontas</span>
+        </div>
+        <div class="queue-summary-card is-review">
+          <strong id="queue-summary-review">0</strong>
+          <span>Precisam de revisão</span>
+        </div>
+        <div class="queue-summary-card">
+          <strong id="queue-summary-published">0</strong>
+          <span>Publicadas</span>
+        </div>
+      </div>
+
+      <div class="queue-toolbar">
+        <label for="queue-status-filter">Mostrar</label>
+        <select id="queue-status-filter" class="select-premium">
+          <option value="active">Pendentes e prontas</option>
+          <option value="all">Todas</option>
+          <option value="awaiting_affiliate">Aguardando link</option>
+          <option value="ready">Prontas</option>
+          <option value="needs_review">Precisam de revisão</option>
+          <option value="published">Publicadas</option>
+          <option value="discarded">Descartadas</option>
+        </select>
+      </div>
+
+      <p id="queue-feedback" class="queue-feedback" aria-live="polite"></p>
+      <div id="grid-queue" class="queue-grid">
+        <div class="empty-state">
+          <p>Nenhuma oferta na fila.</p>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- Progress Log Modal -->
@@ -247,6 +309,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
