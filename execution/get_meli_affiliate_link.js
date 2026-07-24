@@ -166,14 +166,23 @@ async function main() {
 
     console.log('⏳ Aguardando geracao do link...');
     let affiliateLink = null;
-    const maxAttempts = 30; // 3 segundos limite total (30 * 100ms)
+    const maxAttempts = 300; // Ate 30 segundos para o encurtador responder.
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       affiliateLink = await page.evaluate(() => {
-        const inputs = Array.from(document.querySelectorAll('input, textarea'));
-        for (const input of inputs) {
-          const val = input.value || '';
-          if (val.includes('meli.la') || val.includes('mercadolivre.com')) {
-            return val;
+        const elements = Array.from(
+          document.querySelectorAll('input, textarea, a')
+        );
+        for (const element of elements) {
+          const candidates = [
+            element.value,
+            element.href,
+            element.textContent
+          ];
+          for (const candidate of candidates) {
+            const match = String(candidate || '').match(
+              /https?:\/\/meli\.la\/[A-Za-z0-9_-]+/
+            );
+            if (match) return match[0];
           }
         }
         return null;
