@@ -872,7 +872,7 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
         const chats = await client.getChats();
         targetChat = chats.find(chat => chat.name === groupNameOrId);
         if (targetChat) {
-          chatId = targetChat.id._serialized;
+          chatId = targetChat.id._serialized || targetChat.id.$1;
         }
       }
 
@@ -888,56 +888,16 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
 
       console.log(`📌 Destinatário resolvido: ID = ${chatId}`);
 
-      const sendMessage = async (content, options) => {
-        try {
-          return await client.sendMessage(chatId, content, options);
-        } catch (err) {
-          const message = err?.message || String(err);
-          const opaqueEvaluationError =
-            /^Evaluation failed:\s*[a-z]$/i.test(message) ||
-            /^[a-z]$/i.test(message);
-          if (!chatId.endsWith('@g.us') || !opaqueEvaluationError) throw err;
-
-          const patched = await client.pupPage.evaluate(() => {
-            const factory = window.require('WAWebWidFactory');
-            if (
-              !factory?.createWid ||
-              typeof factory.asUserWidOrThrow !== 'function'
-            ) {
-              return false;
-            }
-            if (factory.__alertaOriginalAsUserWidOrThrow) return true;
-
-            const original = factory.asUserWidOrThrow;
-            factory.__alertaOriginalAsUserWidOrThrow = original;
-            factory.asUserWidOrThrow = value => {
-              try {
-                return original.call(factory, value);
-              } catch {
-                return factory.createWid(value?._serialized || String(value));
-              }
-            };
-            return true;
-          });
-
-          if (!patched) throw err;
-          console.warn(
-            '[WhatsApp] Aplicada compatibilidade de identificador para envio em grupo.'
-          );
-          return client.sendMessage(chatId, content, options);
-        }
-      };
-
       let sentMsg;
       if (imagePath && fs.existsSync(imagePath)) {
         console.log(`📸 Preparando mídia: ${path.basename(imagePath)}`);
         const media = MessageMedia.fromFilePath(imagePath);
         
         console.log(`📤 Enviando imagem + texto...`);
-        sentMsg = await sendMessage(media, { caption: messageText });
+        sentMsg = await client.sendMessage(chatId, media, { caption: messageText });
       } else {
         console.log(`📤 Enviando apenas texto...`);
-        sentMsg = await sendMessage(messageText);
+        sentMsg = await client.sendMessage(chatId, messageText);
       }
 
       console.log('✅ Mensagem enviada com sucesso!');
@@ -946,7 +906,7 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
       let extractedId = null;
       if (sentMsg && sentMsg.id) {
         if (typeof sentMsg.id === 'object') {
-          extractedId = sentMsg.id._serialized || sentMsg.id.id;
+          extractedId = sentMsg.id._serialized || sentMsg.id.$1 || sentMsg.id.id;
         } else {
           extractedId = sentMsg.id;
         }

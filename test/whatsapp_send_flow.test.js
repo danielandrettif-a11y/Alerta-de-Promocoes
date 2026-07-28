@@ -8,6 +8,7 @@ const root = path.join(__dirname, '..');
 test('envio ao WhatsApp não informa sucesso sem confirmação', () => {
   const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+  const packageJson = require(path.join(root, 'package.json'));
   const whatsapp = fs.readFileSync(
     path.join(root, 'execution', 'whatsapp_client.js'),
     'utf8'
@@ -22,11 +23,15 @@ test('envio ao WhatsApp não informa sucesso sem confirmação', () => {
   assert.doesNotMatch(whatsapp, /120363410833991285@g\.us/);
   assert.match(whatsapp, /liveState !== 'CONNECTED'/);
   assert.match(whatsapp, /targetChat\?\.isReadOnly/);
-  assert.match(whatsapp, /WAWebWidFactory/);
-  assert.match(whatsapp, /__alertaOriginalAsUserWidOrThrow/);
-  assert.match(whatsapp, /return client\.sendMessage\(chatId, content, options\)/);
-  assert.match(whatsapp, /sentMsg = await sendMessage\(media/);
-  assert.match(whatsapp, /sentMsg = await sendMessage\(messageText\)/);
+  assert.match(packageJson.dependencies['whatsapp-web.js'], /f4ea1e3/);
+  assert.match(whatsapp, /targetChat\.id\._serialized \|\| targetChat\.id\.\$1/);
+  assert.match(
+    whatsapp,
+    /client\.sendMessage\(chatId, media, \{ caption: messageText \}\)/
+  );
+  assert.match(whatsapp, /client\.sendMessage\(chatId, messageText\)/);
+  assert.match(whatsapp, /sentMsg\.id\._serialized \|\| sentMsg\.id\.\$1/);
+  assert.doesNotMatch(whatsapp, /__alertaOriginalAsUserWidOrThrow/);
   assert.doesNotMatch(whatsapp, /sendSeen: false/);
   assert.doesNotMatch(whatsapp, /linkPreview: false/);
   assert.doesNotMatch(whatsapp, /waitUntilMsgSent: true/);
