@@ -87,6 +87,7 @@ async function main() {
   });
 
   try {
+    let failureCount = 0;
     for (let i = 0; i < deals.length; i++) {
       const deal = deals[i];
       const rank = i + 1;
@@ -151,6 +152,8 @@ async function main() {
 
       // Abre a página no browser
       const page = await browser.newPage();
+      const filename = `story_${rank}_discount_${deal.discount}.jpg`;
+      const outputImagePath = path.join(storiesDir, filename);
       await page.setViewport({
         width: 1080,
         height: 1920,
@@ -168,12 +171,17 @@ async function main() {
         });
 
         // Timeout de segurança para fontes e imagens carregarem completamente
-        await new Promise(r => setTimeout(r, 2000));
+        await page.waitForFunction(() => {
+          const image = document.querySelector('.product-image');
+          return image?.complete && image.naturalWidth > 0;
+        }, { timeout: 15000 });
+        await page.evaluate(async () => {
+          await document.querySelector('.product-image').decode();
+          await document.fonts.ready;
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        });
 
         // Salva o screenshot na pasta stories
-        const filename = `story_${rank}_discount_${deal.discount}.jpg`;
-        const outputImagePath = path.join(storiesDir, filename);
-
         await page.screenshot({
           path: outputImagePath,
           type: 'jpeg',
@@ -182,6 +190,7 @@ async function main() {
 
         console.log(`  ✓ Story salvo em: ${path.join('stories', filename)}`);
       } catch (pageErr) {
+        failureCount++;
         console.error(`  ❌ Erro ao capturar imagem do Story para o item ${rank}: ${pageErr.message}`);
       } finally {
         await page.close();
@@ -194,7 +203,10 @@ async function main() {
         // Ignora erros de deleção
       }
 
-      console.log(`  ✓ Story salvo em: ${path.join('stories', filename)}`);
+    }
+
+    if (failureCount > 0) {
+      throw new Error(`${failureCount} Story(s) nao foram gerados.`);
     }
 
     console.log("-----------------------------------------");
@@ -202,6 +214,7 @@ async function main() {
     console.log(`Confira suas imagens na pasta: ${storiesDir}`);
   } catch (err) {
     console.error(`Erro durante a geração das imagens: ${err.message}`);
+    process.exitCode = 1;
   } finally {
     await browser.close();
   }

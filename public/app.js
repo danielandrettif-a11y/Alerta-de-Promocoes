@@ -611,183 +611,6 @@ async function triggerAmazonScraper() {
 }
 
 // ==========================================
-// Canvas Story Rendering (Local Frontend)
-// ==========================================
-function drawStoryOnCanvas(deal, platform) {
-  return new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext('2d');
-
-    // 1. Desenha o fundo (Gradiente dinâmico baseado no tipo de oferta)
-    let gradient = ctx.createLinearGradient(0, 0, 0, 1920);
-    const isLightning = deal.dealType === 'Oferta Relâmpago';
-    
-    if (isLightning) {
-      // Gradiente escuro futurista com tons de roxo/fogo para Ofertas Relâmpago
-      gradient.addColorStop(0, '#0f0c20');
-      gradient.addColorStop(0.5, '#190a2a');
-      gradient.addColorStop(1, '#05020a');
-    } else {
-      // Gradiente azul escuro premium para Ofertas do Dia / Campanha
-      gradient.addColorStop(0, '#0a192f');
-      gradient.addColorStop(0.5, '#0d2b45');
-      gradient.addColorStop(1, '#020c1b');
-    }
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 1080, 1920);
-
-    // Efeito Glow central
-    ctx.beginPath();
-    ctx.arc(540, 960, 480, 0, Math.PI * 2);
-    ctx.fillStyle = isLightning ? 'rgba(255, 0, 128, 0.07)' : 'rgba(0, 242, 254, 0.06)';
-    ctx.fill();
-
-    // 2. Carrega imagem do produto através do Proxy para desviar do CORS
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = `/api/proxy-image?url=${encodeURIComponent(deal.image)}`;
-    
-    img.onload = () => {
-      // Desenha card de fundo branco arredondado para destacar o produto
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-      const rx = 120, ry = 520, rw = 840, rh = 840, radius = 40;
-      ctx.beginPath();
-      if (ctx.roundRect) {
-        ctx.roundRect(rx, ry, rw, rh, radius);
-      } else {
-        ctx.rect(rx, ry, rw, rh);
-      }
-      ctx.fill();
-
-      // Desenha imagem proporcional
-      const padding = 60;
-      const targetW = rw - (padding * 2);
-      const targetH = rh - (padding * 2);
-      const imgRatio = img.width / img.height;
-      const targetRatio = targetW / targetH;
-      let drawW, drawH;
-      
-      if (imgRatio > targetRatio) {
-        drawW = targetW;
-        drawH = targetW / imgRatio;
-      } else {
-        drawH = targetH;
-        drawW = targetH * imgRatio;
-      }
-      
-      const drawX = rx + padding + (targetW - drawW) / 2;
-      const drawY = ry + padding + (targetH - drawH) / 2;
-      ctx.drawImage(img, drawX, drawY, drawW, drawH);
-
-      // 3. Tag da Plataforma no topo
-      const platColor = platform === 'amazon' ? '#ff9900' : '#ffe600';
-      const platTextColor = platform === 'amazon' ? '#ffffff' : '#333333';
-      const platText = platform === 'amazon' ? '🟡 AMAZON' : '🛍️ MERCADO LIVRE';
-      
-      ctx.fillStyle = platColor;
-      ctx.beginPath();
-      if (ctx.roundRect) {
-        ctx.roundRect(390, 120, 300, 70, 20);
-      } else {
-        ctx.rect(390, 120, 300, 70);
-      }
-      ctx.fill();
-      
-      ctx.fillStyle = platTextColor;
-      ctx.font = 'bold 36px Outfit, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(platText, 540, 155);
-
-      // 4. Tipo de Oferta em Destaque
-      const dealTypeText = isLightning ? '⚡ OFERTA RELÂMPAGO' : '🔥 OFERTA DO DIA';
-      const dealTypeColor = isLightning ? '#ff6633' : '#00f2fe';
-      ctx.fillStyle = dealTypeColor;
-      ctx.font = 'bold 46px Montserrat, sans-serif';
-      ctx.fillText(dealTypeText, 540, 245);
-
-      // 5. Título do Produto (com quebra inteligente de linha)
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 44px Outfit, sans-serif';
-      ctx.textAlign = 'center';
-      
-      const words = deal.title.split(' ');
-      let line = '';
-      let y = 330;
-      const maxWidth = 920;
-      const lineHeight = 55;
-      let linesDrawn = 0;
-
-      for (let n = 0; n < words.length; n++) {
-        let testLine = line + words[n] + ' ';
-        let metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && n > 0) {
-          ctx.fillText(line, 540, y);
-          line = words[n] + ' ';
-          y += lineHeight;
-          linesDrawn++;
-          if (linesDrawn >= 2) break;
-        } else {
-          line = testLine;
-        }
-      }
-      if (linesDrawn < 2) {
-        ctx.fillText(line, 540, y);
-      }
-
-      // 6. Preços e Desconto
-      // Selo de Desconto redondo
-      ctx.fillStyle = '#ff0055';
-      ctx.beginPath();
-      ctx.arc(880, 1340, 85, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 42px Montserrat, sans-serif';
-      ctx.fillText(`${deal.discount}%`, 880, 1325);
-      ctx.font = 'bold 24px Montserrat, sans-serif';
-      ctx.fillText('OFF', 880, 1360);
-
-      // Preço Original riscado
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-      ctx.font = '36px Outfit, sans-serif';
-      ctx.fillText(`De: ${deal.originalPrice}`, 540, 1430);
-      
-      const origTextWidth = ctx.measureText(`De: ${deal.originalPrice}`).width;
-      ctx.strokeStyle = 'rgba(255, 0, 85, 0.7)';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(540 - (origTextWidth / 2), 1418);
-      ctx.lineTo(540 + (origTextWidth / 2), 1418);
-      ctx.stroke();
-
-      // Preço Promocional em Destaque Verde Neon
-      ctx.fillStyle = '#00ff66';
-      ctx.font = '900 86px Montserrat, sans-serif';
-      ctx.fillText(deal.currentPrice, 540, 1530);
-
-      // Categoria e Subcategoria
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.font = 'italic 30px Outfit, sans-serif';
-      const catInfo = getProductCategoryAndSub(deal.title);
-      ctx.fillText(`Categoria: ${catInfo.icon} ${catInfo.category} > ${catInfo.subcategory}`, 540, 1640);
-
-      // Chamada de Link
-      ctx.fillStyle = platColor;
-      ctx.font = 'bold 36px Outfit, sans-serif';
-      ctx.fillText('👉 Link direto enviado no Grupo!', 540, 1730);
-
-      // Retorna a URL base64 da imagem pronta
-      resolve(canvas.toDataURL('image/jpeg', 0.9));
-    };
-
-    img.onerror = () => reject(new Error('Erro ao carregar imagem via proxy de CORS. O link pode estar inacessível.'));
-  });
-}
-
-// ==========================================
 // Post Flow to WhatsApp
 // ==========================================
 async function postSelectedDeals(platform) {
@@ -821,34 +644,15 @@ async function postSelectedDeals(platform) {
 
   for (let i = 0; i < targetDeals.length; i++) {
     const deal = targetDeals[i];
-    addLog(`[${i+1}/${targetDeals.length}] Renderizando Story via Canvas para: ${deal.title.substring(0, 30)}...`);
-
-    try {
-      const base64Image = await drawStoryOnCanvas(deal, platform);
-      payloadDeals.push({
-        title: deal.title,
-        originalPrice: deal.originalPrice,
-        currentPrice: deal.currentPrice,
-        discount: deal.discount,
-        link: deal.link,
-        category: (() => { const res = getProductCategoryAndSub(deal.title); return `${res.icon} ${res.category} > ${res.subcategory}`; })(),
-        platform: platform,
-        imageBuffer: base64Image
-      });
-      addLog(`✓ Story renderizado com sucesso!`, 'success');
-    } catch (canvasErr) {
-      addLog(`❌ Falha ao renderizar Story: ${canvasErr.message}. Enviando apenas texto.`, 'warning');
-      payloadDeals.push({
-        title: deal.title,
-        originalPrice: deal.originalPrice,
-        currentPrice: deal.currentPrice,
-        discount: deal.discount,
-        link: deal.link,
-        category: (() => { const res = getProductCategoryAndSub(deal.title); return `${res.icon} ${res.category} > ${res.subcategory}`; })(),
-        platform: platform,
-        imageBuffer: null
-      });
-    }
+    addLog(
+      `[${i + 1}/${targetDeals.length}] Preparando Story: ` +
+      `${deal.title.substring(0, 30)}...`
+    );
+    payloadDeals.push({
+      ...deal,
+      platform,
+      comparison: deal.comparison || null
+    });
   }
 
   addLog(`Iniciando envio para o servidor Express...`);
@@ -914,6 +718,89 @@ function escapeQueueHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function renderPriceComparison(data, title) {
+  const googleUrl = data.googleUrl ||
+    `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(title)}`;
+  const matches = Array.isArray(data.matches) ? data.matches : [];
+  const sources = Array.isArray(data.sources) ? data.sources : [];
+  const storesHtml = matches.map(match => `
+    <a
+      class="comparison-store-row"
+      href="${escapeQueueHtml(match.url)}"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <span>${escapeQueueHtml(match.marketplaceLabel)}</span>
+      <strong>${escapeQueueHtml(match.priceText)}</strong>
+      <small>${match.match?.score || 0}% compatível ↗</small>
+    </a>
+  `).join('');
+  const linksHtml = `
+    <div class="comparison-actions">
+      ${sources.map(source => `
+        <a href="${escapeQueueHtml(source.searchUrl)}" target="_blank"
+          rel="noopener noreferrer" class="comparison-link">
+          ${escapeQueueHtml(source.marketplaceLabel)} ↗
+        </a>
+      `).join('')}
+      <a href="${escapeQueueHtml(googleUrl)}" target="_blank"
+        rel="noopener noreferrer" class="comparison-link">
+        Google Shopping ↗
+      </a>
+    </div>
+  `;
+  if (!data.success) {
+    return `
+      <div class="comparison-details comparison-inconclusive">
+        <strong>Sem nota — comparação inconclusiva</strong>
+        <span>${escapeQueueHtml(
+          data.error || 'Não encontramos produtos equivalentes suficientes.'
+        )}</span>
+        ${storesHtml ? `<div class="comparison-store-list">${storesHtml}</div>` : ''}
+        ${linksHtml}
+      </div>
+    `;
+  }
+  const scoreClass = data.score >= 7
+    ? 'is-good'
+    : data.score >= 5
+      ? 'is-normal'
+      : 'is-bad';
+  const savings = Math.abs(Number(data.savingsPercent) || 0)
+    .toLocaleString('pt-BR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    });
+  const position = data.savingsPercent > 2
+    ? `${savings}% abaixo da mediana`
+    : data.savingsPercent < -2
+      ? `${savings}% acima da mediana`
+      : 'Preço semelhante à mediana';
+  return `
+    <div class="comparison-details">
+      <div class="comparison-score-summary">
+        <div class="comparison-score ${scoreClass}">
+          <strong>${escapeQueueHtml(data.score)}</strong><span>/10</span>
+        </div>
+        <div>
+          <strong class="comparison-verdict">${escapeQueueHtml(data.label)}</strong>
+          <span>${position}</span>
+          <small>
+            Mediana ${escapeQueueHtml(data.medianPriceText)} ·
+            confiança ${escapeQueueHtml(data.confidence)}
+          </small>
+        </div>
+      </div>
+      <div class="comparison-store-list">${storesHtml}</div>
+      <p class="comparison-note">
+        ${matches.length} loja(s) equivalente(s) ·
+        ${data.cached ? 'resultado em cache' : 'consulta atualizada'}
+      </p>
+      ${linksHtml}
+    </div>
+  `;
 }
 
 function setQueueFeedback(message, type = 'info') {
@@ -1180,21 +1067,12 @@ async function enqueueDealsForPublication(deals) {
       `${deal.title.substring(0, 45)}...`
     );
     try {
-      const imageBuffer = await drawStoryOnCanvas(deal, 'ml');
       const response = await fetch('/api/publication-queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           platform: 'mercado_livre',
-          deal: {
-            title: deal.title,
-            originalPrice: deal.originalPrice,
-            currentPrice: deal.currentPrice,
-            discount: deal.discount,
-            image: deal.image,
-            link: deal.link
-          },
-          imageBuffer
+          deal
         })
       });
       const data = await response.json();
@@ -1390,11 +1268,13 @@ function renderMLDeals(deals) {
         >
           Preparar para Instagram
         </button>
-        <div class="price-comparison-area" data-title="${displayTitle}">
-          <button type="button" class="btn-compare-buscape" data-title="${displayTitle}">
-            🔍 Comparar Preços
+        <div class="price-comparison-area">
+          <button type="button" class="btn-compare-buscape">
+            ${deal.comparison ? '↻ Atualizar Comparação' : '🔍 Comparar Preços'}
           </button>
-          <div class="comparison-results hidden"></div>
+          <div class="comparison-results ${deal.comparison ? '' : 'hidden'}">
+            ${deal.comparison ? renderPriceComparison(deal.comparison, displayTitle) : ''}
+          </div>
         </div>
         ${deleteBtnHtml}
       </div>
@@ -1496,11 +1376,13 @@ function renderAmazonDeals(deals) {
           <span class="card-orig-price">De: ${deal.originalPrice}</span>
           <span class="card-promo-price">Por: ${deal.currentPrice}</span>
         </div>
-        <div class="price-comparison-area" data-title="${displayTitle}">
-          <button type="button" class="btn-compare-buscape" data-title="${displayTitle}">
-            🔍 Comparar Preços
+        <div class="price-comparison-area">
+          <button type="button" class="btn-compare-buscape">
+            ${deal.comparison ? '↻ Atualizar Comparação' : '🔍 Comparar Preços'}
           </button>
-          <div class="comparison-results hidden"></div>
+          <div class="comparison-results ${deal.comparison ? '' : 'hidden'}">
+            ${deal.comparison ? renderPriceComparison(deal.comparison, displayTitle) : ''}
+          </div>
         </div>
         ${deleteBtnHtml}
       </div>
@@ -2005,121 +1887,49 @@ function init() {
 // Listener de clique para o comparador de preços
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.btn-compare-buscape');
-  if (btn) {
-    e.stopPropagation();
-    e.preventDefault();
-    
-    const title = btn.dataset.title;
-    const card = btn.closest('.deal-card');
-    const resultsDiv = btn.nextElementSibling;
-    const platform = card.classList.contains('amazon-theme') ? 'amazon' : 'ml';
-    const index = parseInt(card.dataset.index, 10);
-    
-    btn.disabled = true;
-    btn.innerHTML = '<span class="comp-spinner"></span> Consultando...';
-    resultsDiv.classList.remove('hidden');
-    resultsDiv.innerHTML = '<div class="comparison-loading">Buscando menor preço em 3 buscadores...</div>';
-    
-    try {
-      const deal = platform === 'ml' ? allMLDeals[index] : allAmazonDeals[index];
-      const cleanCurrentPriceStr = deal.currentPrice.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-      const currentPriceVal = parseFloat(cleanCurrentPriceStr) || 0;
-      
-      const response = await fetch(`/api/compare-price?q=${encodeURIComponent(title)}&price=${currentPriceVal}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        // Salva os dados de comparação no estado local da oferta
-        deal.comparison = {
-          minPrice: data.minPrice,
-          priceText: data.priceText,
-          url: data.url,
-          sourcesCount: data.sourcesCount,
-          checkedAt: data.checkedAt
-        };
-        
-        // Calcula a economia
-        const diff = data.minPrice - currentPriceVal;
-        const tolerance = currentPriceVal * 0.02; // tolerância de 2%
-        
-        let statusHtml = '';
-        if (diff > tolerance) {
-          statusHtml = `<span class="comparison-badge badge-real">Economia: R$ ${diff.toFixed(2).replace('.', ',')}! 📉</span>`;
-        } else if (diff < -tolerance) {
-          statusHtml = `<span class="comparison-badge badge-alert">⚠️ Preço Acima do Mercado</span>`;
-        } else {
-          statusHtml = `<span class="comparison-badge badge-eq">Preço Equivalente ⚖️</span>`;
-        }
-        
-        let buscapeHtml = data.buscape 
-          ? `<div class="provider-col">
-              <span class="provider-name">Buscapé 🔎</span>
-              <span class="provider-price">${data.buscape.priceText}</span>
-              <a href="${data.buscape.url}" target="_blank" rel="noopener noreferrer" class="provider-link">Ir 🔗</a>
-             </div>`
-          : `<div class="provider-col disabled">
-              <span class="provider-name">Buscapé 🔎</span>
-              <span class="provider-price">N/A</span>
-             </div>`;
-             
-        let zoomHtml = data.zoom 
-          ? `<div class="provider-col">
-              <span class="provider-name">Zoom ⚡</span>
-              <span class="provider-price">${data.zoom.priceText}</span>
-              <a href="${data.zoom.url}" target="_blank" rel="noopener noreferrer" class="provider-link">Ir 🔗</a>
-             </div>`
-          : `<div class="provider-col disabled">
-              <span class="provider-name">Zoom ⚡</span>
-              <span class="provider-price">N/A</span>
-             </div>`;
+  if (!btn) return;
+  e.stopPropagation();
+  e.preventDefault();
 
-        let bondfaroHtml = data.bondfaro 
-          ? `<div class="provider-col">
-              <span class="provider-name">Bondfaro 🏷️</span>
-              <span class="provider-price">${data.bondfaro.priceText}</span>
-              <a href="${data.bondfaro.url}" target="_blank" rel="noopener noreferrer" class="provider-link">Ir 🔗</a>
-             </div>`
-          : `<div class="provider-col disabled">
-              <span class="provider-name">Bondfaro 🏷️</span>
-              <span class="provider-price">N/A</span>
-             </div>`;
+  const card = btn.closest('.deal-card');
+  const resultsDiv = btn.nextElementSibling;
+  const platform = card.classList.contains('amazon-theme') ? 'amazon' : 'ml';
+  const index = Number.parseInt(card.dataset.index, 10);
+  const deal = platform === 'ml' ? allMLDeals[index] : allAmazonDeals[index];
 
-        resultsDiv.innerHTML = `
-          <div class="comparison-details">
-            <div class="comparison-providers">
-              ${buscapeHtml}
-              ${zoomHtml}
-              ${bondfaroHtml}
-            </div>
-            <div class="comparison-summary">
-              <p class="comp-price-row">Menor preço semelhante encontrado: <strong>${data.priceText}</strong></p>
-              <p class="comparison-note">
-                Estimativa com ${data.sourcesCount || 1} comparador(es). Confirme modelo, frete e vendedor.
-              </p>
-              ${statusHtml}
-            </div>
-          </div>
-        `;
-        btn.style.display = 'none'; // esconde o botão após sucesso
-      } else {
-        resultsDiv.innerHTML = `
-          <div class="comparison-error">
-            <span>⚠️ Preço não encontrado.</span>
-            <div class="manual-links-row">
-              <a href="https://www.buscape.com.br/search?q=${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer" class="comparison-link">Buscapé 🔗</a>
-              <a href="https://www.zoom.com.br/search?q=${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer" class="comparison-link">Zoom 🔗</a>
-              <a href="https://www.bondfaro.com.br/search?q=${encodeURIComponent(title)}" target="_blank" rel="noopener noreferrer" class="comparison-link">Bondfaro 🔗</a>
-            </div>
-          </div>
-        `;
-        btn.textContent = 'Comparar Preços';
-        btn.disabled = false;
-      }
-    } catch (err) {
-      resultsDiv.innerHTML = `<div class="comparison-error">Erro de rede ao consultar.</div>`;
-      btn.textContent = 'Comparar Preços';
-      btn.disabled = false;
-    }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="comp-spinner"></span> Consultando...';
+  resultsDiv.classList.remove('hidden');
+  resultsDiv.innerHTML =
+    '<div class="comparison-loading">Comparando em 4 marketplaces...</div>';
+
+  try {
+    const cleanPrice = deal.currentPrice
+      .replace('R$', '')
+      .replace(/\s/g, '')
+      .replace(/\./g, '')
+      .replace(',', '.');
+    const params = new URLSearchParams({
+      q: deal.title,
+      price: Number.parseFloat(cleanPrice) || 0,
+      sourceUrl: deal.link || ''
+    });
+    const response = await fetch(`/api/compare-price?${params}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Falha na comparação.');
+
+    deal.comparison = data;
+    resultsDiv.innerHTML = renderPriceComparison(data, deal.title);
+    btn.textContent = '↻ Atualizar Comparação';
+  } catch (err) {
+    resultsDiv.innerHTML = `
+      <div class="comparison-error">
+        ${escapeQueueHtml(err.message || 'Erro de rede ao consultar.')}
+      </div>
+    `;
+    btn.textContent = 'Comparar Preços';
+  } finally {
+    btn.disabled = false;
   }
 });
 

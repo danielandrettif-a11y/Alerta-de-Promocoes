@@ -103,10 +103,6 @@ const couponConfirmationsPath = path.join(
   APP_RUNTIME_DIR,
   'coupon_confirmations.json'
 );
-const priceComparisonCachePath = path.join(
-  APP_RUNTIME_DIR,
-  'price_comparison_cache.json'
-);
 const marketplaceSearchCachePath = path.join(
   APP_RUNTIME_DIR,
   'marketplace_search_cache.json'
@@ -364,20 +360,6 @@ function requirePublicationQueue(req, res, next) {
   next();
 }
 
-function decodeStoryImage(dataUrl) {
-  const match = String(dataUrl || '').match(
-    /^data:image\/(?:jpeg|jpg|png);base64,([A-Za-z0-9+/=\r\n]+)$/
-  );
-  if (!match) {
-    throw new Error('Imagem do Story ausente ou invalida.');
-  }
-  const buffer = Buffer.from(match[1], 'base64');
-  if (buffer.length === 0 || buffer.length > 15 * 1024 * 1024) {
-    throw new Error('Imagem do Story vazia ou maior que 15 MB.');
-  }
-  return buffer;
-}
-
 // Fila assistida: organiza o Story, mas nunca gera o link afiliado.
 app.get('/api/publication-queue', (req, res) => {
   if (!publicationQueueEnabled) {
@@ -422,12 +404,13 @@ app.post(
       });
 
       if (result.created) {
-        const storyImage = decodeStoryImage(req.body?.imageBuffer);
+        const { coupons } = loadAvailableDeals();
+        const storyImagePath = generateStory(deal, coupons);
         fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
         result.item.storyFile = `${result.item.id}.jpg`;
-        fs.writeFileSync(
+        fs.copyFileSync(
+          storyImagePath,
           path.join(publicationQueueAssetsPath, result.item.storyFile),
-          storyImage
         );
         savePublicationQueue(publicationQueuePath, result.queue);
       }
@@ -737,22 +720,31 @@ function cleanSearchQuery(title) {
 // Comparador principal: valida similaridade, reutiliza cache persistente e
 // deixa claro que o resultado é uma estimativa automática.
 app.get('/api/compare-price', async (req, res) => {
+  if (process.env.MARKETPLACE_SEARCH_ENABLED === 'false') {
+    return res.status(503).json({ error: 'Comparação de preços desativada.' });
+  }
   const query = String(req.query.q || '').trim();
-  if (!query) {
-    return res.status(400).json({ error: 'Parâmetro q é obrigatório' });
+  if (query.length < 2 || query.length > 300) {
+    return res.status(400).json({
+      error: 'Informe um produto com 2 a 300 caracteres.'
+    });
   }
   const comparison = await compareProductPrices({
     title: query,
     currentPrice: req.query.price,
-    cachePath: priceComparisonCachePath,
-    cacheMinutes: Number(process.env.PRICE_COMPARISON_CACHE_MINUTES) || 360
+    sourceUrl: String(req.query.sourceUrl || ''),
+    cachePath: marketplaceSearchCachePath,
+    cacheMinutes:
+      Number(process.env.MARKETPLACE_SEARCH_CACHE_MINUTES) || 30,
+    maxPerMarketplace: Math.min(
+      8,
+      Math.max(
+        1,
+        Number(process.env.MARKETPLACE_SEARCH_RESULTS_PER_SITE) || 4
+      )
+    )
   });
-  res.json({
-    ...comparison,
-    buscape: comparison.providers?.buscape || null,
-    zoom: comparison.providers?.zoom || null,
-    bondfaro: comparison.providers?.bondfaro || null
-  });
+  res.json(comparison);
 });
 
 // Pesquisa manual e isolada em marketplaces. Esta rota apenas devolve links:
@@ -959,62 +951,48 @@ app.get('/api/compare-price-legacy', async (req, res) => {
   }
 });
 
-// POST /api/generate - Recebe as ofertas prontas e imagens do Canvas, envia para o WhatsApp de forma síncrona e retorna os IDs das mensagens
+// POST /api/generate - Gera os Stories no template compartilhado e envia ao WhatsApp.
 app.post('/api/generate', async (req, res) => {
-  const { selectedDeals } = req.body; // Array de objetos contendo dados da oferta + imagem base64
+  const { selectedDeals } = req.body;
   
   if (!Array.isArray(selectedDeals) || selectedDeals.length === 0) {
     return res.status(400).json({ error: 'Nenhuma oferta selecionada para envio.' });
   }
 
-  console.log(`\n📤 [Painel Web] Iniciando envio manual de ${selectedDeals.length} ofertas via Canvas para o WhatsApp...`);
-  const tempDir = path.join(__dirname, '.tmp');
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+  console.log(`\n📤 [Painel Web] Gerando e enviando ${selectedDeals.length} ofertas para o WhatsApp...`);
 
   const results = [];
+  const { coupons } = loadAvailableDeals();
 
   try {
     for (let i = 0; i < selectedDeals.length; i++) {
       const deal = selectedDeals[i];
       console.log(`📦 Processando envio [${i + 1}/${selectedDeals.length}]: ${deal.title.substring(0, 40)}...`);
 
-      let tempImagePath = null;
-
-      // Converte Base64 do Canvas para arquivo de imagem temporário
-      if (deal.imageBuffer && deal.imageBuffer.startsWith('data:image')) {
-        try {
-          const base64Data = deal.imageBuffer.replace(/^data:image\/\w+;base64,/, "");
-          const buffer = Buffer.from(base64Data, 'base64');
-          tempImagePath = path.join(tempDir, `canvas_story_temp_${Date.now()}_${i}.jpg`);
-          fs.writeFileSync(tempImagePath, buffer);
-        } catch (err) {
-          console.error(`   ❌ Falha ao converter imagem do Canvas para buffer: ${err.message}`);
-        }
+      let storyImagePath;
+      try {
+        storyImagePath = generateStory(deal, coupons);
+      } catch (err) {
+        console.error(`   ❌ Falha ao gerar Story: ${err.message}`);
+        results.push({
+          dealId: generateDealId(deal),
+          title: deal.title,
+          success: false,
+          error: err.message
+        });
+        continue;
       }
 
       // Prepara mensagem de legenda formatada
       const platformTag = deal.platform === 'amazon' ? '🟡 *AMAZON*' : '🛍️ *MERCADO LIVRE*';
       const category = inferCategory(deal.title);
       
-      let comparison = deal.comparison?.priceText
-        ? { success: true, sourcesCount: 1, ...deal.comparison }
+      const comparison = deal.comparison?.success
+        ? deal.comparison
         : null;
-      if (
-        !comparison &&
-        process.env.PRICE_COMPARISON_ENABLED !== 'false'
-      ) {
-        comparison = await compareProductPrices({
-          title: deal.title,
-          currentPrice: deal.currentPrice,
-          cachePath: priceComparisonCachePath,
-          cacheMinutes:
-            Number(process.env.PRICE_COMPARISON_CACHE_MINUTES) || 360
-        });
-      }
-      const comparisonText = buildWhatsappComparison(
-        comparison,
-        deal.currentPrice
-      );
+      const comparisonText = comparison
+        ? buildWhatsappComparison(comparison, deal.currentPrice)
+        : '';
       
       const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*${comparisonText}\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
 
@@ -1023,7 +1001,7 @@ app.post('/api/generate', async (req, res) => {
       let sentSuccess = false;
       if (whatsapp && whatsapp.client.info) {
         try {
-          msgId = await whatsapp.sendOffer(GROUP_NAME, wppMessage, tempImagePath);
+          msgId = await whatsapp.sendOffer(GROUP_NAME, wppMessage, storyImagePath);
           console.log(`   ✅ Oferta postada com sucesso! MsgID: ${msgId}`);
           sentSuccess = true;
         } catch (wppErr) {
@@ -1031,13 +1009,6 @@ app.post('/api/generate', async (req, res) => {
         }
       } else {
         console.warn(`   ⚠️ WhatsApp desconectado ou indisponível no servidor.`);
-      }
-
-      // Remove arquivo temporário se gerado
-      if (tempImagePath && fs.existsSync(tempImagePath)) {
-        try {
-          fs.unlinkSync(tempImagePath);
-        } catch (e) {}
       }
 
       // Registra no histórico de publicados
@@ -1059,7 +1030,13 @@ app.post('/api/generate', async (req, res) => {
             source: 'manual',
             comparison: comparison?.success ? {
               minPrice: comparison.minPrice,
+              minPriceText: comparison.minPriceText,
+              medianPrice: comparison.medianPrice,
+              medianPriceText: comparison.medianPriceText,
               priceText: comparison.priceText,
+              score: comparison.score,
+              label: comparison.label,
+              confidence: comparison.confidence,
               sourcesCount: comparison.sourcesCount,
               checkedAt: comparison.checkedAt
             } : null
@@ -1250,7 +1227,7 @@ function loadAvailableDeals() {
   return { deals, coupons };
 }
 
-function generateAutomaticStory(deal, coupons) {
+function generateStory(deal, coupons) {
   const storiesDir = path.join(APP_RUNTIME_DIR, 'automatic_stories');
   const selectionPath = path.join(
     APP_RUNTIME_DIR,
@@ -1324,25 +1301,12 @@ async function publishNextAutomaticOffer() {
       return;
     }
 
-    const comparison = env.PRICE_COMPARISON_ENABLED === 'false'
-      ? { success: false, error: 'Comparação desativada.' }
-      : await compareProductPrices({
-          title: deal.title,
-          currentPrice: deal.currentPrice,
-          cachePath: priceComparisonCachePath,
-          cacheMinutes:
-            Number(env.PRICE_COMPARISON_CACHE_MINUTES) || 360
-        });
-    const comparisonText = buildWhatsappComparison(
-      comparison,
-      deal.currentPrice
-    );
-    const storyImagePath = generateAutomaticStory(deal, coupons);
+    const storyImagePath = generateStory(deal, coupons);
     const platformTag = deal.platform === 'amazon'
       ? '🟡 *AMAZON*'
       : '🛍️ *MERCADO LIVRE*';
     const category = inferCategory(deal.title);
-    const wppMessage = `🔥 *OFERTA ENCONTRADA!*\n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*${comparisonText}\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
+    const wppMessage = `🔥 *OFERTA ENCONTRADA!*\n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
     const msgId = await whatsapp.sendOffer(
       GROUP_NAME,
       wppMessage,
@@ -1363,12 +1327,7 @@ async function publishNextAutomaticOffer() {
       source: 'auto',
       dealType: deal.dealType || 'Ofertas de Campanha',
       timeLeft: deal.timeLeft || '',
-      comparison: comparison?.success ? {
-        minPrice: comparison.minPrice,
-        priceText: comparison.priceText,
-        sourcesCount: comparison.sourcesCount,
-        checkedAt: comparison.checkedAt
-      } : null
+      comparison: null
     });
     saveHistory(historyPath, history);
     console.log(

@@ -15,6 +15,8 @@ os resultados com as ofertas coletadas e sem criar qualquer ação no WhatsApp.
    diário, na geração de Stories ou no cliente do WhatsApp.
 5. As barras dentro das abas Mercado Livre e Amazon continuam sendo filtros
    locais das ofertas já carregadas.
+6. O botão **Comparar Preços** de cada oferta reutiliza esta mesma busca apenas
+   quando clicado, valida produtos equivalentes e calcula mediana e nota.
 
 ## Execução
 
@@ -24,11 +26,14 @@ os resultados com as ofertas coletadas e sem criar qualquer ação no WhatsApp.
 - Links são aceitos somente quando usam HTTPS e pertencem ao domínio esperado.
 - Resultados precisam ter correspondência mínima com os termos pesquisados.
 - Falha em um marketplace não invalida os resultados dos demais.
+- A comparação usa no máximo um resultado validado por marketplace para que
+  uma loja com muitos anúncios não distorça a mediana.
+- A nota exige pelo menos dois marketplaces equivalentes.
 
 ## Variáveis
 
 - `MARKETPLACE_SEARCH_ENABLED`: habilita a rota; padrão `true`.
-- `MARKETPLACE_SEARCH_CACHE_MINUTES`: validade do cache; padrão 30.
+- `MARKETPLACE_SEARCH_CACHE_MINUTES`: validade compartilhada do cache; padrão 30.
 - `MARKETPLACE_SEARCH_RESULTS_PER_SITE`: de 1 a 8; padrão 4.
 
 ## Validação

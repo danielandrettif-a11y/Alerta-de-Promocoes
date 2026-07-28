@@ -13,35 +13,51 @@
     /* Definição de Variáveis por Tema de Oferta (Azul, Amarelo e Vermelho Fraco) */
     :root {
       /* Tema Padrão: Oferta do Dia (Amarelo de Atenção) */
-      --bg-color-start: #faf0d2;     /* Amarelo manteiga pastel */
-      --bg-color-end: #f4e3b5;
+      --bg-color-start: #160e00;
+      --bg-color-center: #875500;
+      --bg-color-end: #0e0800;
+      --bg-glow: rgba(212, 134, 0, 0.56);
+      --card-glow: rgba(255, 171, 35, 0.68);
+      --watermark-stroke: rgba(255, 205, 92, 0.38);
       --accent-color: #1e150a;       /* Marrom super escuro / Quase preto */
       --accent-text: #ffffff;
       --shadow-color: rgba(30, 21, 10, 0.12);
       --text-muted: #6e5f4f;
       --badge-border: rgba(30, 21, 10, 0.12);
+      --outer-text: #ffffff;
+      --outer-muted: #f1d497;
     }
 
     /* Tema: Ofertas de Campanha (Frio - Azul Suave) */
     body.theme-camp {
-      --bg-color-start: #dbe7fc;     /* Azul bebê/cinzento pastel */
-      --bg-color-end: #c4d7f7;
+      --bg-color-start: #020c1d;
+      --bg-color-center: #082b63;
+      --bg-color-end: #020b1a;
+      --bg-glow: rgba(18, 82, 171, 0.48);
+      --card-glow: rgba(40, 125, 255, 0.72);
+      --watermark-stroke: rgba(145, 181, 244, 0.36);
       --accent-color: #0c2340;       /* Azul marinho profundo */
       --accent-text: #ffffff;
       --shadow-color: rgba(12, 35, 64, 0.12);
       --text-muted: #536985;
       --badge-border: rgba(12, 35, 64, 0.12);
+      --outer-muted: #b9c9e5;
     }
 
     /* Tema: Oferta Relâmpago (Urgência - Vermelho Fraco / Rosa) */
     body.theme-lightning {
-      --bg-color-start: #fcdbd9;     /* Vermelho fraco / Rosa pastel */
-      --bg-color-end: #f7bec0;
+      --bg-color-start: #21060a;
+      --bg-color-center: #821b29;
+      --bg-color-end: #140307;
+      --bg-glow: rgba(172, 31, 49, 0.52);
+      --card-glow: rgba(228, 49, 70, 0.7);
+      --watermark-stroke: rgba(255, 142, 153, 0.38);
       --accent-color: #8c1d20;       /* Vermelho escuro carmesim */
       --accent-text: #ffffff;
       --shadow-color: rgba(140, 29, 32, 0.12);
       --text-muted: #825254;
       --badge-border: rgba(140, 29, 32, 0.12);
+      --outer-muted: #f0bec4;
     }
 
     * {
@@ -53,9 +69,16 @@
     body {
       width: 1080px;
       height: 1920px;
-      background: linear-gradient(180deg, var(--bg-color-start) 0%, var(--bg-color-end) 100%);
+      background:
+        radial-gradient(circle at 50% 35%, var(--bg-glow), transparent 42%),
+        linear-gradient(
+          145deg,
+          var(--bg-color-start) 0%,
+          var(--bg-color-center) 52%,
+          var(--bg-color-end) 100%
+        );
       font-family: 'Outfit', sans-serif;
-      color: var(--accent-color);
+      color: var(--outer-text);
       overflow: hidden;
       position: relative;
       display: flex;
@@ -66,39 +89,44 @@
       transition: background 0.3s ease;
     }
 
-    /* Elementos tipográficos de fundo elegantes (Editorial Style) */
-    .bg-text-left {
+    /* Padrão editorial de marca d'água */
+    .watermark-layer {
       position: absolute;
-      left: -80px;
-      top: 25%;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-      font-family: 'Montserrat', sans-serif;
-      font-size: 110px;
-      font-weight: 900;
-      color: rgba(14, 14, 14, 0.01);
-      -webkit-text-stroke: 1.5px rgba(14, 14, 14, 0.03);
-      letter-spacing: 15px;
+      inset: 0;
+      width: 100%;
+      height: 100%;
       z-index: 1;
-      text-transform: uppercase;
+      color: var(--watermark-stroke);
       pointer-events: none;
+      overflow: hidden;
     }
 
-    .bg-text-right {
-      position: absolute;
-      right: -80px;
-      bottom: 25%;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
+    .watermark-layer text {
       font-family: 'Montserrat', sans-serif;
-      font-size: 110px;
       font-weight: 900;
-      color: rgba(14, 14, 14, 0.01);
-      -webkit-text-stroke: 1.5px rgba(14, 14, 14, 0.03);
-      letter-spacing: 15px;
-      z-index: 1;
-      text-transform: uppercase;
-      pointer-events: none;
+      fill: transparent;
+      stroke: currentColor;
+      stroke-width: 4px;
+      paint-order: stroke;
+      opacity: 0.75;
+    }
+
+    .watermark-layer .wm-name {
+      font-size: 52px;
+      letter-spacing: 2px;
+    }
+
+    .watermark-layer .wm-ad {
+      font-family: 'Outfit', sans-serif;
+      font-size: 68px;
+      font-style: italic;
+      letter-spacing: 0;
+    }
+
+    .watermark-layer line {
+      stroke: currentColor;
+      stroke-width: 2px;
+      opacity: 0.5;
     }
 
     /* Header - Nome da Página (Fonte Montserrat Modificada) */
@@ -117,7 +145,7 @@
       font-size: 34px;
       font-weight: 900;
       letter-spacing: 6px;
-      color: var(--accent-color);
+      color: var(--outer-text);
       text-transform: uppercase;
       display: flex;
       align-items: center;
@@ -129,12 +157,12 @@
       display: inline-block;
       width: 25px;
       height: 4px;
-      background-color: var(--accent-color);
+      background-color: var(--outer-text);
     }
 
     .header-tagline {
       font-size: 20px;
-      color: var(--text-muted);
+      color: var(--outer-muted);
       font-weight: 700;
       letter-spacing: 4px;
       text-transform: uppercase;
@@ -153,7 +181,10 @@
       flex-direction: column;
       justify-content: space-between;
       border: 3px solid var(--accent-color);
-      box-shadow: 20px 20px 0px var(--shadow-color);
+      box-shadow:
+        0 0 0 2px rgba(115, 178, 255, 0.35),
+        0 0 34px var(--card-glow),
+        20px 20px 0 var(--shadow-color);
       position: relative;
     }
 
@@ -395,7 +426,7 @@
     .cta-text {
       font-size: 32px;
       font-weight: 900;
-      color: var(--accent-color);
+      color: var(--outer-text);
       text-transform: uppercase;
       letter-spacing: 2px;
       text-align: center;
@@ -404,7 +435,7 @@
 
     .cta-subtext {
       font-size: 22px;
-      color: var(--text-muted);
+      color: var(--outer-muted);
       font-weight: 600;
       text-align: center;
       margin-bottom: 10px;
@@ -427,7 +458,7 @@
       height: 0;
       border-left: 16px solid transparent;
       border-right: 16px solid transparent;
-      border-top: 20px solid var(--accent-color);
+      border-top: 20px solid var(--outer-text);
       animation: bounce 1.2s infinite;
     }
 
@@ -440,8 +471,22 @@
 <body class="{{THEME_CLASS}}">
 
   <!-- Background decorative text outlines -->
-  <div class="bg-text-left">Alerta de Descontos</div>
-  <div class="bg-text-right">Ofertas Editoriais</div>
+  <svg class="watermark-layer" viewBox="0 0 1080 1920" aria-hidden="true">
+    <defs>
+      <pattern id="brand-watermarks" width="800" height="315" patternUnits="userSpaceOnUse"
+        patternTransform="rotate(-28)">
+        <text class="wm-name" x="30" y="82">ALERTA DE DESCONTOS</text>
+        <text class="wm-ad" x="630" y="230">A</text>
+        <text class="wm-ad" x="672" y="260">D</text>
+        <line x1="70" y1="235" x2="260" y2="235"></line>
+      </pattern>
+      <pattern id="brand-watermarks-between" href="#brand-watermarks"
+        width="800" height="315" patternUnits="userSpaceOnUse"
+        patternTransform="translate(0 158) rotate(-28)"></pattern>
+    </defs>
+    <rect width="1080" height="1920" fill="url(#brand-watermarks)"></rect>
+    <rect width="1080" height="1920" fill="url(#brand-watermarks-between)"></rect>
+  </svg>
 
   <!-- Header -->
   <div class="header">

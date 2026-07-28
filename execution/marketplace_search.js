@@ -350,6 +350,19 @@ async function searchMarketplaces({
       )
     );
     const results = dedupeResults(sources.flatMap(source => source.results));
+    if (sources.every(source => source.error)) {
+      return {
+        success: false,
+        error: 'Todos os marketplaces bloquearam ou falharam na consulta.',
+        sources: sources.map(source => ({
+          marketplace: source.marketplace,
+          marketplaceLabel: source.marketplaceLabel,
+          searchUrl: source.searchUrl,
+          count: 0,
+          error: source.error
+        }))
+      };
+    }
     const response = {
       success: true,
       query: String(query).trim(),
