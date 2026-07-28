@@ -24,7 +24,11 @@ test('envio ao WhatsApp não informa sucesso sem confirmação', () => {
   assert.match(whatsapp, /targetChat\?\.isReadOnly/);
   assert.match(whatsapp, /sendSeen: false/);
   assert.match(whatsapp, /linkPreview: false/);
-  assert.match(whatsapp, /waitUntilMsgSent: true/);
+  assert.doesNotMatch(whatsapp, /waitUntilMsgSent: true/);
+  assert.doesNotMatch(
+    whatsapp,
+    /scheduleReconnect\(`Falha interna durante envio: \$\{rawMessage\}`\)/
+  );
   assert.match(whatsapp, /reconnectTimer \|\| reconnectInProgress/);
   assert.match(whatsapp, /await initializeClient\(\)/);
   assert.match(whatsapp, /clearTimeout\(reconnectTimer\)/);

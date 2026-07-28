@@ -891,8 +891,7 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
       let sentMsg;
       const sendOptions = {
         sendSeen: false,
-        linkPreview: false,
-        waitUntilMsgSent: true
+        linkPreview: false
       };
       if (imagePath && fs.existsSync(imagePath)) {
         console.log(`📸 Preparando mídia: ${path.basename(imagePath)}`);
@@ -928,10 +927,9 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
       console.error('❌ Falha no envio da mensagem:', rawMessage, err?.stack || '');
 
       if (/^Evaluation failed:\s*[a-z]$/i.test(rawMessage) || /^[a-z]$/i.test(rawMessage)) {
-        scheduleReconnect(`Falha interna durante envio: ${rawMessage}`);
         reject(new Error(
-          'O WhatsApp Web recusou o envio e a sessão será reconectada. ' +
-          'Aguarde o status voltar para conectado e tente novamente.'
+          'O WhatsApp Web recusou este envio, mas a sessão foi mantida conectada. ' +
+          'Tente novamente.'
         ));
         return;
       }
