@@ -22,8 +22,13 @@ test('envio ao WhatsApp não informa sucesso sem confirmação', () => {
   assert.doesNotMatch(whatsapp, /120363410833991285@g\.us/);
   assert.match(whatsapp, /liveState !== 'CONNECTED'/);
   assert.match(whatsapp, /targetChat\?\.isReadOnly/);
-  assert.match(whatsapp, /sendSeen: false/);
-  assert.match(whatsapp, /linkPreview: false/);
+  assert.match(
+    whatsapp,
+    /client\.sendMessage\(chatId, media, \{ caption: messageText \}\)/
+  );
+  assert.match(whatsapp, /client\.sendMessage\(chatId, messageText\)/);
+  assert.doesNotMatch(whatsapp, /sendSeen: false/);
+  assert.doesNotMatch(whatsapp, /linkPreview: false/);
   assert.doesNotMatch(whatsapp, /waitUntilMsgSent: true/);
   assert.doesNotMatch(
     whatsapp,

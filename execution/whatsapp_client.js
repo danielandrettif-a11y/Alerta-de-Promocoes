@@ -889,22 +889,15 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
       console.log(`📌 Destinatário resolvido: ID = ${chatId}`);
 
       let sentMsg;
-      const sendOptions = {
-        sendSeen: false,
-        linkPreview: false
-      };
       if (imagePath && fs.existsSync(imagePath)) {
         console.log(`📸 Preparando mídia: ${path.basename(imagePath)}`);
         const media = MessageMedia.fromFilePath(imagePath);
         
         console.log(`📤 Enviando imagem + texto...`);
-        sentMsg = await client.sendMessage(chatId, media, {
-          ...sendOptions,
-          caption: messageText
-        });
+        sentMsg = await client.sendMessage(chatId, media, { caption: messageText });
       } else {
         console.log(`📤 Enviando apenas texto...`);
-        sentMsg = await client.sendMessage(chatId, messageText, sendOptions);
+        sentMsg = await client.sendMessage(chatId, messageText);
       }
 
       console.log('✅ Mensagem enviada com sucesso!');
