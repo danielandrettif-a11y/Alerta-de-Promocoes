@@ -71,6 +71,27 @@ function decodeHtmlEntities(str) {
     .replace(/&gt;/g, '>');
 }
 
+function extractProductImage(cardHtml) {
+  const imageTags = String(cardHtml || '').match(/<img\b[^>]*>/gi) || [];
+  const imageTag = imageTags.find(tag =>
+    /class=["'][^"']*poly-component__picture/i.test(tag)
+  );
+  if (!imageTag) return '';
+
+  for (const attribute of ['data-src', 'data-lazy-src', 'src']) {
+    const match = imageTag.match(
+      new RegExp(`\\b${attribute}=["']([^"']+)["']`, 'i')
+    );
+    const value = decodeHtmlEntities(match?.[1] || '');
+    if (/^https:\/\//i.test(value)) return value;
+  }
+
+  const srcset = decodeHtmlEntities(
+    imageTag.match(/\bsrcset=["']([^"']+)["']/i)?.[1] || ''
+  );
+  return srcset.split(',')[0]?.trim().split(/\s+/)[0] || '';
+}
+
 async function scrapeLiveCoupons() {
   console.log("Buscando cupons ativos na Cuponomia...");
   const scraped = [];
@@ -190,8 +211,7 @@ async function main() {
         const link = titleLinkMatch[1].split('#')[0]; // Clean query anchors
         const title = titleLinkMatch[2].replace(/<[^>]*>/g, '').trim();
 
-        const imgMatch = card.match(/<img class="poly-component__picture"[^>]*src="([^"]+)"/i);
-        const image = imgMatch ? imgMatch[1] : '';
+        const image = extractProductImage(card);
 
         const ratingMatch = card.match(/Classificação\s+([0-9.]+)\s+de\s+5\s+estrelas\.\s*([^<]*)/i);
         const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
@@ -433,4 +453,8 @@ Ordenados por **Avaliação (Estrelas)** e depois por **Percentual de Desconto**
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { extractProductImage };

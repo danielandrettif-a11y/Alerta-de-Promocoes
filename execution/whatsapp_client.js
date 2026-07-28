@@ -241,6 +241,7 @@ const connectionState = {
 };
 
 let reconnectTimer = null;
+let reconnectInProgress = false;
 let initializationInProgress = false;
 
 function updateConnectionState(status, details = {}) {
@@ -258,7 +259,7 @@ function getConnectionStatus() {
 }
 
 function scheduleReconnect(reason) {
-  if (reconnectTimer) return;
+  if (reconnectTimer || reconnectInProgress) return;
 
   connectionState.reconnectAttempts += 1;
   const exponent = Math.min(connectionState.reconnectAttempts - 1, 6);
@@ -285,43 +286,57 @@ function scheduleReconnect(reason) {
 
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
-
-    if (
-      profileLockDetected &&
-      Date.now() - processStartedAt >= profileLockGraceMs
-    ) {
-      const removedLocks = clearStaleChromeProfileLocks();
-      profileLockDetected = false;
-
-      // O whatsapp-web.js/Puppeteer pode manter estado interno inutilizavel
-      // depois que o primeiro launch falha com Code 21. Reiniciar o processo
-      // cria um Client limpo e preserva toda a autenticacao no volume /data.
-      // No Coolify, a politica de restart do servico sobe o mesmo container
-      // novamente assim que as travas transitorias ja foram removidas.
-      if (
-        removedLocks.length > 0 &&
-        process.env.NODE_ENV === 'production'
-      ) {
-        console.warn(
-          '[WhatsApp] Perfil destravado. Reiniciando o processo para reconectar com um cliente limpo.'
-        );
-        // 75 e um codigo reservado para recuperacao temporaria. O supervisor
-        // do container reinicia apenas neste caso; outras falhas continuam
-        // visiveis ao Coolify.
-        setTimeout(() => process.exit(75), 1000);
-        return;
-      }
-    }
+    reconnectInProgress = true;
 
     try {
-      await Promise.race([
-        client.destroy(),
-        new Promise(resolve => setTimeout(resolve, 5000))
-      ]);
-    } catch {
-      // O browser pode ja estar encerrado.
+      if (
+        profileLockDetected &&
+        Date.now() - processStartedAt >= profileLockGraceMs
+      ) {
+        const removedLocks = clearStaleChromeProfileLocks();
+        profileLockDetected = false;
+
+        // O whatsapp-web.js/Puppeteer pode manter estado interno inutilizavel
+        // depois que o primeiro launch falha com Code 21. Reiniciar o processo
+        // cria um Client limpo e preserva toda a autenticacao no volume /data.
+        // No Coolify, a politica de restart do servico sobe o mesmo container
+        // novamente assim que as travas transitorias ja foram removidas.
+        if (
+          removedLocks.length > 0 &&
+          process.env.NODE_ENV === 'production'
+        ) {
+          console.warn(
+            '[WhatsApp] Perfil destravado. Reiniciando o processo para reconectar com um cliente limpo.'
+          );
+          // 75 e um codigo reservado para recuperacao temporaria. O supervisor
+          // do container reinicia apenas neste caso; outras falhas continuam
+          // visiveis ao Coolify.
+          setTimeout(() => process.exit(75), 1000);
+          return;
+        }
+      }
+
+      try {
+        await Promise.race([
+          client.destroy(),
+          new Promise(resolve => setTimeout(resolve, 5000))
+        ]);
+      } catch {
+        // O browser pode ja estar encerrado.
+      }
+      await initializeClient();
+    } finally {
+      reconnectInProgress = false;
+      const retryable = [
+        'error',
+        'disconnected',
+        'reconnect_wait',
+        'auth_failure'
+      ].includes(connectionState.status);
+      if (retryable && !reconnectTimer) {
+        scheduleReconnect(connectionState.lastError || reason);
+      }
     }
-    initializeClient();
   }, delayMs);
 }
 
@@ -376,6 +391,10 @@ client.on('authenticated', () => {
 });
 
 client.on('ready', async () => {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   connectionState.reconnectAttempts = 0;
   updateConnectionState('ready', {
     lastError: null,

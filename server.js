@@ -2,8 +2,6 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const http = require('http');
-const urlModule = require('url');
 const { exec, execSync } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./execution/category_helper.js');
 const {
@@ -591,45 +589,89 @@ app.get('/api/proxy-image', (req, res) => {
     return res.status(400).send('URL da imagem é necessária.');
   }
 
+  const allowedHosts = [
+    'mlstatic.com',
+    'media-amazon.com',
+    'ssl-images-amazon.com'
+  ];
+  const parseAllowedUrl = value => {
+    try {
+      const parsed = new URL(value);
+      const allowed = parsed.protocol === 'https:' &&
+        allowedHosts.some(host =>
+          parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)
+        );
+      return allowed ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
   function downloadImage(url, responseStream, redirectCount = 0) {
     if (redirectCount > 5) {
       return responseStream.status(500).send('Excesso de redirecionamentos no proxy de imagem.');
     }
 
-    try {
-      const parsedUrl = urlModule.parse(url);
-      const clientHttp = parsedUrl.protocol === 'https:' ? https : http;
+    const parsedUrl = parseAllowedUrl(url);
+    if (!parsedUrl) {
+      return responseStream.status(400).send('Domínio de imagem não permitido.');
+    }
 
-      const options = {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-      };
+    const request = https.get(parsedUrl, {
+      headers: {
+        Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    }, imageRes => {
+      if (
+        imageRes.statusCode >= 300 &&
+        imageRes.statusCode < 400 &&
+        imageRes.headers.location
+      ) {
+        imageRes.resume();
+        const redirectUrl = new URL(imageRes.headers.location, parsedUrl).href;
+        return downloadImage(redirectUrl, responseStream, redirectCount + 1);
+      }
 
-      clientHttp.get(url, options, (imageRes) => {
-        // Trata redirecionamentos (301, 302, 307, 308)
-        if (imageRes.statusCode >= 300 && imageRes.statusCode < 400 && imageRes.headers.location) {
-          let redirectUrl = imageRes.headers.location;
-          if (!redirectUrl.startsWith('http')) {
-            redirectUrl = urlModule.resolve(url, redirectUrl);
-          }
-          return downloadImage(redirectUrl, responseStream, redirectCount + 1);
-        }
+      const contentType = imageRes.headers['content-type'] || '';
+      if (imageRes.statusCode !== 200 || !contentType.startsWith('image/')) {
+        imageRes.resume();
+        return responseStream
+          .status(imageRes.statusCode || 502)
+          .send('A origem não retornou uma imagem válida.');
+      }
 
-        if (imageRes.statusCode !== 200) {
-          return responseStream.status(imageRes.statusCode).send(`Falha ao baixar imagem no proxy. Status: ${imageRes.statusCode}`);
+      const maxBytes = 8 * 1024 * 1024;
+      const contentLength = Number(imageRes.headers['content-length']) || 0;
+      if (contentLength > maxBytes) {
+        imageRes.resume();
+        return responseStream.status(413).send('Imagem muito grande.');
+      }
+
+      let receivedBytes = 0;
+      responseStream.setHeader('Content-Type', contentType);
+      responseStream.setHeader('Cache-Control', 'public, max-age=86400');
+      imageRes.on('data', chunk => {
+        receivedBytes += chunk.length;
+        if (receivedBytes > maxBytes) {
+          imageRes.destroy();
+          responseStream.destroy();
+          return;
         }
-        
-        responseStream.setHeader('Content-Type', imageRes.headers['content-type'] || 'image/jpeg');
-        responseStream.setHeader('Access-Control-Allow-Origin', '*');
-        imageRes.pipe(responseStream);
-      }).on('error', (err) => {
+        responseStream.write(chunk);
+      });
+      imageRes.on('end', () => responseStream.end());
+      imageRes.on('error', () => responseStream.destroy());
+    });
+    request.setTimeout(15000, () => request.destroy(new Error('Timeout da imagem')));
+    request.on('error', err => {
+      if (!responseStream.headersSent) {
         console.error('Erro no proxy de imagem:', err.message);
         responseStream.status(500).send('Erro ao baixar imagem via proxy.');
-      });
-    } catch (err) {
-      responseStream.status(500).send('Erro de sintaxe de URL no proxy.');
-    }
+      } else {
+        responseStream.destroy();
+      }
+    });
   }
 
   downloadImage(imageUrl, res);

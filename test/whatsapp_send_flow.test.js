@@ -25,5 +25,8 @@ test('envio ao WhatsApp não informa sucesso sem confirmação', () => {
   assert.match(whatsapp, /sendSeen: false/);
   assert.match(whatsapp, /linkPreview: false/);
   assert.match(whatsapp, /waitUntilMsgSent: true/);
+  assert.match(whatsapp, /reconnectTimer \|\| reconnectInProgress/);
+  assert.match(whatsapp, /await initializeClient\(\)/);
+  assert.match(whatsapp, /clearTimeout\(reconnectTimer\)/);
   assert.doesNotMatch(whatsapp, /sent_success_no_id/);
 });

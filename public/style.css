@@ -759,6 +759,11 @@ select:focus-visible {
   transition: var(--transition-smooth);
 }
 
+.card-image.image-fallback {
+  width: 100%;
+  opacity: 0.75;
+}
+
 .deal-card:hover .card-image {
   transform: scale(1.05);
 }

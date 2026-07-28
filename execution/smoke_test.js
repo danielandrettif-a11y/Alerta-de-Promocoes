@@ -145,6 +145,10 @@ async function run() {
     }
 
     await expectResponse('/api/proxy-image', 400);
+    await expectResponse(
+      '/api/proxy-image?url=https%3A%2F%2F127.0.0.1%2Fsecret',
+      400
+    );
     await expectResponse('/api/compare-price', 400);
     await expectResponse('/api/marketplace-search', 400);
     await expectResponse('/api/generate', 400, {

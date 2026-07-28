@@ -16,5 +16,7 @@ test('renderiza ofertas em lotes de 20 sem blur por card', () => {
   assert.match(app, /filteredEntries\.slice\(0, visibleAmazonLimit\)/);
   assert.match(html, /id="btn-load-more-ml"/);
   assert.match(html, /id="btn-load-more-amazon"/);
+  assert.match(app, /\/api\/proxy-image\?url=/);
+  assert.match(app, /IMAGE_PLACEHOLDER/);
   assert.doesNotMatch(cardRule, /backdrop-filter/);
 });

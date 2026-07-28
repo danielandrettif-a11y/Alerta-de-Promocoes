@@ -20,6 +20,25 @@ const tabScrollPositions = new Map();
 const DEALS_PAGE_SIZE = 20;
 let visibleMLLimit = DEALS_PAGE_SIZE;
 let visibleAmazonLimit = DEALS_PAGE_SIZE;
+const IMAGE_PLACEHOLDER = `data:image/svg+xml,${encodeURIComponent(`
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">
+    <rect width="640" height="480" fill="#f3f3f3"/>
+    <text x="320" y="240" text-anchor="middle" dominant-baseline="middle"
+      font-family="Arial,sans-serif" font-size="28" fill="#777">
+      Imagem indisponível
+    </text>
+  </svg>
+`)}`;
+
+function getDealImageUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return IMAGE_PLACEHOLDER;
+    return `/api/proxy-image?url=${encodeURIComponent(url.href)}`;
+  } catch {
+    return IMAGE_PLACEHOLDER;
+  }
+}
 
 // DOM elements - Tabs
 const elTabML = document.getElementById('btn-tab-ml');
@@ -259,10 +278,17 @@ async function fetchWhatsAppStatus() {
     };
 
     whatsappReady = health.whatsapp?.ready === true;
-    elTxtWhatsappStatus.textContent = `WhatsApp: ${labels[status] || status}`;
+    const attempt = status === 'reconnect_wait' &&
+      health.whatsapp?.reconnectAttempts
+      ? ` (tentativa ${health.whatsapp.reconnectAttempts})`
+      : '';
+    elTxtWhatsappStatus.textContent =
+      `WhatsApp: ${labels[status] || status}${attempt}`;
+    elTxtWhatsappStatus.title = health.whatsapp?.lastError || '';
   } catch (err) {
     whatsappReady = false;
     elTxtWhatsappStatus.textContent = 'WhatsApp: indisponível';
+    elTxtWhatsappStatus.title = '';
     console.error('Erro ao consultar WhatsApp:', err);
   }
 
@@ -1403,7 +1429,7 @@ function renderMLDeals(deals) {
     card.innerHTML = `
       ${checkboxHtml}
       <div class="card-image-box">
-        <img class="card-image" src="${deal.image}" alt="${displayTitle}" loading="lazy" decoding="async">
+        <img class="card-image" src="${getDealImageUrl(deal.image)}" alt="${displayTitle}" loading="lazy" decoding="async">
         <span class="card-discount-badge">${deal.discount}% OFF</span>
       </div>
       <div class="card-details">
@@ -1535,7 +1561,7 @@ function renderAmazonDeals(deals) {
     card.innerHTML = `
       ${checkboxHtml}
       <div class="card-image-box">
-        <img class="card-image" src="${deal.image}" alt="${displayTitle}" loading="lazy" decoding="async">
+        <img class="card-image" src="${getDealImageUrl(deal.image)}" alt="${displayTitle}" loading="lazy" decoding="async">
         <span class="card-discount-badge">${deal.discount}% OFF</span>
       </div>
       <div class="card-details">
@@ -2061,6 +2087,17 @@ function init() {
       lastFocusedElement?.focus();
     }
   });
+  document.addEventListener('error', event => {
+    const image = event.target;
+    if (
+      image instanceof HTMLImageElement &&
+      image.classList.contains('card-image') &&
+      image.src !== IMAGE_PLACEHOLDER
+    ) {
+      image.src = IMAGE_PLACEHOLDER;
+      image.classList.add('image-fallback');
+    }
+  }, true);
 
   // Initial loads
   fetchCategories().then(async () => {
