@@ -1044,12 +1044,38 @@ app.post('/api/generate', async (req, res) => {
       const platformTag = deal.platform === 'amazon' ? '🟡 *AMAZON*' : '🛍️ *MERCADO LIVRE*';
       const category = inferCategory(deal.title);
       
-      const comparison = deal.comparison?.success
-        ? deal.comparison
-        : null;
-      const comparisonText = comparison
-        ? buildWhatsappComparison(comparison, deal.currentPrice)
-        : '';
+      let comparison = deal.comparison || null;
+      if (
+        !comparison &&
+        process.env.MARKETPLACE_SEARCH_ENABLED !== 'false'
+      ) {
+        try {
+          comparison = await compareProductPrices({
+            title: deal.title,
+            currentPrice: deal.currentPrice,
+            sourceUrl: deal.link,
+            cachePath: marketplaceSearchCachePath,
+            cacheMinutes:
+              Number(process.env.MARKETPLACE_SEARCH_CACHE_MINUTES) || 30,
+            maxPerMarketplace: Math.min(
+              8,
+              Math.max(
+                1,
+                Number(process.env.MARKETPLACE_SEARCH_RESULTS_PER_SITE) || 4
+              )
+            )
+          });
+        } catch (comparisonError) {
+          console.warn(
+            `   ⚠️ Comparação indisponível para "${deal.title}":`,
+            comparisonError.message
+          );
+        }
+      }
+      const comparisonText = buildWhatsappComparison(
+        comparison,
+        deal.currentPrice
+      );
       
       const wppMessage = `🔥 *OFERTA ENCONTRADA!* \n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*${comparisonText}\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
 

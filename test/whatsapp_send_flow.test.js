@@ -17,6 +17,8 @@ test('envio ao WhatsApp não informa sucesso sem confirmação', () => {
   assert.match(server, /if \(!whatsappStatus\.ready\)/);
   assert.match(server, /success: failedCount === 0/);
   assert.match(server, /sentCount === 0 \? 502/);
+  assert.match(server, /comparison = await compareProductPrices\(\{/);
+  assert.match(server, /const comparisonText = buildWhatsappComparison\(/);
   assert.match(app, /filter\(item => item\.success && item\.msgId\)/);
   assert.match(app, /Nenhuma oferta foi enviada/);
   assert.doesNotMatch(app, /Ofertas postadas no WhatsApp com sucesso/);

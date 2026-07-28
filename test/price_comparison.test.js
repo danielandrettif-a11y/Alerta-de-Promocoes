@@ -127,14 +127,16 @@ test('atribui nota com base na diferença para a mediana', () => {
   assert.equal(scoreOffer(0, 100).score, null);
 });
 
-test('resumo do WhatsApp mostra nota, confiança e ressalva', () => {
+test('resumo do WhatsApp mostra nota, referência, confiança e ressalva', () => {
   const message = buildWhatsappComparison({
     success: true,
     medianPrice: 399.9,
     medianPriceText: 'R$ 399,90',
     sourcesCount: 2
   }, 'R$ 349,29');
-  assert.match(message, /Oferta: 8\/10 — Boa promoção/);
-  assert.match(message, /Confiança média/);
+  assert.match(message, /Nota do comparador: 8\/10/);
+  assert.match(message, /Boa promoção/);
+  assert.match(message, /Referência: R\$ 399,90 · 2 loja\(s\)/);
+  assert.match(message, /Confiança: média/);
   assert.match(message, /Estimativa/);
 });

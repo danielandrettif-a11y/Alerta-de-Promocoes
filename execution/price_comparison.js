@@ -271,7 +271,7 @@ function buildComparisonFromResults({
 
 function buildWhatsappComparison(comparison, currentPrice) {
   if (!comparison?.success) {
-    return '\n\n📊 *Oferta: sem nota — comparação inconclusiva*\n' +
+    return '\n\n📊 *Comparador de preços: sem nota*\n' +
       '_Não encontramos produtos equivalentes suficientes._';
   }
   const referencePrice = comparison.medianPrice || comparison.minPrice;
@@ -290,9 +290,11 @@ function buildWhatsappComparison(comparison, currentPrice) {
     : assessment.differencePercent < -2
       ? `${percent}% acima`
       : 'praticamente igual';
-  return `\n\n📊 *Oferta: ${assessment.score}/10 — ${assessment.label}*\n` +
-    `💰 ${position} da mediana em outras lojas (${referenceText})\n` +
-    `🔎 Confiança ${confidence} · ${sourcesCount} loja(s)\n` +
+  return `\n\n📊 *Nota do comparador: ${assessment.score}/10*\n` +
+    `✅ ${assessment.label}\n` +
+    `💰 Preço ${position} da mediana em outras lojas\n` +
+    `🏪 Referência: ${referenceText} · ${sourcesCount} loja(s)\n` +
+    `🔎 Confiança: ${confidence}\n` +
     '_Estimativa; confira modelo, frete e pagamento._';
 }
 

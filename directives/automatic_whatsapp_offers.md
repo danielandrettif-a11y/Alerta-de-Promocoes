@@ -32,10 +32,9 @@ The server starts two independent timers:
    generates its Story, sends the Story and description, then records the
    result.
 
-Price comparison is never started by the publisher. Manual dashboard sends
-include the compact score only when an operator previously clicked
-**Comparar Preços** on that product card. Automatic sends do not perform or
-include a comparison.
+Manual dashboard sends automatically compare the product when the card has no
+saved comparison, then include the compact score in the WhatsApp description.
+Automatic sends do not perform or include a comparison.
 
 ## Reaction cleanup
 
