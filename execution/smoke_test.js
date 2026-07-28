@@ -347,6 +347,51 @@ async function run() {
     ) {
       throw new Error(`Modo mobile invalido: ${JSON.stringify(mobileState)}`);
     }
+    const mobileQueue = await page.evaluate(() => {
+      document.querySelector('#grid-queue').innerHTML = `
+        <article class="queue-card">
+          <div class="queue-story-column">
+            <img class="queue-story-preview" src="/icon.svg" alt="">
+          </div>
+          <div class="queue-content">
+            <div class="queue-card-heading">
+              <span class="queue-status">Aguardando link afiliado</span>
+              <span class="queue-discount">56% OFF</span>
+            </div>
+            <h3>Produto com um título longo para validar o layout móvel da fila</h3>
+            <div class="queue-price"><span>De R$ 899</span><strong>Por R$ 386,23</strong></div>
+            <a class="queue-product-link">1. Abrir produto no Mercado Livre</a>
+            <div class="queue-affiliate-form">
+              <label>Link gerado manualmente no Mercado Livre</label>
+              <div class="queue-affiliate-row">
+                <input class="queue-affiliate-input" placeholder="https://meli.la/...">
+                <button>Validar link</button>
+              </div>
+            </div>
+          </div>
+        </article>`;
+      document.querySelector('#btn-tab-queue').click();
+      const card = document.querySelector('.queue-card');
+      const content = document.querySelector('.queue-content');
+      const preview = document.querySelector('.queue-story-column');
+      const button = document.querySelector('.queue-affiliate-row button');
+      return {
+        columns: getComputedStyle(card).gridTemplateColumns.split(' ').length,
+        cardWidth: card.getBoundingClientRect().width,
+        contentFits: content.scrollWidth <= content.clientWidth,
+        previewHeight: preview.getBoundingClientRect().height,
+        buttonHeight: button.getBoundingClientRect().height
+      };
+    });
+    if (
+      mobileQueue.columns !== 1 ||
+      mobileQueue.cardWidth > 390 ||
+      !mobileQueue.contentFits ||
+      mobileQueue.previewHeight !== 190 ||
+      mobileQueue.buttonHeight < 44
+    ) {
+      throw new Error(`Fila mobile invalida: ${JSON.stringify(mobileQueue)}`);
+    }
     const mobileWidth = await page.evaluate(() => ({
       viewport: window.innerWidth,
       document: document.documentElement.scrollWidth
