@@ -20,7 +20,12 @@ test('todos os fluxos usam o template compartilhado de Stories', () => {
   );
   assert.match(template, /class="watermark-layer"/);
   assert.equal(
-    template.match(/fill="url\(#brand-watermarks(?:-between)?\)"/g)?.length,
-    2
+    template.match(/fill="url\(#brand-(?:watermarks|ads)(?:-between)?\)"/g)
+      ?.length,
+    4
+  );
+  assert.ok(
+    template.indexOf('fill="url(#brand-watermarks-between)"') <
+      template.indexOf('fill="url(#brand-ads)"')
   );
 });

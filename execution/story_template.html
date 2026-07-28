@@ -476,16 +476,24 @@
       <pattern id="brand-watermarks" width="800" height="315" patternUnits="userSpaceOnUse"
         patternTransform="rotate(-28)">
         <text class="wm-name" x="30" y="82">ALERTA DE DESCONTOS</text>
-        <text class="wm-ad" x="630" y="230">A</text>
-        <text class="wm-ad" x="672" y="260">D</text>
         <line x1="70" y1="235" x2="260" y2="235"></line>
       </pattern>
       <pattern id="brand-watermarks-between" href="#brand-watermarks"
         width="800" height="315" patternUnits="userSpaceOnUse"
         patternTransform="translate(0 158) rotate(-28)"></pattern>
+      <pattern id="brand-ads" width="800" height="315" patternUnits="userSpaceOnUse"
+        patternTransform="rotate(-28)">
+        <text class="wm-ad" x="630" y="230">A</text>
+        <text class="wm-ad" x="672" y="260">D</text>
+      </pattern>
+      <pattern id="brand-ads-between" href="#brand-ads"
+        width="800" height="315" patternUnits="userSpaceOnUse"
+        patternTransform="translate(0 158) rotate(-28)"></pattern>
     </defs>
     <rect width="1080" height="1920" fill="url(#brand-watermarks)"></rect>
     <rect width="1080" height="1920" fill="url(#brand-watermarks-between)"></rect>
+    <rect width="1080" height="1920" fill="url(#brand-ads)"></rect>
+    <rect width="1080" height="1920" fill="url(#brand-ads-between)"></rect>
   </svg>
 
   <!-- Header -->
