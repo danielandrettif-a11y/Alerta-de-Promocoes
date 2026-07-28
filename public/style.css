@@ -261,6 +261,112 @@ body {
 }
 
 /* ==========================================
+   Product generation workspace
+   ========================================== */
+.products-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 18px;
+  padding: 26px 30px;
+  border: 1px solid rgba(242, 113, 33, 0.24);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 85% 0%, rgba(242, 113, 33, 0.17), transparent 38%),
+    var(--bg-card);
+}
+
+.products-eyebrow {
+  color: var(--primary-color);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.products-hero h2 {
+  margin: 6px 0 7px;
+  font: 800 clamp(24px, 3vw, 34px) 'Montserrat', sans-serif;
+}
+
+.products-hero p {
+  max-width: 650px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.products-flow {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.products-flow span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.products-flow strong {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--gradient-brand);
+  font-size: 11px;
+}
+
+.product-source-tabs {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.source-tab {
+  min-height: 44px;
+  padding: 9px 18px;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.source-tab.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.source-panel {
+  display: none;
+}
+
+.source-panel.active {
+  display: block;
+}
+
+.source-note {
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border: 1px solid rgba(255, 190, 107, 0.22);
+  border-radius: 12px;
+  color: #ffd38f;
+  background: rgba(255, 190, 107, 0.06);
+  font-size: 13px;
+}
+
+/* ==========================================
    Content Panels & Layouts
    ========================================== */
 .dashboard-content {
@@ -270,7 +376,7 @@ body {
 }
 
 .marketplace-search-panel {
-  margin-bottom: 34px;
+  margin-bottom: 0;
   padding: 26px 30px;
   border: 1px solid rgba(242, 113, 33, 0.24);
   border-radius: 24px;
@@ -3023,8 +3129,7 @@ select:focus-visible {
     bottom: 0;
     left: 0;
     z-index: 9000;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
     gap: 2px;
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     border-top: 1px solid rgba(255, 255, 255, 0.1);
@@ -3032,6 +3137,7 @@ select:focus-visible {
   }
 
   .tab-button {
+    flex: 1;
     display: flex;
     min-width: 0;
     min-height: 52px;
@@ -3061,6 +3167,49 @@ select:focus-visible {
 
   .dashboard-content {
     padding: 0 12px 100px;
+  }
+
+  .products-hero {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 12px;
+    padding: 18px 16px;
+    border-radius: 18px;
+  }
+
+  .products-hero h2 {
+    font-size: 23px;
+  }
+
+  .products-hero p {
+    font-size: 13px;
+  }
+
+  .products-flow {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .products-flow span {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 9px;
+    white-space: normal;
+  }
+
+  .product-source-tabs {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 12px;
+  }
+
+  .source-tab {
+    min-width: 0;
+    padding: 9px 6px;
+    font-size: 13px;
   }
 
   .marketplace-search-panel {
@@ -3268,12 +3417,36 @@ select:focus-visible {
     display: none;
   }
 
+  .mobile-selection-summary {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    line-height: 1.15;
+  }
+
+  .mobile-selection-summary small {
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .mobile-selection-actions {
+    display: flex;
+    gap: 6px;
+  }
+
   .mobile-selection-bar button {
     min-height: 44px;
-    padding: 0 15px;
+    padding: 0 12px;
     border: 0;
     color: white;
     background: var(--gradient-brand);
+  }
+
+  .mobile-selection-bar button.is-queue {
+    border: 1px solid rgba(88, 211, 154, 0.42);
+    color: #72e8af;
+    background: rgba(45, 179, 119, 0.1);
   }
 
   .progress-modal {

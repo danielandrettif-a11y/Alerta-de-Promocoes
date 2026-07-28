@@ -208,14 +208,18 @@ async function run() {
     });
 
     const requiredSelectors = [
+      '#btn-tab-products',
       '#btn-tab-ml',
       '#btn-tab-amazon',
       '#btn-tab-coupons',
       '#btn-tab-queue',
+      '#btn-tab-search',
+      '#panel-products',
       '#panel-ml',
       '#panel-amazon',
       '#panel-coupons',
       '#panel-queue',
+      '#panel-search',
       '#marketplace-search-form',
       '#ipt-marketplace-search',
       '#marketplace-search-results',
@@ -252,6 +256,8 @@ async function run() {
     for (const tab of [
       '#btn-tab-coupons',
       '#btn-tab-queue',
+      '#btn-tab-search',
+      '#btn-tab-products',
       '#btn-tab-ml'
     ]) {
       await page.click(tab);
@@ -303,7 +309,7 @@ async function run() {
     }
 
     await page.setViewport({ width: 390, height: 844 });
-    await page.click('#btn-toggle-filters-ml');
+    await page.$eval('#btn-toggle-filters-ml', button => button.click());
     await page.evaluate(() => {
       const grid = document.querySelector('#grid-ml');
       grid.innerHTML = '';
@@ -322,13 +328,15 @@ async function run() {
           .getAttribute('aria-expanded'),
         mobileBarVisible: !document.querySelector('#mobile-selection-bar')
           .classList.contains('hidden'),
+        mobileQueueVisible: !document.querySelector('#btn-mobile-queue').hidden,
         mobileSendDisabled: document.querySelector('#btn-mobile-send').disabled,
         navTargetHeight: minHeight([
-          '#btn-tab-ml',
-          '#btn-tab-amazon',
+          '#btn-tab-products',
           '#btn-tab-coupons',
-          '#btn-tab-queue'
+          '#btn-tab-queue',
+          '#btn-tab-search'
         ]),
+        sourceTargetHeight: minHeight(['#btn-tab-ml', '#btn-tab-amazon']),
         filterTargetHeight: minHeight([
           '#ipt-filter-name-ml',
           '#sel-filter-category-ml',
@@ -341,8 +349,10 @@ async function run() {
       !mobileState.filtersOpen ||
       mobileState.filtersExpanded !== 'true' ||
       !mobileState.mobileBarVisible ||
+      !mobileState.mobileQueueVisible ||
       !mobileState.mobileSendDisabled ||
       mobileState.navTargetHeight < 44 ||
+      mobileState.sourceTargetHeight < 44 ||
       mobileState.filterTargetHeight < 44
     ) {
       throw new Error(`Modo mobile invalido: ${JSON.stringify(mobileState)}`);
@@ -392,6 +402,8 @@ async function run() {
     ) {
       throw new Error(`Fila mobile invalida: ${JSON.stringify(mobileQueue)}`);
     }
+    await page.click('#btn-tab-products');
+    await page.click('#btn-tab-ml');
     const mobileWidth = await page.evaluate(() => ({
       viewport: window.innerWidth,
       document: document.documentElement.scrollWidth

@@ -16,7 +16,7 @@
   
   <!-- CSS Link -->
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 
@@ -58,37 +58,38 @@
 
   <!-- Navigation Tabs -->
   <nav class="navigation-tabs" role="tablist">
-    <button id="btn-tab-ml" class="tab-button active" role="tab" aria-selected="true" aria-controls="panel-ml">
-      <span class="tab-icon" aria-hidden="true">🛍️</span>
-      <span class="tab-label">Mercado Livre</span>
-    </button>
-    <button id="btn-tab-amazon" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-amazon">
-      <span class="tab-icon" aria-hidden="true">🟡</span>
-      <span class="tab-label">Amazon</span>
+    <button id="btn-tab-products" class="tab-button active" role="tab" aria-selected="true" aria-controls="panel-products">
+      <span class="tab-icon" aria-hidden="true">✨</span>
+      <span class="tab-label">Produtos</span>
     </button>
     <button id="btn-tab-coupons" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-coupons">
       <span class="tab-icon" aria-hidden="true">🎟️</span>
       <span class="tab-label">Cupons</span>
     </button>
     <button id="btn-tab-queue" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-queue" hidden>
-      <span class="tab-icon" aria-hidden="true">📤</span>
+      <span class="tab-icon" aria-hidden="true">📥</span>
       <span class="tab-label">Fila</span>
       <span id="queue-tab-count" class="queue-tab-count">0</span>
+    </button>
+    <button id="btn-tab-search" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-search">
+      <span class="tab-icon" aria-hidden="true">⌕</span>
+      <span class="tab-label">Buscar</span>
     </button>
   </nav>
 
   <main class="dashboard-content">
-    <section class="marketplace-search-panel" aria-labelledby="marketplace-search-title">
+    <section id="panel-search" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-search">
+    <div class="marketplace-search-panel" aria-labelledby="marketplace-search-title">
       <div class="marketplace-search-heading">
         <div>
-          <span class="search-scope-badge">PESQUISA GERAL</span>
-          <h2 id="marketplace-search-title">Encontrar produtos nos grandes marketplaces</h2>
+          <span class="search-scope-badge">BUSCA GERAL</span>
+          <h2 id="marketplace-search-title">Encontre qualquer produto na internet</h2>
           <p>
-            Procura no Mercado Livre, Amazon, Magalu e Casas Bahia.
-            Os resultados abaixo servem somente para consulta e não são enviados ao WhatsApp.
+            Compare resultados do Mercado Livre, Amazon, Magalu e Casas Bahia
+            sem sair do painel.
           </p>
         </div>
-        <span class="no-whatsapp-badge">Sem envio ao WhatsApp</span>
+        <span class="no-whatsapp-badge">Consulta multiloja</span>
       </div>
       <form id="marketplace-search-form" class="marketplace-search-form">
         <label class="marketplace-search-input" for="ipt-marketplace-search">
@@ -108,10 +109,39 @@
       </form>
       <p id="marketplace-search-status" class="marketplace-search-status" aria-live="polite"></p>
       <div id="marketplace-search-results" class="marketplace-search-results"></div>
+    </div>
     </section>
     
-    <!-- Tab 1: Mercado Livre Panel -->
-    <section id="panel-ml" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-ml">
+    <!-- Tab 1: Product generation -->
+    <section id="panel-products" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-products">
+      <div class="products-hero">
+        <div>
+          <span class="products-eyebrow">CENTRAL DE CONTEÚDO</span>
+          <h2>Gerar e distribuir ofertas</h2>
+          <p>
+            Selecione uma ou várias ofertas e escolha o destino:
+            deixar o Story pronto na fila ou enviar agora ao WhatsApp.
+          </p>
+        </div>
+        <div class="products-flow" aria-label="Fluxo de trabalho">
+          <span><strong>1</strong> Selecione</span>
+          <span><strong>2</strong> Escolha o destino</span>
+          <span><strong>3</strong> Publique</span>
+        </div>
+      </div>
+
+      <div class="product-source-tabs" role="tablist" aria-label="Fonte das ofertas">
+        <button id="btn-tab-ml" class="source-tab active" type="button" role="tab"
+          aria-selected="true" aria-controls="panel-ml">
+          <span aria-hidden="true">🛍️</span> Mercado Livre
+        </button>
+        <button id="btn-tab-amazon" class="source-tab" type="button" role="tab"
+          aria-selected="false" aria-controls="panel-amazon">
+          <span aria-hidden="true">🟡</span> Amazon
+        </button>
+      </div>
+
+      <div id="panel-ml" class="source-panel active" role="tabpanel" aria-labelledby="btn-tab-ml">
       <div class="control-bar">
         <div class="selection-actions">
           <label class="checkbox-container">
@@ -128,10 +158,10 @@
             <span class="icon-sync">🔄</span> Atualizar Mercado Livre
           </button>
           <button id="btn-queue-ml" class="btn-queue" disabled hidden>
-            Adicionar à fila (<span id="txt-queue-count-ml">0</span>)
+            Preparar na fila (<span id="txt-queue-count-ml">0</span>)
           </button>
           <button id="btn-generate-ml" class="btn-cta" disabled>
-            Postar no WhatsApp (<span id="txt-selected-count-ml">0</span>) 🚀
+            Enviar agora (<span id="txt-selected-count-ml">0</span>) →
           </button>
         </div>
       </div>
@@ -181,10 +211,14 @@
           Carregar mais 20
         </button>
       </div>
-    </section>
+      </div>
 
-    <!-- Tab 2: Amazon Panel -->
-    <section id="panel-amazon" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-amazon">
+      <!-- Amazon source panel -->
+      <div id="panel-amazon" class="source-panel" role="tabpanel" aria-labelledby="btn-tab-amazon">
+      <p class="source-note">
+        A fila com link afiliado é exclusiva do Mercado Livre.
+        Na Amazon, as ofertas selecionadas podem ser enviadas diretamente ao WhatsApp.
+      </p>
       <div class="control-bar">
         <div class="selection-actions">
           <label class="checkbox-container">
@@ -201,7 +235,7 @@
             <span class="icon-sync">🔄</span> Atualizar Amazon
           </button>
           <button id="btn-generate-amazon" class="btn-cta btn-amazon-cta" disabled>
-            Postar no WhatsApp (<span id="txt-selected-count-amazon">0</span>) 🚀
+            Enviar agora (<span id="txt-selected-count-amazon">0</span>) →
           </button>
         </div>
       </div>
@@ -250,6 +284,7 @@
         <button id="btn-load-more-amazon" class="btn-secondary" type="button">
           Carregar mais 20
         </button>
+      </div>
       </div>
     </section>
 
@@ -343,8 +378,14 @@
 
   <div id="mobile-selection-bar" class="mobile-selection-bar hidden"
     aria-live="polite">
-    <span><strong id="mobile-selection-count">0</strong> selecionada(s)</span>
-    <button id="btn-mobile-send" type="button">Enviar ao WhatsApp</button>
+    <div class="mobile-selection-summary">
+      <strong><span id="mobile-selection-count">0</span> selecionada(s)</strong>
+      <small>Escolha o destino</small>
+    </div>
+    <div class="mobile-selection-actions">
+      <button id="btn-mobile-queue" class="is-queue" type="button" hidden>Fila</button>
+      <button id="btn-mobile-send" type="button">WhatsApp</button>
+    </div>
   </div>
 
   <footer class="main-footer">
@@ -352,6 +393,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=18"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>

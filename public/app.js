@@ -41,15 +41,19 @@ function getDealImageUrl(value) {
 }
 
 // DOM elements - Tabs
+const elTabProducts = document.getElementById('btn-tab-products');
 const elTabML = document.getElementById('btn-tab-ml');
 const elTabAmazon = document.getElementById('btn-tab-amazon');
 const elTabCoupons = document.getElementById('btn-tab-coupons');
 const elTabQueue = document.getElementById('btn-tab-queue');
+const elTabSearch = document.getElementById('btn-tab-search');
 
+const elPanelProducts = document.getElementById('panel-products');
 const elPanelML = document.getElementById('panel-ml');
 const elPanelAmazon = document.getElementById('panel-amazon');
 const elPanelCoupons = document.getElementById('panel-coupons');
 const elPanelQueue = document.getElementById('panel-queue');
+const elPanelSearch = document.getElementById('panel-search');
 
 // DOM elements - Grids
 const elGridML = document.getElementById('grid-ml');
@@ -118,6 +122,7 @@ const elFiltersML = document.getElementById('filters-ml');
 const elFiltersAmazon = document.getElementById('filters-amazon');
 const elMobileSelectionBar = document.getElementById('mobile-selection-bar');
 const elMobileSelectionCount = document.getElementById('mobile-selection-count');
+const elBtnMobileQueue = document.getElementById('btn-mobile-queue');
 const elBtnMobileSend = document.getElementById('btn-mobile-send');
 
 function parseBackendDate(dateStr) {
@@ -224,7 +229,10 @@ async function fetchDataStatus() {
     lastUpdateAmazon = status.amazon?.generatedAt || lastUpdateAmazon;
     if (previousMLUpdate && lastUpdateML !== previousMLUpdate) fetchMLDeals();
     if (previousAmazonUpdate && lastUpdateAmazon !== previousAmazonUpdate) {
-      if (elTabAmazon.classList.contains('active')) {
+      if (
+        elTabProducts.classList.contains('active') &&
+        activeDealPlatform === 'amazon'
+      ) {
         fetchAmazonDeals();
       } else {
         amazonDealsLoaded = false;
@@ -252,8 +260,7 @@ async function fetchDataStatus() {
         elTxtAutomationStatus.classList.remove('status-stale');
       }
     }
-    const platform = elTabAmazon.classList.contains('active') ? 'amazon' : 'ml';
-    updateLastUpdateUI(platform);
+    updateLastUpdateUI(activeDealPlatform);
   } catch (err) {
     console.error('Erro ao consultar estado das atualizações:', err);
   }
@@ -595,7 +602,11 @@ async function fetchMLDeals() {
     
     if (data.generatedAt) {
       lastUpdateML = data.generatedAt;
-      if (elTabML.classList.contains('active') || elTabCoupons.classList.contains('active')) {
+      if (
+        (elTabProducts.classList.contains('active') &&
+          activeDealPlatform === 'ml') ||
+        elTabCoupons.classList.contains('active')
+      ) {
         updateLastUpdateUI('ml');
       }
     }
@@ -630,7 +641,10 @@ async function fetchAmazonDeals() {
     
     if (data.generatedAt) {
       lastUpdateAmazon = data.generatedAt;
-      if (elTabAmazon.classList.contains('active')) {
+      if (
+        elTabProducts.classList.contains('active') &&
+        activeDealPlatform === 'amazon'
+      ) {
         updateLastUpdateUI('amazon');
       }
     }
@@ -1143,6 +1157,8 @@ async function fetchPublicationQueue(options = {}) {
     publicationQueueEnabled = data.enabled === true;
     elTabQueue.hidden = !publicationQueueEnabled;
     elBtnQueueML.hidden = !publicationQueueEnabled;
+    elBtnMobileQueue.hidden =
+      !publicationQueueEnabled || activeDealPlatform !== 'ml';
 
     if (!publicationQueueEnabled) {
       publicationQueueItems = [];
@@ -1701,6 +1717,7 @@ function renderCoupons(coupons) {
           // Troca para a aba do Mercado Livre e rola até o produto
           elFilterNameML.value = d.title;
           applyMLFilters();
+          elTabProducts.click();
           elTabML.click();
           setTimeout(() => {
             const card = Array.from(elGridML.querySelectorAll('.deal-card')).find(c => {
@@ -1862,14 +1879,16 @@ function toggleAmazonSelectIndex(index) {
 }
 
 function updateMobileSelectionBar() {
-  const onDealTab = elTabML.classList.contains('active') ||
-    elTabAmazon.classList.contains('active');
+  const onDealTab = elTabProducts.classList.contains('active');
   const count = activeDealPlatform === 'amazon'
     ? selectedAmazonIndices.size
     : selectedMLIndices.size;
 
   elMobileSelectionCount.textContent = count;
   elMobileSelectionBar.classList.toggle('hidden', !onDealTab || count === 0);
+  elBtnMobileQueue.hidden =
+    !publicationQueueEnabled || activeDealPlatform !== 'ml';
+  elBtnMobileQueue.disabled = count === 0;
   elBtnMobileSend.disabled = !whatsappReady || count === 0;
   elBtnMobileSend.textContent = whatsappReady
     ? 'Enviar ao WhatsApp'
@@ -1949,26 +1968,36 @@ function switchTab(activeBtn, activePanel) {
   const currentPanel = document.querySelector('.tab-panel.active');
   if (currentPanel) tabScrollPositions.set(currentPanel.id, window.scrollY);
 
-  [elTabML, elTabAmazon, elTabCoupons, elTabQueue]
+  [elTabProducts, elTabCoupons, elTabQueue, elTabSearch]
     .forEach(btn => btn.classList.remove('active'));
-  [elPanelML, elPanelAmazon, elPanelCoupons, elPanelQueue]
+  [elPanelProducts, elPanelCoupons, elPanelQueue, elPanelSearch]
     .forEach(panel => panel.classList.remove('active'));
   
   activeBtn.classList.add('active');
   activePanel.classList.add('active');
-  [elTabML, elTabAmazon, elTabCoupons, elTabQueue].forEach(btn => {
+  [elTabProducts, elTabCoupons, elTabQueue, elTabSearch].forEach(btn => {
     btn.setAttribute('aria-selected', String(btn === activeBtn));
   });
   
-  const platform = activeBtn === elTabAmazon ? 'amazon' : 'ml';
-  if (activeBtn === elTabML || activeBtn === elTabAmazon) {
-    activeDealPlatform = platform;
-  }
-  updateLastUpdateUI(platform);
+  updateLastUpdateUI(activeDealPlatform);
   updateMobileSelectionBar();
   requestAnimationFrame(() => {
     window.scrollTo({ top: tabScrollPositions.get(activePanel.id) || 0 });
   });
+}
+
+function switchDealSource(activeBtn, activePanel) {
+  [elTabML, elTabAmazon].forEach(btn => {
+    btn.classList.toggle('active', btn === activeBtn);
+    btn.setAttribute('aria-selected', String(btn === activeBtn));
+  });
+  [elPanelML, elPanelAmazon].forEach(panel =>
+    panel.classList.toggle('active', panel === activePanel)
+  );
+
+  activeDealPlatform = activeBtn === elTabAmazon ? 'amazon' : 'ml';
+  updateLastUpdateUI(activeDealPlatform);
+  updateMobileSelectionBar();
 }
 
 // ==========================================
@@ -1982,9 +2011,14 @@ function init() {
   });
 
   // Tab Switchers
-  elTabML.addEventListener('click', () => switchTab(elTabML, elPanelML));
+  elTabProducts.addEventListener('click', () =>
+    switchTab(elTabProducts, elPanelProducts)
+  );
+  elTabML.addEventListener('click', () =>
+    switchDealSource(elTabML, elPanelML)
+  );
   elTabAmazon.addEventListener('click', () => {
-    switchTab(elTabAmazon, elPanelAmazon);
+    switchDealSource(elTabAmazon, elPanelAmazon);
     if (!amazonDealsLoaded) fetchAmazonDeals();
   });
   elTabCoupons.addEventListener('click', () => switchTab(elTabCoupons, elPanelCoupons));
@@ -1992,6 +2026,9 @@ function init() {
     switchTab(elTabQueue, elPanelQueue);
     fetchPublicationQueue();
   });
+  elTabSearch.addEventListener('click', () =>
+    switchTab(elTabSearch, elPanelSearch)
+  );
 
   // Scrapers
   elBtnUpdateML.addEventListener('click', triggerMLScraper);
@@ -2011,6 +2048,12 @@ function init() {
   elBtnMobileSend.addEventListener('click', () =>
     postSelectedDeals(activeDealPlatform)
   );
+  elBtnMobileQueue.addEventListener('click', () => {
+    const deals = allMLDeals.filter((_, index) =>
+      selectedMLIndices.has(index)
+    );
+    enqueueDealsForPublication(deals);
+  });
   elBtnQueueML.addEventListener('click', () => {
     const deals = allMLDeals.filter((_, index) =>
       selectedMLIndices.has(index)
