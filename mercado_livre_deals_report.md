@@ -1,6 +1,6 @@
 # 🛍️ Mercado Livre: Melhores Ofertas e Cupons do Dia
 
-Relatório gerado em: **27/07/2026 23:30:11** (Horário de Brasília)
+Relatório gerado em: **28/07/2026 00:00:12** (Horário de Brasília)
 
 ---
 

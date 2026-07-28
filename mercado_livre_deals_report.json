@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-28T02:30:11.025Z",
-  "generatedAtDisplay": "27/07/2026 23:30:11",
+  "generatedAt": "2026-07-28T03:00:12.383Z",
+  "generatedAtDisplay": "28/07/2026 00:00:12",
   "coupons": [
     {
       "code": "COMPRAHOJE",
@@ -8,7 +8,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MELIMODA",
@@ -16,7 +16,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "GARANTAMEUDESCONTO",
@@ -24,7 +24,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MELHORDODIA",
@@ -32,7 +32,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MUITOBARATO",
@@ -40,7 +40,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "AVENE15",
@@ -48,7 +48,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "SALVAMEUBOLSO",
@@ -56,7 +56,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "REVISAO100",
@@ -64,7 +64,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "TUDOEMPROMO",
@@ -72,7 +72,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "CUPOMPRAMODA",
@@ -80,7 +80,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "OFERTAPRACASA",
@@ -88,7 +88,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "COMPRINHAS",
@@ -96,7 +96,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MELIOFFHOJE",
@@ -104,7 +104,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "LIBERADESCONTO",
@@ -112,7 +112,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "OFFMELI",
@@ -120,7 +120,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "SEMPREML",
@@ -128,7 +128,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "VAIBARATO",
@@ -136,7 +136,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "CASAPROMO",
@@ -144,7 +144,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MEUACHADO",
@@ -152,7 +152,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "PROMOVALE",
@@ -160,7 +160,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "VALEDESCONTO",
@@ -168,7 +168,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MELIOFERTAS",
@@ -176,7 +176,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MELICUPOM",
@@ -184,7 +184,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "VALEPLUS",
@@ -192,7 +192,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "OFERTASMELI",
@@ -200,7 +200,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "DESCONTOU",
@@ -208,7 +208,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MEUVALE",
@@ -216,7 +216,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "SUPERPROMO",
@@ -224,7 +224,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MLMELHOROFERTA",
@@ -232,7 +232,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "SALDAOCASA",
@@ -240,7 +240,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "CUPOMTOP",
@@ -248,7 +248,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "COMPRAML",
@@ -256,7 +256,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "LEVAESSA",
@@ -264,7 +264,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "PROMOPRACASA",
@@ -272,7 +272,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "MODASEMPRE",
@@ -280,7 +280,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     },
     {
       "code": "AFILIADOSCOMLOLA",
@@ -288,7 +288,7 @@
       "maxLimit": "N/A",
       "lastConfirmedAt": null,
       "verificationStatus": "unverified",
-      "sourceUnavailableAt": "2026-07-28T02:30:10.960Z"
+      "sourceUnavailableAt": "2026-07-28T03:00:12.286Z"
     }
   ],
   "deals": []

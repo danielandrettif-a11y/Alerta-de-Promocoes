@@ -149,6 +149,13 @@ async function run() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ selectedDeals: [] })
     });
+    await expectResponse('/api/generate', 503, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        selectedDeals: [{ title: 'Oferta de teste' }]
+      })
+    });
     await expectResponse('/api/delete-deal', 400, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

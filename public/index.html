@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   
   <!-- CSS Link -->
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
 
@@ -25,6 +25,10 @@
     <div class="spinner-container">
       <div class="spinner"></div>
       <p id="loading-text" class="loading-text">Processando dados...</p>
+      <div class="loading-progress" role="progressbar"
+        aria-label="OperaÃ§Ã£o em andamento">
+        <span class="loading-progress-bar"></span>
+      </div>
     </div>
   </div>
 
@@ -155,6 +159,12 @@
           <p>Nenhuma oferta carregada. Clique em "Atualizar Mercado Livre" para buscar ofertas.</p>
         </div>
       </div>
+      <div id="pagination-ml" class="deal-pagination" hidden>
+        <span id="pagination-count-ml"></span>
+        <button id="btn-load-more-ml" class="btn-secondary" type="button">
+          Carregar mais 20
+        </button>
+      </div>
     </section>
 
     <!-- Tab 2: Amazon Panel -->
@@ -214,6 +224,12 @@
         <div class="empty-state">
           <p>Nenhuma oferta carregada. Clique em "Atualizar Amazon" para buscar ofertas.</p>
         </div>
+      </div>
+      <div id="pagination-amazon" class="deal-pagination" hidden>
+        <span id="pagination-count-amazon"></span>
+        <button id="btn-load-more-amazon" class="btn-secondary" type="button">
+          Carregar mais 20
+        </button>
       </div>
     </section>
 
@@ -305,10 +321,10 @@
   </div>
 
   <footer class="main-footer">
-    <p>&copy; 2026 Promo Automator. Geração de imagens via Canvas & Envio Direto ao WhatsApp.</p>
+    <p>&copy; 2026 Promo Automator. Geração de Stories & Envio Direto ao WhatsApp.</p>
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

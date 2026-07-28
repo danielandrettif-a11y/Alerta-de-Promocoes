@@ -13,6 +13,9 @@ let publicationQueueItems = [];
 let publicationQueueSummary = {};
 let publicationHistorySignature = '';
 let amazonDealsLoaded = false;
+const DEALS_PAGE_SIZE = 20;
+let visibleMLLimit = DEALS_PAGE_SIZE;
+let visibleAmazonLimit = DEALS_PAGE_SIZE;
 
 // DOM elements - Tabs
 const elTabML = document.getElementById('btn-tab-ml');
@@ -30,6 +33,12 @@ const elGridML = document.getElementById('grid-ml');
 const elGridAmazon = document.getElementById('grid-amazon');
 const elGridCoupons = document.getElementById('grid-coupons');
 const elGridQueue = document.getElementById('grid-queue');
+const elPaginationML = document.getElementById('pagination-ml');
+const elPaginationAmazon = document.getElementById('pagination-amazon');
+const elPaginationCountML = document.getElementById('pagination-count-ml');
+const elPaginationCountAmazon = document.getElementById('pagination-count-amazon');
+const elBtnLoadMoreML = document.getElementById('btn-load-more-ml');
+const elBtnLoadMoreAmazon = document.getElementById('btn-load-more-amazon');
 
 // DOM elements - ML Actions
 const elBtnUpdateML = document.getElementById('btn-update-ml');
@@ -495,7 +504,8 @@ async function fetchMLDeals() {
     );
     allCoupons = data.coupons || [];
     freshnessML = data.freshness || null;
-    
+
+    visibleMLLimit = DEALS_PAGE_SIZE;
     renderMLDeals(allMLDeals);
     renderCoupons(allCoupons);
     
@@ -525,6 +535,7 @@ async function fetchAmazonDeals() {
     );
     amazonDealsLoaded = true;
     freshnessAmazon = data.freshness || null;
+    visibleAmazonLimit = DEALS_PAGE_SIZE;
     renderAmazonDeals(allAmazonDeals);
     
     if (data.generatedAt) {
@@ -557,6 +568,7 @@ async function triggerMLScraper() {
       allCoupons = data.data.coupons || [];
       freshnessML = data.data.freshness || null;
       selectedMLIndices.clear();
+      visibleMLLimit = DEALS_PAGE_SIZE;
       updateMLSelectionUI();
       renderMLDeals(allMLDeals);
       renderCoupons(allCoupons);
@@ -593,6 +605,7 @@ async function triggerAmazonScraper() {
       );
       freshnessAmazon = data.data.freshness || null;
       selectedAmazonIndices.clear();
+      visibleAmazonLimit = DEALS_PAGE_SIZE;
       updateAmazonSelectionUI();
       renderAmazonDeals(allAmazonDeals);
       
@@ -664,46 +677,62 @@ async function postSelectedDeals(platform) {
       body: JSON.stringify({ selectedDeals: payloadDeals })
     });
     const result = await response.json();
-    
-    if (result.success && result.results) {
-      addLog(`🚀 Ofertas postadas no WhatsApp com sucesso!`, 'success');
-      
-      // Atualiza o estado local das ofertas com o respectivo msgId retornado
-      result.results.forEach(resItem => {
-        if (resItem.success && resItem.msgId) {
-          const dealList = platform === 'ml' ? allMLDeals : allAmazonDeals;
-          const found = dealList.find(d =>
-            generateClientDealId(d, platform) === resItem.dealId
-          );
-          if (found) {
-            found.publishedMsgId = resItem.msgId;
-          }
-        }
-      });
 
-      // Redesenha a UI
+    const itemResults = Array.isArray(result.results) ? result.results : [];
+    const sentItems = itemResults.filter(item => item.success && item.msgId);
+    const failedItems = itemResults.filter(item => !item.success);
+
+    for (const item of failedItems) {
+      addLog(
+        `❌ ${item.title || 'Oferta'}: ` +
+        `${item.error || 'o WhatsApp não confirmou o envio.'}`,
+        'error'
+      );
+    }
+
+    if (sentItems.length > 0) {
+      addLog(
+        `✅ ${sentItems.length} de ${targetDeals.length} oferta(s) ` +
+        `enviada(s) ao WhatsApp.`,
+        failedItems.length ? 'warning' : 'success'
+      );
+
+      const dealList = platform === 'ml' ? allMLDeals : allAmazonDeals;
+      const selectedIndices = platform === 'ml'
+        ? selectedMLIndices
+        : selectedAmazonIndices;
+      for (const item of sentItems) {
+        const index = dealList.findIndex(deal =>
+          generateClientDealId(deal, platform) === item.dealId
+        );
+        if (index >= 0) {
+          dealList[index].publishedMsgId = item.msgId;
+          selectedIndices.delete(index);
+        }
+      }
+
       if (platform === 'ml') {
         renderMLDeals(allMLDeals);
       } else {
         renderAmazonDeals(allAmazonDeals);
       }
-    } else if (result.success) {
-      addLog(`🚀 Envio disparado no servidor!`, 'success');
     } else {
-      addLog(`❌ Falha no servidor: ${result.error}`, 'error');
+      addLog(
+        `❌ Nenhuma oferta foi enviada. ` +
+        `${result.error || result.message || 'Verifique a conexão do WhatsApp.'}`,
+        'error'
+      );
     }
   } catch (err) {
     addLog(`❌ Falha de rede ao disparar envios: ${err.message}`, 'error');
   }
 
   spinner.style.display = 'none';
-  
-  // Limpa seleções pós envio
+
+  // Ofertas que falharam permanecem selecionadas para nova tentativa.
   if (platform === 'ml') {
-    selectedMLIndices.clear();
     updateMLSelectionUI();
   } else {
-    selectedAmazonIndices.clear();
     updateAmazonSelectionUI();
   }
 }
@@ -1164,10 +1193,51 @@ async function updateQueueItemStatus(itemId, status) {
 // ==========================================
 // Rendering Methods (Cards & UI)
 // ==========================================
+function getFilteredDealEntries(deals, platform) {
+  const isAmazon = platform === 'amazon';
+  const searchTerm = (
+    isAmazon ? elFilterNameAmazon.value : elFilterNameML.value
+  ).toLowerCase().trim();
+  const selectedCategory = isAmazon
+    ? elFilterCategoryAmazon.value
+    : elFilterCategoryML.value;
+  const selectedSubcategory = isAmazon
+    ? elFilterSubcategoryAmazon.value
+    : elFilterSubcategoryML.value;
+  const selectedDiscount = isAmazon
+    ? elFilterDiscountAmazon.value
+    : elFilterDiscountML.value;
+
+  return deals
+    .map((deal, index) => ({ deal, index }))
+    .filter(({ deal }) => {
+      const category = getProductCategoryAndSub(deal.title);
+      return (
+        deal.title.toLowerCase().includes(searchTerm) &&
+        (!selectedCategory || category.category === selectedCategory) &&
+        (!selectedSubcategory || category.subcategory === selectedSubcategory) &&
+        (!selectedDiscount || deal.discount >= Number(selectedDiscount))
+      );
+    });
+}
+
+function updateDealPagination(platform, visibleCount, totalCount) {
+  const isAmazon = platform === 'amazon';
+  const pagination = isAmazon ? elPaginationAmazon : elPaginationML;
+  const count = isAmazon ? elPaginationCountAmazon : elPaginationCountML;
+  const button = isAmazon ? elBtnLoadMoreAmazon : elBtnLoadMoreML;
+
+  pagination.hidden = totalCount === 0;
+  count.textContent =
+    `Mostrando ${Math.min(visibleCount, totalCount)} de ${totalCount} ofertas`;
+  button.hidden = visibleCount >= totalCount;
+}
+
 function renderMLDeals(deals) {
   elGridML.innerHTML = '';
   
   if (deals.length === 0) {
+    elPaginationML.hidden = true;
     elGridML.innerHTML = `
       <div class="empty-state">
         <p>Nenhuma oferta do Mercado Livre carregada. Clique em "Atualizar Mercado Livre".</p>
@@ -1175,8 +1245,21 @@ function renderMLDeals(deals) {
     `;
     return;
   }
-  
-  deals.forEach((deal, index) => {
+
+  const filteredEntries = getFilteredDealEntries(deals, 'ml');
+  if (filteredEntries.length === 0) {
+    elPaginationML.hidden = true;
+    elGridML.innerHTML = `
+      <div class="empty-state">
+        <p>Nenhuma oferta corresponde aos filtros selecionados.</p>
+      </div>
+    `;
+    updateMLSelectionUI();
+    return;
+  }
+
+  const visibleEntries = filteredEntries.slice(0, visibleMLLimit);
+  visibleEntries.forEach(({ deal, index }) => {
     const isSelected = selectedMLIndices.has(index);
     const isPublished = !!deal.publishedMsgId;
     const wasRemoved = !!deal.removedFromWhatsAppAt;
@@ -1294,14 +1377,16 @@ function renderMLDeals(deals) {
     
     elGridML.appendChild(card);
   });
-  
-  applyMLFilters();
+
+  updateDealPagination('ml', visibleEntries.length, filteredEntries.length);
+  updateMLSelectionUI();
 }
 
 function renderAmazonDeals(deals) {
   elGridAmazon.innerHTML = '';
   
   if (deals.length === 0) {
+    elPaginationAmazon.hidden = true;
     elGridAmazon.innerHTML = `
       <div class="empty-state">
         <p>Nenhuma oferta da Amazon carregada. Clique em "Atualizar Amazon".</p>
@@ -1309,8 +1394,21 @@ function renderAmazonDeals(deals) {
     `;
     return;
   }
-  
-  deals.forEach((deal, index) => {
+
+  const filteredEntries = getFilteredDealEntries(deals, 'amazon');
+  if (filteredEntries.length === 0) {
+    elPaginationAmazon.hidden = true;
+    elGridAmazon.innerHTML = `
+      <div class="empty-state">
+        <p>Nenhuma oferta corresponde aos filtros selecionados.</p>
+      </div>
+    `;
+    updateAmazonSelectionUI();
+    return;
+  }
+
+  const visibleEntries = filteredEntries.slice(0, visibleAmazonLimit);
+  visibleEntries.forEach(({ deal, index }) => {
     const isSelected = selectedAmazonIndices.has(index);
     const isPublished = !!deal.publishedMsgId;
     const wasRemoved = !!deal.removedFromWhatsAppAt;
@@ -1402,8 +1500,13 @@ function renderAmazonDeals(deals) {
     
     elGridAmazon.appendChild(card);
   });
-  
-  applyAmazonFilters();
+
+  updateDealPagination(
+    'amazon',
+    visibleEntries.length,
+    filteredEntries.length
+  );
+  updateAmazonSelectionUI();
 }
 
 function renderCoupons(coupons) {
@@ -1495,6 +1598,8 @@ function renderCoupons(coupons) {
         `;
         mini.addEventListener('click', () => {
           // Troca para a aba do Mercado Livre e rola até o produto
+          elFilterNameML.value = d.title;
+          applyMLFilters();
           elTabML.click();
           setTimeout(() => {
             const card = Array.from(elGridML.querySelectorAll('.deal-card')).find(c => {
@@ -1625,61 +1730,13 @@ function findCompatibleDealsForCoupon(coupon, deals) {
 // Filters Logic
 // ==========================================
 function applyMLFilters() {
-  const searchTerm = elFilterNameML.value.toLowerCase().trim();
-  const selectedCategory = elFilterCategoryML.value;
-  const selectedSubcategory = elFilterSubcategoryML.value;
-  const selectedDiscount = elFilterDiscountML.value;
-  
-  const cards = elGridML.querySelectorAll('.deal-card');
-  
-  cards.forEach(card => {
-    const idx = parseInt(card.dataset.index, 10);
-    const deal = allMLDeals[idx];
-    if (!deal) return;
-    
-    const matchesSearch = deal.title.toLowerCase().includes(searchTerm);
-    const catInfo = getProductCategoryAndSub(deal.title);
-    const matchesCategory = !selectedCategory || catInfo.category === selectedCategory;
-    const matchesSubcategory = !selectedSubcategory || catInfo.subcategory === selectedSubcategory;
-    const matchesDiscount = !selectedDiscount || deal.discount >= parseInt(selectedDiscount, 10);
-    
-    if (matchesSearch && matchesCategory && matchesSubcategory && matchesDiscount) {
-      card.classList.remove('hidden-filter');
-    } else {
-      card.classList.add('hidden-filter');
-    }
-  });
-
-  updateMLSelectionUI();
+  visibleMLLimit = DEALS_PAGE_SIZE;
+  renderMLDeals(allMLDeals);
 }
 
 function applyAmazonFilters() {
-  const searchTerm = elFilterNameAmazon.value.toLowerCase().trim();
-  const selectedCategory = elFilterCategoryAmazon.value;
-  const selectedSubcategory = elFilterSubcategoryAmazon.value;
-  const selectedDiscount = elFilterDiscountAmazon.value;
-  
-  const cards = elGridAmazon.querySelectorAll('.deal-card');
-  
-  cards.forEach(card => {
-    const idx = parseInt(card.dataset.index, 10);
-    const deal = allAmazonDeals[idx];
-    if (!deal) return;
-    
-    const matchesSearch = deal.title.toLowerCase().includes(searchTerm);
-    const catInfo = getProductCategoryAndSub(deal.title);
-    const matchesCategory = !selectedCategory || catInfo.category === selectedCategory;
-    const matchesSubcategory = !selectedSubcategory || catInfo.subcategory === selectedSubcategory;
-    const matchesDiscount = !selectedDiscount || deal.discount >= parseInt(selectedDiscount, 10);
-    
-    if (matchesSearch && matchesCategory && matchesSubcategory && matchesDiscount) {
-      card.classList.remove('hidden-filter');
-    } else {
-      card.classList.add('hidden-filter');
-    }
-  });
-
-  updateAmazonSelectionUI();
+  visibleAmazonLimit = DEALS_PAGE_SIZE;
+  renderAmazonDeals(allAmazonDeals);
 }
 
 // ==========================================
@@ -1810,6 +1867,14 @@ function init() {
   // Scrapers
   elBtnUpdateML.addEventListener('click', triggerMLScraper);
   elBtnUpdateAmazon.addEventListener('click', triggerAmazonScraper);
+  elBtnLoadMoreML.addEventListener('click', () => {
+    visibleMLLimit += DEALS_PAGE_SIZE;
+    renderMLDeals(allMLDeals);
+  });
+  elBtnLoadMoreAmazon.addEventListener('click', () => {
+    visibleAmazonLimit += DEALS_PAGE_SIZE;
+    renderAmazonDeals(allAmazonDeals);
+  });
 
   // Generate / Post Triggers
   elBtnGenerateML.addEventListener('click', () => postSelectedDeals('ml'));

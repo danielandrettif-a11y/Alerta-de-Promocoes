@@ -837,8 +837,6 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
       // Se for um ID válido do WhatsApp (termina com @g.us ou @c.us)
       if (groupNameOrId.includes('@')) {
         chatId = groupNameOrId;
-      } else if (groupNameOrId === 'Alerta de Descontos') {
-        chatId = '120363410833991285@g.us';
       } else {
         console.log(`📡 Buscando chat pelo nome "${groupNameOrId}"...`);
         const chats = await client.getChats();

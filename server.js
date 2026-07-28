@@ -117,7 +117,10 @@ const publicationQueueAssetsPath = path.join(
 );
 const publicationQueueEnabled =
   readEnv().PUBLICATION_QUEUE_ENABLED !== 'false';
-const GROUP_NAME = 'Alerta de Descontos';
+const GROUP_NAME =
+  readEnv().WHATSAPP_GROUP_ID ||
+  readEnv().WHATSAPP_GROUP_NAME ||
+  'Alerta de Descontos';
 
 // Liveness do processo + estado informativo das integracoes.
 // A rota sempre responde 200 enquanto o painel estiver vivo para evitar
@@ -959,6 +962,18 @@ app.post('/api/generate', async (req, res) => {
     return res.status(400).json({ error: 'Nenhuma oferta selecionada para envio.' });
   }
 
+  const whatsappStatus = whatsappEnabled && whatsapp
+    ? whatsapp.getConnectionStatus()
+    : { status: 'disabled', ready: false };
+  if (!whatsappStatus.ready) {
+    return res.status(503).json({
+      success: false,
+      error:
+        `WhatsApp indisponível (${whatsappStatus.status}). ` +
+        'Reconecte a sessão antes de enviar.'
+    });
+  }
+
   console.log(`\n📤 [Painel Web] Gerando e enviando ${selectedDeals.length} ofertas para o WhatsApp...`);
 
   const results = [];
@@ -999,16 +1014,14 @@ app.post('/api/generate', async (req, res) => {
       // Envia via WhatsApp Web
       let msgId = null;
       let sentSuccess = false;
-      if (whatsapp && whatsapp.client.info) {
-        try {
-          msgId = await whatsapp.sendOffer(GROUP_NAME, wppMessage, storyImagePath);
-          console.log(`   ✅ Oferta postada com sucesso! MsgID: ${msgId}`);
-          sentSuccess = true;
-        } catch (wppErr) {
-          console.error(`   ❌ Erro ao enviar para o WhatsApp: ${wppErr.message}`);
-        }
-      } else {
-        console.warn(`   ⚠️ WhatsApp desconectado ou indisponível no servidor.`);
+      let sendError = null;
+      try {
+        msgId = await whatsapp.sendOffer(GROUP_NAME, wppMessage, storyImagePath);
+        console.log(`   ✅ Oferta postada com sucesso! MsgID: ${msgId}`);
+        sentSuccess = true;
+      } catch (wppErr) {
+        sendError = wppErr.message;
+        console.error(`   ❌ Erro ao enviar para o WhatsApp: ${sendError}`);
       }
 
       // Registra no histórico de publicados
@@ -1051,7 +1064,8 @@ app.post('/api/generate', async (req, res) => {
         dealId,
         title: deal.title,
         success: sentSuccess,
-        msgId: msgId
+        msgId,
+        error: sendError
       });
 
       // Aguarda intervalo curto entre envios para estabilidade
@@ -1060,9 +1074,14 @@ app.post('/api/generate', async (req, res) => {
       }
     }
 
-    res.json({
-      success: true,
-      message: `Processamento de ${selectedDeals.length} ofertas concluído!`,
+    const sentCount = results.filter(item => item.success).length;
+    const failedCount = results.length - sentCount;
+    res.status(sentCount === 0 ? 502 : failedCount > 0 ? 207 : 200).json({
+      success: failedCount === 0,
+      partial: sentCount > 0 && failedCount > 0,
+      sentCount,
+      failedCount,
+      message: `${sentCount} de ${selectedDeals.length} oferta(s) enviada(s).`,
       results
     });
   } catch (err) {
