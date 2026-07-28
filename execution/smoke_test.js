@@ -208,12 +208,14 @@ async function run() {
     });
 
     const requiredSelectors = [
+      '#btn-tab-home',
       '#btn-tab-products',
       '#btn-tab-ml',
       '#btn-tab-amazon',
       '#btn-tab-coupons',
       '#btn-tab-queue',
       '#btn-tab-search',
+      '#panel-home',
       '#panel-products',
       '#panel-ml',
       '#panel-amazon',
@@ -230,6 +232,16 @@ async function run() {
     ];
     for (const selector of requiredSelectors) {
       await page.waitForSelector(selector, { timeout: 5000 });
+    }
+    const landingState = await page.evaluate(() => ({
+      activePanel: document.querySelector('.tab-panel.active')?.id,
+      destinations: document.querySelectorAll('[data-home-target]').length
+    }));
+    if (
+      landingState.activePanel !== 'panel-home' ||
+      landingState.destinations !== 4
+    ) {
+      throw new Error(`Home inicial invalida: ${JSON.stringify(landingState)}`);
     }
 
     const initialDealSelector = deals.deals.length
@@ -250,17 +262,95 @@ async function run() {
       }
     }
 
-    await page.click('#btn-tab-amazon');
+    await page.click('#btn-tab-products');
+    await page.$eval('#btn-tab-amazon', button => button.click());
     await page.waitForFunction(() => amazonDealsLoaded, { timeout: 5000 });
 
     for (const tab of [
       '#btn-tab-coupons',
       '#btn-tab-queue',
       '#btn-tab-search',
+      '#btn-tab-home',
       '#btn-tab-products',
       '#btn-tab-ml'
     ]) {
       await page.click(tab);
+    }
+
+    const productProgress = await page.evaluate(async () => {
+      const originalFetch = window.fetch;
+      const originalDeals = allMLDeals;
+      const originalReady = whatsappReady;
+      const fakeDeals = [
+        {
+          title: 'Produto de teste A',
+          originalPrice: 'R$ 199,90',
+          currentPrice: 'R$ 99,90',
+          discount: 50,
+          link: 'https://produto.mercadolivre.com.br/MLB-1001',
+          image: ''
+        },
+        {
+          title: 'Produto de teste B',
+          originalPrice: 'R$ 299,90',
+          currentPrice: 'R$ 149,90',
+          discount: 50,
+          link: 'https://produto.mercadolivre.com.br/MLB-1002',
+          image: ''
+        }
+      ];
+
+      try {
+        allMLDeals = fakeDeals;
+        whatsappReady = true;
+        selectedMLIndices.clear();
+        selectedMLIndices.add(0);
+        selectedMLIndices.add(1);
+        window.fetch = async (url, options) => {
+          if (url !== '/api/generate') {
+            return originalFetch.call(window, url, options);
+          }
+          const deal = JSON.parse(options.body).selectedDeals[0];
+          return new Response(JSON.stringify({
+            results: [{
+              dealId: generateClientDealId(deal, 'ml'),
+              title: deal.title,
+              success: true,
+              msgId: `smoke-${deal.title.at(-1)}`
+            }]
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        };
+
+        await postSelectedDeals('ml');
+        return Array.from(document.querySelectorAll('.product-progress'))
+          .map(row => ({
+            className: row.className,
+            status: row.querySelector('.product-progress-heading span')
+              .textContent,
+            value: row.querySelector('[role="progressbar"]')
+              .getAttribute('aria-valuenow')
+          }));
+      } finally {
+        window.fetch = originalFetch;
+        allMLDeals = originalDeals;
+        whatsappReady = originalReady;
+        selectedMLIndices.clear();
+        document.querySelector('#progress-modal').classList.add('hidden');
+        renderMLDeals(allMLDeals);
+      }
+    });
+    if (
+      productProgress.length !== 2 ||
+      productProgress.some(item =>
+        !item.className.includes('is-success') ||
+        item.status !== 'Enviado' ||
+        item.value !== '100'
+      )
+    ) {
+      throw new Error('Progresso individual dos produtos nao foi concluido');
     }
 
     const sharedFileName = await page.evaluate(async () => {
@@ -331,6 +421,7 @@ async function run() {
         mobileQueueVisible: !document.querySelector('#btn-mobile-queue').hidden,
         mobileSendDisabled: document.querySelector('#btn-mobile-send').disabled,
         navTargetHeight: minHeight([
+          '#btn-tab-home',
           '#btn-tab-products',
           '#btn-tab-coupons',
           '#btn-tab-queue',
@@ -402,8 +493,7 @@ async function run() {
     ) {
       throw new Error(`Fila mobile invalida: ${JSON.stringify(mobileQueue)}`);
     }
-    await page.click('#btn-tab-products');
-    await page.click('#btn-tab-ml');
+    await page.click('#btn-tab-home');
     const mobileWidth = await page.evaluate(() => ({
       viewport: window.innerWidth,
       document: document.documentElement.scrollWidth
@@ -433,6 +523,6 @@ async function run() {
 }
 
 run().catch(error => {
-  console.error(`[smoke] FALHA: ${error.message}`);
+  console.error(`[smoke] FALHA: ${error.stack || error.message}`);
   process.exitCode = 1;
 });

@@ -18,6 +18,11 @@ test('renderiza ofertas em lotes de 20 sem blur por card', () => {
   assert.match(html, /id="btn-load-more-amazon"/);
   assert.match(html, /id="btn-tab-products"/);
   assert.match(html, /id="btn-tab-search"/);
+  assert.match(html, /id="panel-home"/);
+  assert.match(html, /data-home-target="products"/);
+  assert.match(html, /data-home-target="coupons"/);
+  assert.match(html, /data-home-target="queue"/);
+  assert.match(html, /data-home-target="search"/);
   assert.match(html, /id="btn-queue-ml"/);
   assert.match(html, /id="btn-mobile-queue"/);
   assert.match(app, /function switchDealSource/);

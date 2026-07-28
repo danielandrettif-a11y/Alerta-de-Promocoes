@@ -22,11 +22,11 @@ test('envio ao WhatsApp não informa sucesso sem confirmação', () => {
   assert.doesNotMatch(whatsapp, /120363410833991285@g\.us/);
   assert.match(whatsapp, /liveState !== 'CONNECTED'/);
   assert.match(whatsapp, /targetChat\?\.isReadOnly/);
-  assert.match(
-    whatsapp,
-    /client\.sendMessage\(chatId, media, \{ caption: messageText \}\)/
-  );
-  assert.match(whatsapp, /client\.sendMessage\(chatId, messageText\)/);
+  assert.match(whatsapp, /WAWebWidFactory/);
+  assert.match(whatsapp, /__alertaOriginalAsUserWidOrThrow/);
+  assert.match(whatsapp, /return client\.sendMessage\(chatId, content, options\)/);
+  assert.match(whatsapp, /sentMsg = await sendMessage\(media/);
+  assert.match(whatsapp, /sentMsg = await sendMessage\(messageText\)/);
   assert.doesNotMatch(whatsapp, /sendSeen: false/);
   assert.doesNotMatch(whatsapp, /linkPreview: false/);
   assert.doesNotMatch(whatsapp, /waitUntilMsgSent: true/);
@@ -38,4 +38,6 @@ test('envio ao WhatsApp não informa sucesso sem confirmação', () => {
   assert.match(whatsapp, /await initializeClient\(\)/);
   assert.match(whatsapp, /clearTimeout\(reconnectTimer\)/);
   assert.doesNotMatch(whatsapp, /sent_success_no_id/);
+  assert.match(app, /className = 'product-progress is-queued'/);
+  assert.match(app, /selectedDeals: \[payloadDeals\[i\]\]/);
 });

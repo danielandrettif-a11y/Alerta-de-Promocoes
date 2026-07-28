@@ -16,7 +16,7 @@
   
   <!-- CSS Link -->
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=19">
+  <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -58,7 +58,11 @@
 
   <!-- Navigation Tabs -->
   <nav class="navigation-tabs" role="tablist">
-    <button id="btn-tab-products" class="tab-button active" role="tab" aria-selected="true" aria-controls="panel-products">
+    <button id="btn-tab-home" class="tab-button active" role="tab" aria-selected="true" aria-controls="panel-home">
+      <span class="tab-icon" aria-hidden="true">⌂</span>
+      <span class="tab-label">Início</span>
+    </button>
+    <button id="btn-tab-products" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-products">
       <span class="tab-icon" aria-hidden="true">✨</span>
       <span class="tab-label">Produtos</span>
     </button>
@@ -78,6 +82,56 @@
   </nav>
 
   <main class="dashboard-content">
+    <section id="panel-home" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-home">
+      <div class="home-shell">
+        <div class="home-intro">
+          <span class="home-eyebrow">CENTRAL DE OPERAÇÕES</span>
+          <h2>O que você quer fazer agora?</h2>
+          <p>Escolha uma área para começar. Você pode voltar ao início pelo menu inferior.</p>
+        </div>
+
+        <div class="home-destinations">
+          <button class="home-destination is-products" type="button" data-home-target="products">
+            <span class="home-destination-icon" aria-hidden="true">✨</span>
+            <span class="home-destination-content">
+              <strong>Gerar produtos</strong>
+              <small>Selecione ofertas, prepare Stories e envie para a fila ou WhatsApp.</small>
+            </span>
+            <span class="home-destination-action">Abrir gerador →</span>
+          </button>
+
+          <button class="home-destination is-coupons" type="button" data-home-target="coupons">
+            <span class="home-destination-icon" aria-hidden="true">🎟️</span>
+            <span class="home-destination-content">
+              <strong>Ver cupons</strong>
+              <small>Consulte códigos, validade e produtos compatíveis.</small>
+            </span>
+            <span class="home-destination-action">Abrir cupons →</span>
+          </button>
+
+          <button class="home-destination is-queue" type="button" data-home-target="queue">
+            <span class="home-destination-icon" aria-hidden="true">📥</span>
+            <span class="home-destination-content">
+              <strong>Fila de publicação</strong>
+              <small>Acompanhe Stories aguardando link, prontos ou em revisão.</small>
+            </span>
+            <span class="home-destination-action">
+              <span id="home-queue-count">0 itens</span> · Abrir fila →
+            </span>
+          </button>
+
+          <button class="home-destination is-search" type="button" data-home-target="search">
+            <span class="home-destination-icon" aria-hidden="true">⌕</span>
+            <span class="home-destination-content">
+              <strong>Busca geral</strong>
+              <small>Pesquise um produto no Mercado Livre, Amazon, Magalu e Casas Bahia.</small>
+            </span>
+            <span class="home-destination-action">Começar busca →</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section id="panel-search" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-search">
     <div class="marketplace-search-panel" aria-labelledby="marketplace-search-title">
       <div class="marketplace-search-heading">
@@ -113,7 +167,7 @@
     </section>
     
     <!-- Tab 1: Product generation -->
-    <section id="panel-products" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-products">
+    <section id="panel-products" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-products">
       <div class="products-hero">
         <div>
           <span class="products-eyebrow">CENTRAL DE CONTEÚDO</span>
@@ -393,6 +447,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=19"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

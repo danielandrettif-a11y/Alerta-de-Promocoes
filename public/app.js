@@ -41,6 +41,7 @@ function getDealImageUrl(value) {
 }
 
 // DOM elements - Tabs
+const elTabHome = document.getElementById('btn-tab-home');
 const elTabProducts = document.getElementById('btn-tab-products');
 const elTabML = document.getElementById('btn-tab-ml');
 const elTabAmazon = document.getElementById('btn-tab-amazon');
@@ -48,6 +49,7 @@ const elTabCoupons = document.getElementById('btn-tab-coupons');
 const elTabQueue = document.getElementById('btn-tab-queue');
 const elTabSearch = document.getElementById('btn-tab-search');
 
+const elPanelHome = document.getElementById('panel-home');
 const elPanelProducts = document.getElementById('panel-products');
 const elPanelML = document.getElementById('panel-ml');
 const elPanelAmazon = document.getElementById('panel-amazon');
@@ -115,6 +117,7 @@ const elQueueSummaryAwaiting = document.getElementById('queue-summary-awaiting')
 const elQueueSummaryReady = document.getElementById('queue-summary-ready');
 const elQueueSummaryReview = document.getElementById('queue-summary-review');
 const elQueueSummaryPublished = document.getElementById('queue-summary-published');
+const elHomeQueueCount = document.getElementById('home-queue-count');
 const elTxtWhatsappStatus = document.getElementById('txt-whatsapp-status');
 const elBtnToggleFiltersML = document.getElementById('btn-toggle-filters-ml');
 const elBtnToggleFiltersAmazon = document.getElementById('btn-toggle-filters-amazon');
@@ -756,7 +759,7 @@ async function postSelectedDeals(platform) {
   modal.classList.remove('hidden');
   modal.querySelector('.progress-modal-content').focus();
   spinner.style.display = 'block';
-  logEl.innerHTML = '';
+  logEl.replaceChildren();
 
   const addLog = (msg, type = 'info') => {
     const d = document.createElement('div');
@@ -768,32 +771,84 @@ async function postSelectedDeals(platform) {
 
   addLog(`Preparando envio de ${targetDeals.length} ofertas para o WhatsApp...`);
   
-  const payloadDeals = [];
+  const payloadDeals = targetDeals.map(deal => ({
+    ...deal,
+    platform,
+    comparison: deal.comparison || null
+  }));
+  const productProgress = payloadDeals.map((deal, index) => {
+    const row = document.createElement('div');
+    row.className = 'product-progress is-queued';
 
-  for (let i = 0; i < targetDeals.length; i++) {
-    const deal = targetDeals[i];
-    addLog(
-      `[${i + 1}/${targetDeals.length}] Preparando Story: ` +
-      `${deal.title.substring(0, 30)}...`
-    );
-    payloadDeals.push({
-      ...deal,
-      platform,
-      comparison: deal.comparison || null
-    });
+    const heading = document.createElement('div');
+    heading.className = 'product-progress-heading';
+    const name = document.createElement('strong');
+    name.textContent =
+      `${index + 1}. ${deal.title.substring(0, 58)}` +
+      (deal.title.length > 58 ? '…' : '');
+    const status = document.createElement('span');
+    status.textContent = 'Na fila';
+    heading.append(name, status);
+
+    const track = document.createElement('div');
+    track.className = 'product-progress-track';
+    track.setAttribute('role', 'progressbar');
+    track.setAttribute('aria-label', `Progresso de ${deal.title}`);
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', '100');
+    track.setAttribute('aria-valuenow', '0');
+    const bar = document.createElement('span');
+    track.appendChild(bar);
+    row.append(heading, track);
+    logEl.appendChild(row);
+
+    return (state, text, value) => {
+      row.className = `product-progress is-${state}`;
+      status.textContent = text;
+      track.setAttribute('aria-valuenow', String(value));
+      bar.style.width = `${value}%`;
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+  });
+
+  const itemResults = [];
+  for (let i = 0; i < payloadDeals.length; i++) {
+    productProgress[i]('processing', 'Gerando Story e enviando…', 65);
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedDeals: [payloadDeals[i]] })
+      });
+      const result = await response.json();
+      const item = Array.isArray(result.results)
+        ? result.results[0]
+        : null;
+      if (!item) {
+        throw new Error(
+          result.error ||
+          result.message ||
+          `Servidor respondeu HTTP ${response.status}.`
+        );
+      }
+      itemResults.push(item);
+      productProgress[i](
+        item.success && item.msgId ? 'success' : 'error',
+        item.success && item.msgId ? 'Enviado' : 'Falhou',
+        100
+      );
+    } catch (err) {
+      itemResults.push({
+        dealId: generateClientDealId(payloadDeals[i], platform),
+        title: payloadDeals[i].title,
+        success: false,
+        error: err.message
+      });
+      productProgress[i]('error', 'Falhou', 100);
+    }
   }
 
-  addLog(`Iniciando envio para o servidor Express...`);
-
   try {
-    const response = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ selectedDeals: payloadDeals })
-    });
-    const result = await response.json();
-
-    const itemResults = Array.isArray(result.results) ? result.results : [];
     const sentItems = itemResults.filter(item => item.success && item.msgId);
     const failedItems = itemResults.filter(item => !item.success);
 
@@ -833,16 +888,13 @@ async function postSelectedDeals(platform) {
       }
     } else {
       addLog(
-        `❌ Nenhuma oferta foi enviada. ` +
-        `${result.error || result.message || 'Verifique a conexão do WhatsApp.'}`,
+        '❌ Nenhuma oferta foi enviada. Verifique a conexão do WhatsApp.',
         'error'
       );
     }
-  } catch (err) {
-    addLog(`❌ Falha de rede ao disparar envios: ${err.message}`, 'error');
+  } finally {
+    spinner.style.display = 'none';
   }
-
-  spinner.style.display = 'none';
 
   // Ofertas que falharam permanecem selecionadas para nova tentativa.
   if (platform === 'ml') {
@@ -997,6 +1049,8 @@ function updateQueueSummary() {
     (summary.ready || 0) +
     (summary.needsReview || 0);
   elQueueTabCount.textContent = activeCount;
+  elHomeQueueCount.textContent =
+    `${activeCount} ${activeCount === 1 ? 'item' : 'itens'}`;
 }
 
 function queueItemMatchesFilter(item) {
@@ -1968,14 +2022,14 @@ function switchTab(activeBtn, activePanel) {
   const currentPanel = document.querySelector('.tab-panel.active');
   if (currentPanel) tabScrollPositions.set(currentPanel.id, window.scrollY);
 
-  [elTabProducts, elTabCoupons, elTabQueue, elTabSearch]
+  [elTabHome, elTabProducts, elTabCoupons, elTabQueue, elTabSearch]
     .forEach(btn => btn.classList.remove('active'));
-  [elPanelProducts, elPanelCoupons, elPanelQueue, elPanelSearch]
+  [elPanelHome, elPanelProducts, elPanelCoupons, elPanelQueue, elPanelSearch]
     .forEach(panel => panel.classList.remove('active'));
   
   activeBtn.classList.add('active');
   activePanel.classList.add('active');
-  [elTabProducts, elTabCoupons, elTabQueue, elTabSearch].forEach(btn => {
+  [elTabHome, elTabProducts, elTabCoupons, elTabQueue, elTabSearch].forEach(btn => {
     btn.setAttribute('aria-selected', String(btn === activeBtn));
   });
   
@@ -2011,6 +2065,9 @@ function init() {
   });
 
   // Tab Switchers
+  elTabHome.addEventListener('click', () =>
+    switchTab(elTabHome, elPanelHome)
+  );
   elTabProducts.addEventListener('click', () =>
     switchTab(elTabProducts, elPanelProducts)
   );
@@ -2029,6 +2086,17 @@ function init() {
   elTabSearch.addEventListener('click', () =>
     switchTab(elTabSearch, elPanelSearch)
   );
+  document.querySelectorAll('[data-home-target]').forEach(button => {
+    button.addEventListener('click', () => {
+      const tabs = {
+        products: elTabProducts,
+        coupons: elTabCoupons,
+        queue: elTabQueue,
+        search: elTabSearch
+      };
+      tabs[button.dataset.homeTarget]?.click();
+    });
+  });
 
   // Scrapers
   elBtnUpdateML.addEventListener('click', triggerMLScraper);
