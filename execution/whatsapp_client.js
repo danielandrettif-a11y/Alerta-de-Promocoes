@@ -833,35 +833,60 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
   return new Promise(async (resolve, reject) => {
     try {
       let chatId = null;
+      let targetChat = null;
+
+      const liveState = await client.getState();
+      if (liveState !== 'CONNECTED') {
+        const reason = `Estado atual do WhatsApp Web: ${liveState || 'desconhecido'}`;
+        scheduleReconnect(reason);
+        throw new Error(
+          'A sessão do WhatsApp perdeu a conexão. Aguarde a reconexão e tente novamente.'
+        );
+      }
 
       // Se for um ID válido do WhatsApp (termina com @g.us ou @c.us)
       if (groupNameOrId.includes('@')) {
         chatId = groupNameOrId;
+        targetChat = await client.getChatById(chatId);
       } else {
         console.log(`📡 Buscando chat pelo nome "${groupNameOrId}"...`);
         const chats = await client.getChats();
-        const groupChat = chats.find(chat => chat.name === groupNameOrId);
-        if (groupChat) {
-          chatId = groupChat.id._serialized;
+        targetChat = chats.find(chat => chat.name === groupNameOrId);
+        if (targetChat) {
+          chatId = targetChat.id._serialized;
         }
       }
 
       if (!chatId) {
         return reject(new Error(`Chat ou Grupo "${groupNameOrId}" não foi localizado nos chats ativos.`));
       }
+      if (targetChat?.isReadOnly) {
+        return reject(new Error(
+          `O grupo "${targetChat.name || groupNameOrId}" não permite envios por esta conta. ` +
+          'Torne a conta administradora ou escolha outro grupo.'
+        ));
+      }
 
       console.log(`📌 Destinatário resolvido: ID = ${chatId}`);
 
       let sentMsg;
+      const sendOptions = {
+        sendSeen: false,
+        linkPreview: false,
+        waitUntilMsgSent: true
+      };
       if (imagePath && fs.existsSync(imagePath)) {
         console.log(`📸 Preparando mídia: ${path.basename(imagePath)}`);
         const media = MessageMedia.fromFilePath(imagePath);
         
         console.log(`📤 Enviando imagem + texto...`);
-        sentMsg = await client.sendMessage(chatId, media, { caption: messageText });
+        sentMsg = await client.sendMessage(chatId, media, {
+          ...sendOptions,
+          caption: messageText
+        });
       } else {
         console.log(`📤 Enviando apenas texto...`);
-        sentMsg = await client.sendMessage(chatId, messageText);
+        sentMsg = await client.sendMessage(chatId, messageText, sendOptions);
       }
 
       console.log('✅ Mensagem enviada com sucesso!');
@@ -875,10 +900,23 @@ async function sendOffer(groupNameOrId, messageText, imagePath = null) {
           extractedId = sentMsg.id;
         }
       }
-      resolve(extractedId || 'sent_success_no_id');
+      if (!extractedId) {
+        throw new Error('O WhatsApp não devolveu a confirmação da mensagem.');
+      }
+      resolve(extractedId);
     } catch (err) {
-      console.error('❌ Falha no envio da mensagem:', err.message);
-      reject(err);
+      const rawMessage = err?.message || String(err);
+      console.error('❌ Falha no envio da mensagem:', rawMessage, err?.stack || '');
+
+      if (/^Evaluation failed:\s*[a-z]$/i.test(rawMessage) || /^[a-z]$/i.test(rawMessage)) {
+        scheduleReconnect(`Falha interna durante envio: ${rawMessage}`);
+        reject(new Error(
+          'O WhatsApp Web recusou o envio e a sessão será reconectada. ' +
+          'Aguarde o status voltar para conectado e tente novamente.'
+        ));
+        return;
+      }
+      reject(err instanceof Error ? err : new Error(rawMessage));
     }
   });
 }

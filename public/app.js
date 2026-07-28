@@ -13,6 +13,10 @@ let publicationQueueItems = [];
 let publicationQueueSummary = {};
 let publicationHistorySignature = '';
 let amazonDealsLoaded = false;
+let whatsappReady = false;
+let activeDealPlatform = 'ml';
+let lastFocusedElement = null;
+const tabScrollPositions = new Map();
 const DEALS_PAGE_SIZE = 20;
 let visibleMLLimit = DEALS_PAGE_SIZE;
 let visibleAmazonLimit = DEALS_PAGE_SIZE;
@@ -88,6 +92,14 @@ const elQueueSummaryAwaiting = document.getElementById('queue-summary-awaiting')
 const elQueueSummaryReady = document.getElementById('queue-summary-ready');
 const elQueueSummaryReview = document.getElementById('queue-summary-review');
 const elQueueSummaryPublished = document.getElementById('queue-summary-published');
+const elTxtWhatsappStatus = document.getElementById('txt-whatsapp-status');
+const elBtnToggleFiltersML = document.getElementById('btn-toggle-filters-ml');
+const elBtnToggleFiltersAmazon = document.getElementById('btn-toggle-filters-amazon');
+const elFiltersML = document.getElementById('filters-ml');
+const elFiltersAmazon = document.getElementById('filters-amazon');
+const elMobileSelectionBar = document.getElementById('mobile-selection-bar');
+const elMobileSelectionCount = document.getElementById('mobile-selection-count');
+const elBtnMobileSend = document.getElementById('btn-mobile-send');
 
 function parseBackendDate(dateStr) {
   if (!dateStr) return null;
@@ -228,6 +240,38 @@ async function fetchDataStatus() {
   }
 }
 
+async function fetchWhatsAppStatus() {
+  try {
+    const response = await fetch('/api/health');
+    const health = await response.json();
+    const status = health.whatsapp?.status || 'offline';
+    const labels = {
+      ready: 'conectado',
+      connecting: 'conectando',
+      authenticated: 'autenticado',
+      qr_required: 'QR necessário',
+      reconnect_wait: 'reconectando',
+      auth_failure: 'falha na autenticação',
+      disconnected: 'desconectado',
+      starting: 'iniciando',
+      disabled: 'desativado',
+      error: 'erro'
+    };
+
+    whatsappReady = health.whatsapp?.ready === true;
+    elTxtWhatsappStatus.textContent = `WhatsApp: ${labels[status] || status}`;
+  } catch (err) {
+    whatsappReady = false;
+    elTxtWhatsappStatus.textContent = 'WhatsApp: indisponível';
+    console.error('Erro ao consultar WhatsApp:', err);
+  }
+
+  elTxtWhatsappStatus.classList.toggle('is-ready', whatsappReady);
+  elTxtWhatsappStatus.classList.toggle('is-offline', !whatsappReady);
+  updateMLSelectionUI();
+  updateAmazonSelectionUI();
+}
+
 async function syncPublicationHistory() {
   try {
     const response = await fetch('/api/publish-history');
@@ -265,6 +309,18 @@ function hideLoading() {
   elLoadingOverlay.classList.add('hidden');
 }
 
+function showDealSkeletons(grid) {
+  if (grid.querySelector('.deal-card:not(.deal-skeleton)')) return;
+  grid.innerHTML = Array.from({ length: 4 }, () => `
+    <div class="deal-card deal-skeleton" aria-hidden="true">
+      <div class="skeleton-image"></div>
+      <div class="skeleton-lines">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  `).join('');
+}
+
 // ==========================================
 // Pesquisa geral (consulta apenas, sem WhatsApp)
 // ==========================================
@@ -278,6 +334,7 @@ function createMarketplaceResultCard(result) {
     image.src = result.image;
     image.alt = '';
     image.loading = 'lazy';
+    image.decoding = 'async';
     image.referrerPolicy = 'no-referrer';
     card.appendChild(image);
   } else {
@@ -490,6 +547,7 @@ function handleCategoryChange(categorySelectEl, subcategorySelectEl) {
 // API Handlers
 // ==========================================
 async function fetchMLDeals() {
+  showDealSkeletons(elGridML);
   try {
     const historyRes = await fetch('/api/publish-history');
     const historyData = await historyRes.json();
@@ -517,10 +575,16 @@ async function fetchMLDeals() {
     }
   } catch (err) {
     console.error('Erro ao buscar ofertas do Mercado Livre:', err);
+    elGridML.innerHTML = `
+      <div class="empty-state">
+        <p>Não foi possível carregar as ofertas. Tente novamente.</p>
+      </div>
+    `;
   }
 }
 
 async function fetchAmazonDeals() {
+  showDealSkeletons(elGridAmazon);
   try {
     const historyRes = await fetch('/api/publish-history');
     const historyData = await historyRes.json();
@@ -546,6 +610,11 @@ async function fetchAmazonDeals() {
     }
   } catch (err) {
     console.error('Erro ao buscar ofertas da Amazon:', err);
+    elGridAmazon.innerHTML = `
+      <div class="empty-state">
+        <p>Não foi possível carregar as ofertas. Tente novamente.</p>
+      </div>
+    `;
   }
 }
 
@@ -632,14 +701,20 @@ async function postSelectedDeals(platform) {
   const targetDeals = deals.filter((_, idx) => indices.includes(idx));
 
   if (targetDeals.length === 0) return;
+  if (!whatsappReady) {
+    alert('O WhatsApp não está conectado. Confira o status no topo da página.');
+    return;
+  }
 
   const modal = document.getElementById('progress-modal');
   const title = document.getElementById('progress-title');
   const logEl = document.getElementById('progress-log');
   const spinner = modal.querySelector('.progress-spinner');
   
+  lastFocusedElement = document.activeElement;
   title.textContent = 'Postando Stories no WhatsApp...';
   modal.classList.remove('hidden');
+  modal.querySelector('.progress-modal-content').focus();
   spinner.style.display = 'block';
   logEl.innerHTML = '';
 
@@ -1328,7 +1403,7 @@ function renderMLDeals(deals) {
     card.innerHTML = `
       ${checkboxHtml}
       <div class="card-image-box">
-        <img class="card-image" src="${deal.image}" alt="${displayTitle}" loading="lazy">
+        <img class="card-image" src="${deal.image}" alt="${displayTitle}" loading="lazy" decoding="async">
         <span class="card-discount-badge">${deal.discount}% OFF</span>
       </div>
       <div class="card-details">
@@ -1460,7 +1535,7 @@ function renderAmazonDeals(deals) {
     card.innerHTML = `
       ${checkboxHtml}
       <div class="card-image-box">
-        <img class="card-image" src="${deal.image}" alt="${displayTitle}" loading="lazy">
+        <img class="card-image" src="${deal.image}" alt="${displayTitle}" loading="lazy" decoding="async">
         <span class="card-discount-badge">${deal.discount}% OFF</span>
       </div>
       <div class="card-details">
@@ -1590,7 +1665,7 @@ function renderCoupons(coupons) {
         const mini = document.createElement('div');
         mini.className = 'compatible-product-mini';
         mini.innerHTML = `
-          <img src="${d.image}" alt="">
+          <img src="${d.image}" alt="" loading="lazy" decoding="async">
           <div class="mini-details">
             <span class="mini-title">${d.title}</span>
             <span class="mini-price">${d.currentPrice} (${d.discount}% OFF)</span>
@@ -1760,6 +1835,21 @@ function toggleAmazonSelectIndex(index) {
   updateAmazonSelectionUI();
 }
 
+function updateMobileSelectionBar() {
+  const onDealTab = elTabML.classList.contains('active') ||
+    elTabAmazon.classList.contains('active');
+  const count = activeDealPlatform === 'amazon'
+    ? selectedAmazonIndices.size
+    : selectedMLIndices.size;
+
+  elMobileSelectionCount.textContent = count;
+  elMobileSelectionBar.classList.toggle('hidden', !onDealTab || count === 0);
+  elBtnMobileSend.disabled = !whatsappReady || count === 0;
+  elBtnMobileSend.textContent = whatsappReady
+    ? 'Enviar ao WhatsApp'
+    : 'WhatsApp desconectado';
+}
+
 function updateMLSelectionUI() {
   const cards = elGridML.querySelectorAll('.deal-card');
   cards.forEach(card => {
@@ -1777,7 +1867,7 @@ function updateMLSelectionUI() {
   const count = selectedMLIndices.size;
   elTxtSelectedCountML.textContent = count;
   elTxtQueueCountML.textContent = count;
-  elBtnGenerateML.disabled = count === 0;
+  elBtnGenerateML.disabled = count === 0 || !whatsappReady;
   elBtnQueueML.disabled = count === 0;
   elBtnClearSelectionML.disabled = count === 0;
 
@@ -1791,6 +1881,7 @@ function updateMLSelectionUI() {
   } else {
     elChkSelectAllML.checked = false;
   }
+  updateMobileSelectionBar();
 }
 
 function updateAmazonSelectionUI() {
@@ -1809,7 +1900,7 @@ function updateAmazonSelectionUI() {
 
   const count = selectedAmazonIndices.size;
   elTxtSelectedCountAmazon.textContent = count;
-  elBtnGenerateAmazon.disabled = count === 0;
+  elBtnGenerateAmazon.disabled = count === 0 || !whatsappReady;
   elBtnClearSelectionAmazon.disabled = count === 0;
 
   const visibleCards = elGridAmazon.querySelectorAll('.deal-card:not(.hidden-filter)');
@@ -1822,12 +1913,16 @@ function updateAmazonSelectionUI() {
   } else {
     elChkSelectAllAmazon.checked = false;
   }
+  updateMobileSelectionBar();
 }
 
 // ==========================================
 // Tabs Management
 // ==========================================
 function switchTab(activeBtn, activePanel) {
+  const currentPanel = document.querySelector('.tab-panel.active');
+  if (currentPanel) tabScrollPositions.set(currentPanel.id, window.scrollY);
+
   [elTabML, elTabAmazon, elTabCoupons, elTabQueue]
     .forEach(btn => btn.classList.remove('active'));
   [elPanelML, elPanelAmazon, elPanelCoupons, elPanelQueue]
@@ -1840,7 +1935,14 @@ function switchTab(activeBtn, activePanel) {
   });
   
   const platform = activeBtn === elTabAmazon ? 'amazon' : 'ml';
+  if (activeBtn === elTabML || activeBtn === elTabAmazon) {
+    activeDealPlatform = platform;
+  }
   updateLastUpdateUI(platform);
+  updateMobileSelectionBar();
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: tabScrollPositions.get(activePanel.id) || 0 });
+  });
 }
 
 // ==========================================
@@ -1850,6 +1952,7 @@ function init() {
   elMarketplaceSearchForm.addEventListener('submit', runMarketplaceSearch);
   document.getElementById('btn-close-progress').addEventListener('click', () => {
     document.getElementById('progress-modal').classList.add('hidden');
+    lastFocusedElement?.focus();
   });
 
   // Tab Switchers
@@ -1879,6 +1982,9 @@ function init() {
   // Generate / Post Triggers
   elBtnGenerateML.addEventListener('click', () => postSelectedDeals('ml'));
   elBtnGenerateAmazon.addEventListener('click', () => postSelectedDeals('amazon'));
+  elBtnMobileSend.addEventListener('click', () =>
+    postSelectedDeals(activeDealPlatform)
+  );
   elBtnQueueML.addEventListener('click', () => {
     const deals = allMLDeals.filter((_, index) =>
       selectedMLIndices.has(index)
@@ -1938,15 +2044,40 @@ function init() {
   // Filters Amazon listeners
   elFilterNameAmazon.addEventListener('input', applyAmazonFilters);
   elFilterDiscountAmazon.addEventListener('change', applyAmazonFilters);
+  elBtnToggleFiltersML.addEventListener('click', () => {
+    const open = elFiltersML.classList.toggle('is-open');
+    elBtnToggleFiltersML.setAttribute('aria-expanded', String(open));
+  });
+  elBtnToggleFiltersAmazon.addEventListener('click', () => {
+    const open = elFiltersAmazon.classList.toggle('is-open');
+    elBtnToggleFiltersAmazon.setAttribute('aria-expanded', String(open));
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    const modal = document.getElementById('progress-modal');
+    if (!modal.classList.contains('hidden')) {
+      modal.classList.add('hidden');
+      lastFocusedElement?.focus();
+    }
+  });
 
   // Initial loads
   fetchCategories().then(async () => {
     await fetchPublicationQueue();
     fetchMLDeals();
     fetchDataStatus();
+    fetchWhatsAppStatus();
   });
   setInterval(fetchDataStatus, 60000);
+  setInterval(fetchWhatsAppStatus, 30000);
   setInterval(syncPublicationHistory, 30000);
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(err =>
+      console.error('Falha ao ativar modo instalável:', err)
+    );
+  }
 }
 
 // Listener de clique para o comparador de preços

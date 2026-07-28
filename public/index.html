@@ -2,7 +2,10 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0713">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="description" content="Painel de controle simplificado para buscar ofertas do Mercado Livre/Shopee, cupons diários e gerar Stories diretamente no navegador para enviar ao WhatsApp.">
   <title>Promo Automator | Painel de Controle de Ofertas e Stories</title>
   
@@ -12,7 +15,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   
   <!-- CSS Link -->
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
 
@@ -26,7 +30,7 @@
       <div class="spinner"></div>
       <p id="loading-text" class="loading-text">Processando dados...</p>
       <div class="loading-progress" role="progressbar"
-        aria-label="OperaÃ§Ã£o em andamento">
+        aria-label="Operação em andamento">
         <span class="loading-progress-bar"></span>
       </div>
     </div>
@@ -45,6 +49,9 @@
         <p id="txt-automation-status" class="automation-status">
           Publicação automática: carregando...
         </p>
+        <p id="txt-whatsapp-status" class="whatsapp-status" role="status">
+          WhatsApp: verificando...
+        </p>
       </div>
     </div>
   </header>
@@ -52,16 +59,21 @@
   <!-- Navigation Tabs -->
   <nav class="navigation-tabs" role="tablist">
     <button id="btn-tab-ml" class="tab-button active" role="tab" aria-selected="true" aria-controls="panel-ml">
-      🛍️ Mercado Livre
+      <span class="tab-icon" aria-hidden="true">🛍️</span>
+      <span class="tab-label">Mercado Livre</span>
     </button>
     <button id="btn-tab-amazon" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-amazon">
-      🟡 Amazon
+      <span class="tab-icon" aria-hidden="true">🟡</span>
+      <span class="tab-label">Amazon</span>
     </button>
     <button id="btn-tab-coupons" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-coupons">
-      🎟️ Cupons do Dia
+      <span class="tab-icon" aria-hidden="true">🎟️</span>
+      <span class="tab-label">Cupons</span>
     </button>
     <button id="btn-tab-queue" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-queue" hidden>
-      Fila de publicação <span id="queue-tab-count" class="queue-tab-count">0</span>
+      <span class="tab-icon" aria-hidden="true">📤</span>
+      <span class="tab-label">Fila</span>
+      <span id="queue-tab-count" class="queue-tab-count">0</span>
     </button>
   </nav>
 
@@ -124,27 +136,31 @@
         </div>
       </div>
 
+      <button id="btn-toggle-filters-ml" class="mobile-filter-toggle"
+        type="button" aria-expanded="false" aria-controls="filters-ml">
+        🔎 Busca e filtros
+      </button>
       <!-- Filter Bar -->
-      <div class="filter-bar">
+      <div id="filters-ml" class="filter-bar">
         <div class="filter-group search-filter">
           <span class="filter-icon">🔍</span>
-          <input type="text" id="ipt-filter-name-ml" placeholder="Filtrar somente as ofertas já carregadas..." title="Filtrar ofertas carregadas">
+          <input type="text" id="ipt-filter-name-ml" placeholder="Filtrar somente as ofertas já carregadas..." aria-label="Filtrar ofertas do Mercado Livre por nome">
         </div>
         <div class="filter-group category-filter">
           <span class="filter-icon">🏷️</span>
-          <select id="sel-filter-category-ml" class="select-premium" title="Filtrar por categoria">
+          <select id="sel-filter-category-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por categoria">
             <option value="">Todas as Categorias</option>
           </select>
         </div>
         <div class="filter-group subcategory-filter">
           <span class="filter-icon">📂</span>
-          <select id="sel-filter-subcategory-ml" class="select-premium" title="Filtrar por subcategoria" disabled>
+          <select id="sel-filter-subcategory-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por subcategoria" disabled>
             <option value="">Todas as Subcategorias</option>
           </select>
         </div>
         <div class="filter-group discount-filter">
           <span class="filter-icon">📉</span>
-          <select id="sel-filter-discount-ml" class="select-premium" title="Filtrar por desconto">
+          <select id="sel-filter-discount-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por desconto">
             <option value="">Qualquer desconto</option>
             <option value="30">30% OFF ou mais</option>
             <option value="40">40% OFF ou mais</option>
@@ -190,27 +206,31 @@
         </div>
       </div>
 
+      <button id="btn-toggle-filters-amazon" class="mobile-filter-toggle"
+        type="button" aria-expanded="false" aria-controls="filters-amazon">
+        🔎 Busca e filtros
+      </button>
       <!-- Filter Bar -->
-      <div class="filter-bar">
+      <div id="filters-amazon" class="filter-bar">
         <div class="filter-group search-filter">
           <span class="filter-icon">🔍</span>
-          <input type="text" id="ipt-filter-name-amazon" placeholder="Filtrar somente as ofertas já carregadas..." title="Filtrar ofertas carregadas">
+          <input type="text" id="ipt-filter-name-amazon" placeholder="Filtrar somente as ofertas já carregadas..." aria-label="Filtrar ofertas da Amazon por nome">
         </div>
         <div class="filter-group category-filter">
           <span class="filter-icon">🏷️</span>
-          <select id="sel-filter-category-amazon" class="select-premium" title="Filtrar por categoria">
+          <select id="sel-filter-category-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por categoria">
             <option value="">Todas as Categorias</option>
           </select>
         </div>
         <div class="filter-group subcategory-filter">
           <span class="filter-icon">📂</span>
-          <select id="sel-filter-subcategory-amazon" class="select-premium" title="Filtrar por subcategoria" disabled>
+          <select id="sel-filter-subcategory-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por subcategoria" disabled>
             <option value="">Todas as Subcategorias</option>
           </select>
         </div>
         <div class="filter-group discount-filter">
           <span class="filter-icon">📉</span>
-          <select id="sel-filter-discount-amazon" class="select-premium" title="Filtrar por desconto">
+          <select id="sel-filter-discount-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por desconto">
             <option value="">Qualquer desconto</option>
             <option value="15">15% OFF ou mais</option>
             <option value="30">30% OFF ou mais</option>
@@ -309,8 +329,9 @@
   </main>
 
   <!-- Progress Log Modal -->
-  <div id="progress-modal" class="progress-modal hidden">
-    <div class="progress-modal-content">
+  <div id="progress-modal" class="progress-modal hidden" role="dialog"
+    aria-modal="true" aria-labelledby="progress-title">
+    <div class="progress-modal-content" tabindex="-1">
       <div class="progress-header">
         <h3 id="progress-title">Postando Stories no WhatsApp...</h3>
         <div class="progress-spinner"></div>
@@ -320,11 +341,17 @@
     </div>
   </div>
 
+  <div id="mobile-selection-bar" class="mobile-selection-bar hidden"
+    aria-live="polite">
+    <span><strong id="mobile-selection-count">0</strong> selecionada(s)</span>
+    <button id="btn-mobile-send" type="button">Enviar ao WhatsApp</button>
+  </div>
+
   <footer class="main-footer">
     <p>&copy; 2026 Promo Automator. Geração de Stories & Envio Direto ao WhatsApp.</p>
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

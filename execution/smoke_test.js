@@ -101,6 +101,9 @@ async function run() {
 
     await expectResponse('/style.css', 200);
     await expectResponse('/app.js', 200);
+    await expectResponse('/manifest.webmanifest', 200);
+    await expectResponse('/sw.js', 200);
+    await expectResponse('/icon.svg', 200);
 
     const health = await (await expectResponse('/api/health', 200)).json();
     const deals = await (await expectResponse('/api/deals', 200)).json();
@@ -221,17 +224,22 @@ async function run() {
       await page.waitForSelector(selector, { timeout: 5000 });
     }
 
-    await page.waitForSelector('#grid-ml .deal-card', { timeout: 5000 });
+    const initialDealSelector = deals.deals.length
+      ? '#grid-ml .deal-card'
+      : '#grid-ml .empty-state';
+    await page.waitForSelector(initialDealSelector, { timeout: 5000 });
     if (await page.evaluate(() => amazonDealsLoaded)) {
       throw new Error('Amazon foi carregada antes de abrir sua aba');
     }
-    const historySyncPreservedCards = await page.evaluate(async () => {
-      const firstCard = document.querySelector('#grid-ml .deal-card');
-      await syncPublicationHistory();
-      return firstCard === document.querySelector('#grid-ml .deal-card');
-    });
-    if (!historySyncPreservedCards) {
-      throw new Error('Historico inalterado reconstruiu todos os cards');
+    if (deals.deals.length) {
+      const historySyncPreservedCards = await page.evaluate(async () => {
+        const firstCard = document.querySelector('#grid-ml .deal-card');
+        await syncPublicationHistory();
+        return firstCard === document.querySelector('#grid-ml .deal-card');
+      });
+      if (!historySyncPreservedCards) {
+        throw new Error('Historico inalterado reconstruiu todos os cards');
+      }
     }
 
     await page.click('#btn-tab-amazon');
@@ -291,6 +299,50 @@ async function run() {
     }
 
     await page.setViewport({ width: 390, height: 844 });
+    await page.click('#btn-toggle-filters-ml');
+    await page.evaluate(() => {
+      const grid = document.querySelector('#grid-ml');
+      grid.innerHTML = '';
+      showDealSkeletons(grid);
+      selectedMLIndices.add(0);
+      updateMLSelectionUI();
+    });
+    const mobileState = await page.evaluate(() => {
+      const minHeight = selectors => Math.min(...selectors.map(selector =>
+        document.querySelector(selector).getBoundingClientRect().height
+      ));
+      return {
+        navPosition: getComputedStyle(document.querySelector('.navigation-tabs')).position,
+        filtersOpen: document.querySelector('#filters-ml').classList.contains('is-open'),
+        filtersExpanded: document.querySelector('#btn-toggle-filters-ml')
+          .getAttribute('aria-expanded'),
+        mobileBarVisible: !document.querySelector('#mobile-selection-bar')
+          .classList.contains('hidden'),
+        mobileSendDisabled: document.querySelector('#btn-mobile-send').disabled,
+        navTargetHeight: minHeight([
+          '#btn-tab-ml',
+          '#btn-tab-amazon',
+          '#btn-tab-coupons',
+          '#btn-tab-queue'
+        ]),
+        filterTargetHeight: minHeight([
+          '#ipt-filter-name-ml',
+          '#sel-filter-category-ml',
+          '#sel-filter-discount-ml'
+        ])
+      };
+    });
+    if (
+      mobileState.navPosition !== 'fixed' ||
+      !mobileState.filtersOpen ||
+      mobileState.filtersExpanded !== 'true' ||
+      !mobileState.mobileBarVisible ||
+      !mobileState.mobileSendDisabled ||
+      mobileState.navTargetHeight < 44 ||
+      mobileState.filterTargetHeight < 44
+    ) {
+      throw new Error(`Modo mobile invalido: ${JSON.stringify(mobileState)}`);
+    }
     const mobileWidth = await page.evaluate(() => ({
       viewport: window.innerWidth,
       document: document.documentElement.scrollWidth

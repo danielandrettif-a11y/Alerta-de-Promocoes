@@ -1,0 +1,17 @@
+{
+  "name": "Promo Automator",
+  "short_name": "Promo",
+  "description": "Painel mobile para selecionar e publicar ofertas.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0713",
+  "theme_color": "#0b0713",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
