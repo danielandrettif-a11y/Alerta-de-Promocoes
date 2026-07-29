@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { saveJsonAtomic } = require('./json_store.js');
 
 const STATUSES = Object.freeze({
   AWAITING_AFFILIATE: 'awaiting_affiliate',
@@ -17,6 +18,34 @@ const ACTIVE_STATUSES = new Set([
   STATUSES.NEEDS_REVIEW
 ]);
 
+const AFFILIATE_PROCESSING_STATES = Object.freeze({
+  PENDING: 'pending',
+  CLAIMED: 'claimed',
+  ERROR: 'error',
+  COMPLETED: 'completed'
+});
+
+function emptyAffiliateProcessing() {
+  return {
+    state: AFFILIATE_PROCESSING_STATES.PENDING,
+    claimedBy: null,
+    claimedAt: null,
+    claimExpiresAt: null,
+    attempts: 0,
+    lastError: null,
+    completedAt: null
+  };
+}
+
+function normalizeAffiliateProcessing(item) {
+  const current = item?.affiliateProcessing || {};
+  return {
+    ...emptyAffiliateProcessing(),
+    ...current,
+    attempts: Math.max(0, Number(current.attempts) || 0)
+  };
+}
+
 function emptyQueue() {
   return {
     version: 1,
@@ -27,7 +56,12 @@ function emptyQueue() {
 function normalizeQueue(queue) {
   return {
     version: 1,
-    items: Array.isArray(queue?.items) ? queue.items : []
+    items: Array.isArray(queue?.items)
+      ? queue.items.map(item => ({
+        ...item,
+        affiliateProcessing: normalizeAffiliateProcessing(item)
+      }))
+      : []
   };
 }
 
@@ -43,12 +77,7 @@ function loadQueue(queuePath) {
 }
 
 function saveQueue(queuePath, queue) {
-  fs.mkdirSync(path.dirname(queuePath), { recursive: true });
-  fs.writeFileSync(
-    queuePath,
-    JSON.stringify(normalizeQueue(queue), null, 2),
-    'utf-8'
-  );
+  saveJsonAtomic(queuePath, normalizeQueue(queue));
 }
 
 function normalizeHttpsUrl(rawValue, fieldName) {
@@ -98,7 +127,8 @@ function normalizeProductLink(rawValue) {
 }
 
 function findItem(queue, itemId) {
-  return normalizeQueue(queue).items.find(item => item.id === itemId) || null;
+  return (Array.isArray(queue?.items) ? queue.items : [])
+    .find(item => item.id === itemId) || null;
 }
 
 function enqueueOffer(queue, input, now = new Date()) {
@@ -135,6 +165,7 @@ function enqueueOffer(queue, input, now = new Date()) {
     productLink: normalizeProductLink(input.productLink),
     storyFile: String(input.storyFile || ''),
     affiliateLink: null,
+    affiliateProcessing: emptyAffiliateProcessing(),
     reviewReason: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -170,6 +201,118 @@ function setAffiliateLink(
     item.status = STATUSES.READY;
     item.readyAt = item.updatedAt;
   }
+  item.affiliateProcessing = {
+    ...normalizeAffiliateProcessing(item),
+    state: AFFILIATE_PROCESSING_STATES.COMPLETED,
+    claimedBy: null,
+    claimedAt: null,
+    claimExpiresAt: null,
+    lastError: null,
+    completedAt: item.updatedAt
+  };
+  return { queue: normalized, item };
+}
+
+function releaseExpiredClaims(queue, now = new Date()) {
+  const normalized = normalizeQueue(queue);
+  const nowMs = now.getTime();
+  for (const item of normalized.items) {
+    const processing = normalizeAffiliateProcessing(item);
+    if (
+      processing.state === AFFILIATE_PROCESSING_STATES.CLAIMED &&
+      new Date(processing.claimExpiresAt || 0).getTime() <= nowMs
+    ) {
+      item.affiliateProcessing = {
+        ...processing,
+        state: AFFILIATE_PROCESSING_STATES.PENDING,
+        claimedBy: null,
+        claimedAt: null,
+        claimExpiresAt: null,
+        lastError: {
+          code: 'CLAIM_EXPIRED',
+          message: 'A reserva expirou e o item voltou para a fila.',
+          at: now.toISOString()
+        }
+      };
+    }
+  }
+  return normalized;
+}
+
+function claimAffiliateJobs(
+  queue,
+  { deviceId, limit = 10, leaseMs = 5 * 60 * 1000, maxAttempts = 3 },
+  now = new Date()
+) {
+  const normalized = releaseExpiredClaims(queue, now);
+  const claimant = String(deviceId || '').trim();
+  if (!claimant) throw new Error('deviceId obrigatorio.');
+  const safeLimit = Math.min(30, Math.max(1, Number(limit) || 10));
+  const expiresAt = new Date(now.getTime() + leaseMs).toISOString();
+  const jobs = normalized.items.filter(item => {
+    const processing = normalizeAffiliateProcessing(item);
+    return (
+      item.status === STATUSES.AWAITING_AFFILIATE &&
+      processing.state === AFFILIATE_PROCESSING_STATES.PENDING &&
+      processing.attempts < maxAttempts
+    );
+  }).slice(0, safeLimit);
+
+  for (const item of jobs) {
+    item.affiliateProcessing = {
+      ...normalizeAffiliateProcessing(item),
+      state: AFFILIATE_PROCESSING_STATES.CLAIMED,
+      claimedBy: claimant,
+      claimedAt: now.toISOString(),
+      claimExpiresAt: expiresAt,
+      lastError: null
+    };
+  }
+  return { queue: normalized, jobs };
+}
+
+function assertClaimOwner(item, deviceId, now) {
+  const processing = normalizeAffiliateProcessing(item);
+  if (
+    processing.state !== AFFILIATE_PROCESSING_STATES.CLAIMED ||
+    processing.claimedBy !== deviceId
+  ) {
+    throw new Error('Este item nao esta reservado para este dispositivo.');
+  }
+  if (new Date(processing.claimExpiresAt || 0).getTime() <= now.getTime()) {
+    throw new Error('A reserva deste item expirou.');
+  }
+  return processing;
+}
+
+function recordAffiliateFailure(
+  queue,
+  itemId,
+  { deviceId, code, message, maxAttempts = 3 },
+  now = new Date()
+) {
+  const normalized = normalizeQueue(queue);
+  const item = findItem(normalized, itemId);
+  if (!item) throw new Error('Item da fila nao encontrado.');
+  const processing = assertClaimOwner(item, deviceId, now);
+  const authRequired = code === 'AUTH_REQUIRED';
+  const attempts = processing.attempts + (authRequired ? 0 : 1);
+  item.affiliateProcessing = {
+    ...processing,
+    state: attempts >= maxAttempts
+      ? AFFILIATE_PROCESSING_STATES.ERROR
+      : AFFILIATE_PROCESSING_STATES.PENDING,
+    claimedBy: null,
+    claimedAt: null,
+    claimExpiresAt: null,
+    attempts,
+    lastError: {
+      code: String(code || 'UNKNOWN_ERROR'),
+      message: String(message || 'Falha sem detalhes.').slice(0, 500),
+      at: now.toISOString()
+    }
+  };
+  item.updatedAt = now.toISOString();
   return { queue: normalized, item };
 }
 
@@ -230,13 +373,19 @@ function summarizeQueue(queue) {
 
 module.exports = {
   STATUSES,
+  AFFILIATE_PROCESSING_STATES,
   emptyQueue,
+  emptyAffiliateProcessing,
   normalizeQueue,
   loadQueue,
   saveQueue,
   validateAffiliateLink,
   enqueueOffer,
   setAffiliateLink,
+  releaseExpiredClaims,
+  claimAffiliateJobs,
+  assertClaimOwner,
+  recordAffiliateFailure,
   updateItemStatus,
   summarizeQueue
 };

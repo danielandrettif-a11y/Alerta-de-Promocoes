@@ -11,6 +11,8 @@ let freshnessAmazon = null;
 let publicationQueueEnabled = false;
 let publicationQueueItems = [];
 let publicationQueueSummary = {};
+let publicationBatches = [];
+const selectedReadyBatchIds = new Set();
 let publicationHistorySignature = '';
 let amazonDealsLoaded = false;
 let whatsappReady = false;
@@ -127,6 +129,21 @@ const elMobileSelectionBar = document.getElementById('mobile-selection-bar');
 const elMobileSelectionCount = document.getElementById('mobile-selection-count');
 const elBtnMobileQueue = document.getElementById('btn-mobile-queue');
 const elBtnMobileSend = document.getElementById('btn-mobile-send');
+const elLocalWorkerPanel = document.getElementById('local-affiliate-worker');
+const elLocalWorkerBadge = document.getElementById('local-worker-badge');
+const elLocalWorkerDevice = document.getElementById('local-worker-device');
+const elLocalWorkerSeen = document.getElementById('local-worker-seen');
+const elLocalWorkerState = document.getElementById('local-worker-state');
+const elLocalWorkerProcessing = document.getElementById('local-worker-processing');
+const elLocalWorkerReady = document.getElementById('local-worker-ready');
+const elLocalWorkerErrors = document.getElementById('local-worker-errors');
+const elLocalWorkerAuth = document.getElementById('local-worker-auth');
+const elBtnExplainLocalWorker = document.getElementById('btn-explain-local-worker');
+const elBtnRefreshLocalWorker = document.getElementById('btn-refresh-local-worker');
+const elBtnPrepareBatch = document.getElementById('btn-prepare-batch');
+const elBtnDownloadLatestBatch = document.getElementById('btn-download-latest-batch');
+const elBatchSelectionCount = document.getElementById('batch-selection-count');
+const elBatchList = document.getElementById('batch-list');
 
 function parseBackendDate(dateStr) {
   if (!dateStr) return null;
@@ -1007,6 +1024,10 @@ function setQueueFeedback(message, type = 'info') {
 
 function getQueueStatusMeta(status) {
   const metadata = {
+    processing: {
+      label: 'Processando',
+      className: 'is-processing'
+    },
     awaiting_affiliate: {
       label: 'Aguardando link afiliado',
       className: 'is-awaiting'
@@ -1080,7 +1101,10 @@ function renderPublicationQueue() {
   }
 
   for (const item of visibleItems) {
-    const status = getQueueStatusMeta(item.status);
+    const processingState = item.affiliateProcessing?.state;
+    const status = getQueueStatusMeta(
+      processingState === 'claimed' ? 'processing' : item.status
+    );
     const card = document.createElement('article');
     card.className = `queue-card ${status.className}`;
     card.dataset.itemId = item.id;
@@ -1122,6 +1146,12 @@ function renderPublicationQueue() {
     const readyActions = item.status === 'ready'
       ? `
         <div class="queue-ready-actions">
+          <button type="button" data-queue-action="copy-title">
+            Copiar título
+          </button>
+          <button type="button" data-queue-action="copy-caption">
+            Copiar legenda
+          </button>
           <button type="button" data-queue-action="copy-link">
             2. Copiar link afiliado
           </button>
@@ -1132,6 +1162,27 @@ function renderPublicationQueue() {
             4. Marcar publicada
           </button>
         </div>
+      `
+      : '';
+
+    const processingMessage = item.affiliateProcessing?.lastError
+      ? `
+        <div class="queue-processing-message">
+          <strong>${escapeQueueHtml(
+            item.affiliateProcessing.lastError.code || 'Erro'
+          )}:</strong>
+          ${escapeQueueHtml(item.affiliateProcessing.lastError.message || '')}
+        </div>
+      `
+      : '';
+
+    const batchSelector = item.status === 'ready'
+      ? `
+        <label class="queue-batch-selector">
+          <input type="checkbox" data-batch-select="${escapeQueueHtml(item.id)}"
+            ${selectedReadyBatchIds.has(item.id) ? 'checked' : ''}>
+          Incluir no lote
+        </label>
       `
       : '';
 
@@ -1163,6 +1214,7 @@ function renderPublicationQueue() {
 
     card.innerHTML = `
       <div class="queue-story-column">
+        ${batchSelector}
         <img
           class="queue-story-preview"
           src="${escapeQueueHtml(item.storyUrl || '')}"
@@ -1193,14 +1245,22 @@ function renderPublicationQueue() {
           1. Abrir produto no Mercado Livre
         </a>
         ${reviewMessage}
+        ${processingMessage}
         ${affiliateForm}
         ${readyActions}
         ${completedDetails}
         <div class="queue-secondary-actions">${secondaryAction}</div>
       </div>
     `;
+    const batchCheckbox = card.querySelector('[data-batch-select]');
+    batchCheckbox?.addEventListener('change', () => {
+      if (batchCheckbox.checked) selectedReadyBatchIds.add(item.id);
+      else selectedReadyBatchIds.delete(item.id);
+      updateBatchSelection();
+    });
     elGridQueue.appendChild(card);
   }
+  updateBatchSelection();
 }
 
 async function fetchPublicationQueue(options = {}) {
@@ -1359,6 +1419,152 @@ async function updateQueueItemStatus(itemId, status) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Falha ao atualizar status.');
   await fetchPublicationQueue();
+}
+
+function buildQueueCaption(item) {
+  return [
+    '🔥 OFERTA ENCONTRADA!',
+    '',
+    item.title,
+    '',
+    `❌ De: ${item.originalPrice}`,
+    `✅ Por: ${item.currentPrice}`,
+    `💸 ${Number(item.discount) || 0}% OFF`,
+    '',
+    '🛒 Comprar:',
+    item.affiliateLink,
+    '',
+    'Preço e disponibilidade podem mudar a qualquer momento.'
+  ].join('\n');
+}
+
+async function fetchLocalWorkerStatus() {
+  try {
+    const response = await fetch('/api/local-affiliate-worker/status');
+    const data = await response.json();
+    elLocalWorkerPanel.hidden = data.enabled !== true;
+    if (!data.enabled) return;
+    const workers = data.workers || [];
+    const worker = workers.find(item => item.online) || workers[0] || null;
+    const queue = data.queue || {};
+    const labels = {
+      idle: 'Ocioso',
+      processing: 'Processando',
+      auth_required: 'Autenticação necessária',
+      offline: 'Offline',
+      error: 'Erro'
+    };
+    elLocalWorkerBadge.textContent = worker?.online ? 'Online' : 'Offline';
+    elLocalWorkerBadge.classList.toggle('is-online', worker?.online === true);
+    elLocalWorkerDevice.textContent = worker?.deviceName || 'Nenhum';
+    elLocalWorkerSeen.textContent = worker?.lastSeenAt
+      ? new Date(worker.lastSeenAt).toLocaleString('pt-BR')
+      : '--';
+    elLocalWorkerState.textContent = labels[worker?.status] || 'Offline';
+    elLocalWorkerProcessing.textContent = queue.processing || 0;
+    elLocalWorkerReady.textContent = queue.ready || 0;
+    elLocalWorkerErrors.textContent = queue.errors || 0;
+    elLocalWorkerAuth.hidden = data.authRequired !== true;
+  } catch (error) {
+    elLocalWorkerBadge.textContent = 'Indisponível';
+    elLocalWorkerBadge.classList.remove('is-online');
+  }
+}
+
+function updateBatchSelection() {
+  const readyIds = new Set(
+    publicationQueueItems
+      .filter(item => item.status === 'ready')
+      .map(item => item.id)
+  );
+  for (const itemId of selectedReadyBatchIds) {
+    if (!readyIds.has(itemId)) selectedReadyBatchIds.delete(itemId);
+  }
+  const count = selectedReadyBatchIds.size;
+  elBatchSelectionCount.textContent =
+    `${count} ${count === 1 ? 'oferta pronta selecionada' : 'ofertas prontas selecionadas'}`;
+  elBtnPrepareBatch.disabled = count === 0;
+}
+
+function renderPublicationBatches() {
+  elBatchList.replaceChildren();
+  elBtnDownloadLatestBatch.disabled = publicationBatches.length === 0;
+  if (publicationBatches.length === 0) {
+    elBatchList.innerHTML =
+      '<div class="empty-state"><p>Nenhum lote preparado.</p></div>';
+    return;
+  }
+  for (const batch of publicationBatches) {
+    const section = document.createElement('article');
+    section.className = 'batch-card';
+    section.dataset.batchId = batch.id;
+    section.innerHTML = `
+      <div class="batch-card-heading">
+        <div>
+          <h4>${escapeQueueHtml(batch.name)}</h4>
+          <span>${new Date(batch.createdAt).toLocaleString('pt-BR')} ·
+            ${batch.itemCount} oferta(s)</span>
+        </div>
+        <a href="${escapeQueueHtml(batch.downloadUrl)}">Baixar ZIP</a>
+      </div>
+      <div class="batch-item-grid">
+        ${(batch.items || []).map(item => `
+          <div class="batch-item" data-batch-item-id="${escapeQueueHtml(item.id)}">
+            <img src="${escapeQueueHtml(item.storyUrl)}"
+              alt="Story de ${escapeQueueHtml(item.title)}" loading="lazy">
+            <strong>${escapeQueueHtml(item.title)}</strong>
+            <div>
+              <button type="button" data-batch-action="copy-link">Link</button>
+              <button type="button" data-batch-action="copy-title">Título</button>
+              <button type="button" data-batch-action="copy-caption">Legenda</button>
+              <button type="button" data-batch-action="published">Publicado</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    elBatchList.appendChild(section);
+  }
+}
+
+async function fetchPublicationBatches() {
+  if (!publicationQueueEnabled) return;
+  try {
+    const response = await fetch('/api/publication-batches');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Falha ao carregar lotes.');
+    publicationBatches = data.batches || [];
+    renderPublicationBatches();
+  } catch (error) {
+    console.error('Erro ao carregar lotes:', error);
+  }
+}
+
+async function preparePublicationBatch() {
+  if (selectedReadyBatchIds.size === 0) return;
+  const name = prompt('Nome do lote:', `Lote ${new Date().toLocaleDateString('pt-BR')}`);
+  if (name === null) return;
+  elBtnPrepareBatch.disabled = true;
+  try {
+    const response = await fetch('/api/publication-batches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        itemIds: [...selectedReadyBatchIds]
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Falha ao preparar lote.');
+    selectedReadyBatchIds.clear();
+    await fetchPublicationBatches();
+    renderPublicationQueue();
+    setQueueFeedback('Lote e pacote ZIP preparados.', 'success');
+  } catch (error) {
+    setQueueFeedback(error.message, 'error');
+  } finally {
+    updateBatchSelection();
+  }
 }
 
 // ==========================================
@@ -2082,6 +2288,8 @@ function init() {
   elTabQueue.addEventListener('click', () => {
     switchTab(elTabQueue, elPanelQueue);
     fetchPublicationQueue();
+    fetchLocalWorkerStatus();
+    fetchPublicationBatches();
   });
   elTabSearch.addEventListener('click', () =>
     switchTab(elTabSearch, elPanelSearch)
@@ -2128,12 +2336,29 @@ function init() {
     );
     enqueueDealsForPublication(deals);
   });
-  elBtnRefreshQueue.addEventListener('click', () =>
-    fetchPublicationQueue({
+  elBtnRefreshQueue.addEventListener('click', async () => {
+    await Promise.all([
+      fetchPublicationQueue({
       feedback: 'Fila atualizada.',
       type: 'success'
-    })
-  );
+      }),
+      fetchLocalWorkerStatus(),
+      fetchPublicationBatches()
+    ]);
+  });
+  elBtnExplainLocalWorker.addEventListener('click', () => {
+    alert(
+      'Abra a extensão Promo Automator no Chrome ou Edge e clique em ' +
+      '“Processar fila”. A sessão e os cookies ficam somente no seu navegador.'
+    );
+  });
+  elBtnRefreshLocalWorker.addEventListener('click', fetchLocalWorkerStatus);
+  elBtnPrepareBatch.addEventListener('click', preparePublicationBatch);
+  elBtnDownloadLatestBatch.addEventListener('click', () => {
+    if (publicationBatches[0]?.downloadUrl) {
+      window.location.assign(publicationBatches[0].downloadUrl);
+    }
+  });
   elQueueStatusFilter.addEventListener('change', renderPublicationQueue);
 
   // Select All ML Toggle
@@ -2213,6 +2438,10 @@ function init() {
   // Initial loads
   fetchCategories().then(async () => {
     await fetchPublicationQueue();
+    await Promise.all([
+      fetchLocalWorkerStatus(),
+      fetchPublicationBatches()
+    ]);
     fetchMLDeals();
     fetchDataStatus();
     fetchWhatsAppStatus();
@@ -2220,6 +2449,7 @@ function init() {
   setInterval(fetchDataStatus, 60000);
   setInterval(fetchWhatsAppStatus, 30000);
   setInterval(syncPublicationHistory, 30000);
+  setInterval(fetchLocalWorkerStatus, 30000);
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(err =>
@@ -2379,6 +2609,18 @@ document.addEventListener('click', async (event) => {
       return;
     }
 
+    if (action === 'copy-title') {
+      await copyQueueText(item.title);
+      setQueueFeedback('Título copiado.', 'success');
+      return;
+    }
+
+    if (action === 'copy-caption') {
+      await copyQueueText(buildQueueCaption(item));
+      setQueueFeedback('Legenda copiada.', 'success');
+      return;
+    }
+
     if (action === 'share-story') {
       const shared = await shareQueueStory(item);
       setQueueFeedback(
@@ -2414,6 +2656,41 @@ document.addEventListener('click', async (event) => {
     setQueueFeedback(err.message, 'error');
   } finally {
     actionButton.disabled = false;
+  }
+});
+
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-batch-action]');
+  if (!button) return;
+  const batchCard = button.closest('.batch-card');
+  const itemCard = button.closest('.batch-item');
+  const batch = publicationBatches.find(entry =>
+    entry.id === batchCard?.dataset.batchId
+  );
+  const item = batch?.items.find(entry =>
+    entry.id === itemCard?.dataset.batchItemId
+  );
+  if (!item) return;
+
+  button.disabled = true;
+  try {
+    const action = button.dataset.batchAction;
+    if (action === 'copy-link') await copyQueueText(item.affiliateLink);
+    if (action === 'copy-title') await copyQueueText(item.title);
+    if (action === 'copy-caption') await copyQueueText(item.caption);
+    if (action === 'published') {
+      if (!confirm('Confirma que este Story foi publicado no Instagram?')) return;
+      await updateQueueItemStatus(item.id, 'published');
+      await fetchPublicationBatches();
+    }
+    setQueueFeedback(
+      action === 'published' ? 'Oferta marcada como publicada.' : 'Conteúdo copiado.',
+      'success'
+    );
+  } catch (error) {
+    setQueueFeedback(error.message, 'error');
+  } finally {
+    button.disabled = false;
   }
 });
 

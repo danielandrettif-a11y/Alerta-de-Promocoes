@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Promo Automator - Links Mercado Livre",
+  "version": "1.0.0",
+  "description": "Gera links meli.la usando a sessão local do Mercado Livre.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://www.mercadolivre.com.br/*",
+    "https://produto.mercadolivre.com.br/*"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.mercadolivre.com.br/*",
+        "https://produto.mercadolivre.com.br/*"
+      ],
+      "js": [
+        "content/mercado_livre.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

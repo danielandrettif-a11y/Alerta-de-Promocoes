@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gerador local de links</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="eyebrow">PROMO AUTOMATOR</span>
+    <h1>Gerador local de links</h1>
+    <p id="device-name">Dispositivo local</p>
+  </header>
+
+  <main>
+    <section class="status-card">
+      <div><span>Servidor</span><strong id="server-status">Verificando...</strong></div>
+      <div><span>Mercado Livre</span><strong id="auth-status">Sessão local</strong></div>
+      <div><span>Aguardando</span><strong id="waiting-count">0</strong></div>
+      <div><span>Processadas</span><strong id="processed-count">0</strong></div>
+      <div><span>Falhas</span><strong id="failed-count">0</strong></div>
+    </section>
+
+    <section class="current-card">
+      <span>Item atual</span>
+      <strong id="current-item">Nenhum</strong>
+      <p id="last-error" role="status"></p>
+    </section>
+
+    <label for="batch-size">Tamanho do lote</label>
+    <select id="batch-size">
+      <option value="5">5 ofertas</option>
+      <option value="10">10 ofertas</option>
+      <option value="20">20 ofertas</option>
+      <option value="30">30 ofertas</option>
+    </select>
+
+    <button id="start" class="primary">Processar fila</button>
+    <button id="continue" class="primary" hidden>Continuar processamento</button>
+    <button id="stop">Parar</button>
+    <div class="button-row">
+      <button id="test">Testar conexão</button>
+      <button id="open-ml">Abrir Mercado Livre</button>
+    </div>
+    <button id="options" class="link-button">Configurar servidor e token</button>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -2,6 +2,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
+const archiver = require('archiver');
 const { exec, execSync } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./execution/category_helper.js');
 const {
@@ -33,9 +35,29 @@ const {
   saveQueue: savePublicationQueue,
   enqueueOffer,
   setAffiliateLink,
+  releaseExpiredClaims,
+  claimAffiliateJobs,
+  assertClaimOwner,
+  recordAffiliateFailure,
   updateItemStatus,
   summarizeQueue
 } = require('./execution/publication_queue.js');
+const {
+  FAILURE_CODES,
+  isValidWorkerToken,
+  loadWorkers,
+  saveWorkers,
+  updateWorker,
+  listWorkerStatus
+} = require('./execution/local_affiliate_worker.js');
+const {
+  createBatchRecord,
+  buildLinksText,
+  buildOffersCsv,
+  loadBatches,
+  saveBatches,
+  isSafeBatchId
+} = require('./execution/publication_batches.js');
 
 // puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
 // load Puppeteer lazily only when the price-comparison endpoint needs it.
@@ -113,8 +135,22 @@ const publicationQueueAssetsPath = path.join(
   APP_RUNTIME_DIR,
   'publication_queue_assets'
 );
+const localAffiliateWorkersPath = path.join(
+  APP_RUNTIME_DIR,
+  'local_affiliate_workers.json'
+);
+const publicationBatchesPath = path.join(
+  APP_RUNTIME_DIR,
+  'publication_batches.json'
+);
+const publicationBatchFilesPath = path.join(
+  APP_RUNTIME_DIR,
+  'publication_batches'
+);
 const publicationQueueEnabled =
   readEnv().PUBLICATION_QUEUE_ENABLED !== 'false';
+const localAffiliateWorkerEnabled =
+  readEnv().LOCAL_AFFILIATE_WORKER_ENABLED === 'true';
 const GROUP_NAME =
   readEnv().WHATSAPP_GROUP_ID ||
   readEnv().WHATSAPP_GROUP_NAME ||
@@ -361,7 +397,153 @@ function requirePublicationQueue(req, res, next) {
   next();
 }
 
-// Fila assistida: organiza o Story, mas nunca gera o link afiliado.
+function requireLocalAffiliateWorker(req, res, next) {
+  if (!localAffiliateWorkerEnabled) {
+    return res.status(404).json({
+      enabled: false,
+      error: 'Worker local de afiliados desativado.'
+    });
+  }
+  const expectedToken = readEnv().LOCAL_AFFILIATE_WORKER_TOKEN;
+  if (!expectedToken) {
+    return res.status(503).json({
+      error: 'Token do worker local nao configurado no servidor.'
+    });
+  }
+  if (!isValidWorkerToken(req.get('authorization'), expectedToken)) {
+    return res.status(401).json({ error: 'Token do worker invalido.' });
+  }
+  next();
+}
+
+app.use('/api/local-affiliate-worker', (req, res, next) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+  });
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+function applyAffiliateLinkToQueue(queue, item, affiliateLink) {
+  const { deals } = loadAvailableDeals();
+  const currentDeal = deals.find(deal =>
+    deal.platform === 'mercado_livre' &&
+    generateDealId(deal) === item.dealId
+  );
+  let reviewReason = null;
+  let latestPrice = null;
+  if (!currentDeal) {
+    reviewReason =
+      'O produto nao aparece mais no catalogo atual. Atualize as ofertas antes de publicar.';
+  } else if (
+    String(currentDeal.currentPrice || '') !==
+    String(item.currentPrice || '')
+  ) {
+    latestPrice = String(currentDeal.currentPrice || '');
+    reviewReason =
+      `O preco mudou de ${item.currentPrice} para ${latestPrice}. ` +
+      'Gere um novo Story antes de publicar.';
+  }
+  return setAffiliateLink(
+    queue,
+    item.id,
+    affiliateLink,
+    { reviewReason, latestPrice }
+  );
+}
+
+function getAffiliateProcessingSummary(queue) {
+  const result = {
+    awaiting: 0,
+    processing: 0,
+    ready: 0,
+    errors: 0
+  };
+  for (const item of queue.items) {
+    if (item.status === PUBLICATION_QUEUE_STATUSES.AWAITING_AFFILIATE) {
+      result.awaiting += 1;
+    }
+    if (item.affiliateProcessing?.state === 'claimed') {
+      result.processing += 1;
+    }
+    if (item.status === PUBLICATION_QUEUE_STATUSES.READY) result.ready += 1;
+    if (item.affiliateProcessing?.state === 'error') result.errors += 1;
+  }
+  return result;
+}
+
+function timingSafeTextEqual(leftValue, rightValue) {
+  const left = Buffer.from(String(leftValue || ''));
+  const right = Buffer.from(String(rightValue || ''));
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function batchForResponse(batch) {
+  return {
+    id: batch.id,
+    name: batch.name,
+    createdAt: batch.createdAt,
+    itemCount: batch.items.length,
+    downloadUrl:
+      `/api/publication-batches/${encodeURIComponent(batch.id)}/download` +
+      `?token=${encodeURIComponent(batch.downloadToken)}`,
+    items: batch.items.map(item => ({
+      ...item,
+      storyUrl:
+        `/api/publication-queue/assets/${encodeURIComponent(item.storyFile)}`
+    }))
+  };
+}
+
+function createBatchZip(batch) {
+  return new Promise((resolve, reject) => {
+    fs.mkdirSync(publicationBatchFilesPath, { recursive: true });
+    const zipPath = path.join(publicationBatchFilesPath, `${batch.id}.zip`);
+    const temporaryPath = `${zipPath}.${process.pid}.tmp`;
+    const output = fs.createWriteStream(temporaryPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const fail = error => {
+      output.destroy();
+      fs.rmSync(temporaryPath, { force: true });
+      reject(error);
+    };
+    output.on('close', () => {
+      try {
+        fs.renameSync(temporaryPath, zipPath);
+        resolve(zipPath);
+      } catch (error) {
+        fail(error);
+      }
+    });
+    output.on('error', fail);
+    archive.on('error', fail);
+    archive.pipe(output);
+    for (const item of batch.items) {
+      const storyPath = path.join(publicationQueueAssetsPath, item.storyFile);
+      archive.file(storyPath, {
+        name: `${batch.folderName}/${item.imageFile}`
+      });
+    }
+    archive.append(buildLinksText(batch), {
+      name: `${batch.folderName}/links.txt`
+    });
+    archive.append(buildOffersCsv(batch), {
+      name: `${batch.folderName}/ofertas.csv`
+    });
+    const portableManifest = {
+      ...batch,
+      downloadToken: undefined
+    };
+    archive.append(JSON.stringify(portableManifest, null, 2), {
+      name: `${batch.folderName}/manifest.json`
+    });
+    archive.finalize();
+  });
+}
+
+// Fila assistida: organiza o Story e aceita link manual ou do worker local.
 app.get('/api/publication-queue', (req, res) => {
   if (!publicationQueueEnabled) {
     return res.json({
@@ -455,31 +637,10 @@ app.patch(
         return res.status(404).json({ error: 'Item da fila nao encontrado.' });
       }
 
-      const { deals } = loadAvailableDeals();
-      const currentDeal = deals.find(deal =>
-        deal.platform === 'mercado_livre' &&
-        generateDealId(deal) === item.dealId
-      );
-      let reviewReason = null;
-      let latestPrice = null;
-      if (!currentDeal) {
-        reviewReason =
-          'O produto nao aparece mais no catalogo atual. Atualize as ofertas antes de publicar.';
-      } else if (
-        String(currentDeal.currentPrice || '') !==
-        String(item.currentPrice || '')
-      ) {
-        latestPrice = String(currentDeal.currentPrice || '');
-        reviewReason =
-          `O preco mudou de ${item.currentPrice} para ${latestPrice}. ` +
-          'Gere um novo Story antes de publicar.';
-      }
-
-      const result = setAffiliateLink(
+      const result = applyAffiliateLinkToQueue(
         queue,
-        item.id,
-        req.body?.affiliateLink,
-        { reviewReason, latestPrice }
+        item,
+        req.body?.affiliateLink
       );
       savePublicationQueue(publicationQueuePath, result.queue);
       res.json({
@@ -512,6 +673,247 @@ app.patch(
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
+  }
+);
+
+app.get('/api/local-affiliate-worker/status', (req, res) => {
+  if (!localAffiliateWorkerEnabled) {
+    return res.json({
+      enabled: false,
+      workers: [],
+      queue: getAffiliateProcessingSummary({ items: [] })
+    });
+  }
+  const queue = releaseExpiredClaims(
+    loadPublicationQueue(publicationQueuePath)
+  );
+  savePublicationQueue(publicationQueuePath, queue);
+  const workers = listWorkerStatus(loadWorkers(localAffiliateWorkersPath));
+  res.json({
+    enabled: true,
+    workers,
+    queue: getAffiliateProcessingSummary(queue),
+    authRequired: workers.some(worker =>
+      worker.status === 'auth_required' && worker.online
+    )
+  });
+});
+
+app.post(
+  '/api/local-affiliate-worker/heartbeat',
+  requireLocalAffiliateWorker,
+  (req, res) => {
+    try {
+      const workers = loadWorkers(localAffiliateWorkersPath);
+      const worker = updateWorker(workers, req.body);
+      saveWorkers(localAffiliateWorkersPath, workers);
+      res.json({ success: true, worker });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.post(
+  '/api/local-affiliate-worker/claim',
+  requireLocalAffiliateWorker,
+  (req, res) => {
+    try {
+      const env = readEnv();
+      const leaseMs = Math.max(
+        60000,
+        Number(env.LOCAL_AFFILIATE_CLAIM_MINUTES || 5) * 60000
+      );
+      const maxAttempts = Math.min(
+        10,
+        Math.max(1, Number(env.LOCAL_AFFILIATE_MAX_ATTEMPTS) || 3)
+      );
+      const queue = loadPublicationQueue(publicationQueuePath);
+      const result = claimAffiliateJobs(queue, {
+        deviceId: req.body?.deviceId,
+        limit: req.body?.limit,
+        leaseMs,
+        maxAttempts
+      });
+      savePublicationQueue(publicationQueuePath, result.queue);
+
+      const workers = loadWorkers(localAffiliateWorkersPath);
+      const existing = workers.workers.find(worker =>
+        worker.deviceId === req.body?.deviceId
+      );
+      updateWorker(workers, {
+        ...existing,
+        ...req.body,
+        status: result.jobs.length ? 'processing' : 'idle',
+        currentItemId: result.jobs[0]?.id || null
+      });
+      saveWorkers(localAffiliateWorkersPath, workers);
+
+      res.json({
+        success: true,
+        jobs: result.jobs.map(item => ({
+          id: item.id,
+          title: item.title,
+          productLink: item.productLink,
+          claimExpiresAt: item.affiliateProcessing.claimExpiresAt,
+          attempts: item.affiliateProcessing.attempts
+        }))
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.post(
+  '/api/local-affiliate-worker/jobs/:itemId/complete',
+  requireLocalAffiliateWorker,
+  (req, res) => {
+    try {
+      const deviceId = String(req.body?.deviceId || '').trim();
+      const queue = loadPublicationQueue(publicationQueuePath);
+      const item = queue.items.find(entry => entry.id === req.params.itemId);
+      if (!item) {
+        return res.status(404).json({ error: 'Item da fila nao encontrado.' });
+      }
+      assertClaimOwner(item, deviceId, new Date());
+      const result = applyAffiliateLinkToQueue(
+        queue,
+        item,
+        req.body?.affiliateLink
+      );
+      savePublicationQueue(publicationQueuePath, result.queue);
+
+      const workers = loadWorkers(localAffiliateWorkersPath);
+      const current = workers.workers.find(worker =>
+        worker.deviceId === deviceId
+      );
+      updateWorker(workers, {
+        ...current,
+        deviceId,
+        status: 'idle',
+        currentItemId: null,
+        processedCount: (current?.processedCount || 0) + 1
+      });
+      saveWorkers(localAffiliateWorkersPath, workers);
+      res.json({
+        success: true,
+        ready: result.item.status === PUBLICATION_QUEUE_STATUSES.READY,
+        item: queueItemForResponse(result.item)
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.post(
+  '/api/local-affiliate-worker/jobs/:itemId/fail',
+  requireLocalAffiliateWorker,
+  (req, res) => {
+    try {
+      const code = String(req.body?.code || 'UNKNOWN_ERROR');
+      if (!FAILURE_CODES.has(code)) {
+        throw new Error('Codigo de falha invalido.');
+      }
+      const deviceId = String(req.body?.deviceId || '').trim();
+      const queue = loadPublicationQueue(publicationQueuePath);
+      const result = recordAffiliateFailure(
+        queue,
+        req.params.itemId,
+        {
+          deviceId,
+          code,
+          message: req.body?.message,
+          maxAttempts: Math.min(
+            10,
+            Math.max(
+              1,
+              Number(readEnv().LOCAL_AFFILIATE_MAX_ATTEMPTS) || 3
+            )
+          )
+        }
+      );
+      savePublicationQueue(publicationQueuePath, result.queue);
+
+      const workers = loadWorkers(localAffiliateWorkersPath);
+      const current = workers.workers.find(worker =>
+        worker.deviceId === deviceId
+      );
+      updateWorker(workers, {
+        ...current,
+        deviceId,
+        status: code === 'AUTH_REQUIRED' ? 'auth_required' : 'error',
+        currentItemId: null,
+        lastError: req.body?.message || code
+      });
+      saveWorkers(localAffiliateWorkersPath, workers);
+      res.json({
+        success: true,
+        item: queueItemForResponse(result.item)
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.get('/api/publication-batches', requirePublicationQueue, (req, res) => {
+  const batches = loadBatches(publicationBatchesPath);
+  res.json({
+    enabled: true,
+    batches: batches.batches.map(batchForResponse)
+  });
+});
+
+app.post(
+  '/api/publication-batches',
+  requirePublicationQueue,
+  async (req, res) => {
+    try {
+      const queue = loadPublicationQueue(publicationQueuePath);
+      const batch = createBatchRecord(queue, req.body);
+      await createBatchZip(batch);
+      const batches = loadBatches(publicationBatchesPath);
+      batches.batches.unshift(batch);
+      saveBatches(publicationBatchesPath, batches);
+      res.status(201).json({
+        success: true,
+        batch: batchForResponse(batch)
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.get(
+  '/api/publication-batches/:batchId/download',
+  requirePublicationQueue,
+  (req, res, next) => {
+    const batchId = String(req.params.batchId || '');
+    if (!isSafeBatchId(batchId)) {
+      return res.status(400).json({ error: 'Identificador de lote invalido.' });
+    }
+    const batches = loadBatches(publicationBatchesPath);
+    const batch = batches.batches.find(item => item.id === batchId);
+    if (
+      !batch ||
+      !timingSafeTextEqual(req.query.token, batch.downloadToken)
+    ) {
+      return res.status(404).json({ error: 'Pacote nao encontrado.' });
+    }
+    const zipPath = path.join(publicationBatchFilesPath, `${batch.id}.zip`);
+    if (!fs.existsSync(zipPath)) {
+      return res.status(404).json({ error: 'Arquivo ZIP nao encontrado.' });
+    }
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${batch.folderName}.zip"`
+    );
+    res.type('application/zip');
+    res.setHeader('Content-Length', fs.statSync(zipPath).size);
+    fs.createReadStream(zipPath).on('error', next).pipe(res);
   }
 );
 

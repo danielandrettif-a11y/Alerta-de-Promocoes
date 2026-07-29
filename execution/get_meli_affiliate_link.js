@@ -1,5 +1,6 @@
 /**
  * execution/get_meli_affiliate_link.js
+ * LEGADO: não usado pelo worker local. Mantido apenas para compatibilidade.
  * ─────────────────────────────────────────────────────────────────
  * Camada 3 — Execução (Determinística)
  *

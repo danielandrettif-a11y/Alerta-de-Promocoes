@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configurar gerador local</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="eyebrow">CONFIGURAÇÃO</span>
+    <h1>Gerador local de links</h1>
+  </header>
+  <main>
+    <label for="server-url">Endereço do servidor</label>
+    <input id="server-url" type="url" placeholder="https://seu-painel.exemplo.com">
+    <label for="token">Token exclusivo do worker</label>
+    <input id="token" type="password" autocomplete="new-password">
+    <label for="device-name">Nome do dispositivo</label>
+    <input id="device-name" maxlength="80" placeholder="PC de casa">
+    <label for="page-timeout">Timeout da página (segundos)</label>
+    <input id="page-timeout" type="number" min="15" max="120" value="45">
+    <button id="save" class="primary">Salvar configuração</button>
+    <p id="feedback" role="status"></p>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

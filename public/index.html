@@ -16,7 +16,7 @@
   
   <!-- CSS Link -->
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=20">
+  <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 
@@ -366,8 +366,8 @@
           <span class="queue-eyebrow">FLUXO ASSISTIDO E SEGURO</span>
           <h2>Fila de publicação</h2>
           <p>
-            O sistema prepara o Story. Você gera o link afiliado manualmente,
-            cola aqui e finaliza o sticker no Instagram.
+            O sistema prepara o Story. A extensão local pode gerar os links
+            automaticamente; colar o link manualmente continua disponível.
           </p>
         </div>
         <button id="btn-refresh-queue" class="btn-secondary" type="button">
@@ -394,6 +394,40 @@
         </div>
       </div>
 
+      <section id="local-affiliate-worker" class="local-worker-panel" hidden>
+        <div class="local-worker-heading">
+          <div>
+            <span class="queue-eyebrow">EXTENSÃO CHROME / EDGE</span>
+            <h3>Gerador local de links</h3>
+            <p>
+              Usa a sessão do Mercado Livre no seu computador. Cookies e
+              credenciais nunca são enviados ao servidor.
+            </p>
+          </div>
+          <span id="local-worker-badge" class="local-worker-badge">Offline</span>
+        </div>
+        <div class="local-worker-stats">
+          <div><span>Dispositivo</span><strong id="local-worker-device">Nenhum</strong></div>
+          <div><span>Última atividade</span><strong id="local-worker-seen">--</strong></div>
+          <div><span>Estado</span><strong id="local-worker-state">Offline</strong></div>
+          <div><span>Processando</span><strong id="local-worker-processing">0</strong></div>
+          <div><span>Prontas</span><strong id="local-worker-ready">0</strong></div>
+          <div><span>Erros</span><strong id="local-worker-errors">0</strong></div>
+        </div>
+        <p id="local-worker-auth" class="local-worker-auth" hidden>
+          Autenticação necessária. Conclua o login na aba do Mercado Livre
+          e clique em “Continuar processamento” na extensão.
+        </p>
+        <div class="local-worker-actions">
+          <button id="btn-explain-local-worker" type="button">
+            Processar links no navegador
+          </button>
+          <button id="btn-refresh-local-worker" type="button">
+            Atualizar status
+          </button>
+        </div>
+      </section>
+
       <div class="queue-toolbar">
         <label for="queue-status-filter">Mostrar</label>
         <select id="queue-status-filter" class="select-premium">
@@ -413,6 +447,28 @@
           <p>Nenhuma oferta na fila.</p>
         </div>
       </div>
+
+      <section id="publication-batches" class="publication-batches">
+        <div class="batch-heading">
+          <div>
+            <span class="queue-eyebrow">CONTEÚDO PARA POSTAR DEPOIS</span>
+            <h3>Lotes prontos para postagem</h3>
+            <p>Selecione ofertas prontas acima e gere um pacote organizado.</p>
+          </div>
+          <div class="batch-actions">
+            <button id="btn-prepare-batch" type="button" disabled>
+              Preparar lote
+            </button>
+            <button id="btn-download-latest-batch" type="button" disabled>
+              Baixar pacote
+            </button>
+          </div>
+        </div>
+        <p id="batch-selection-count">0 ofertas prontas selecionadas</p>
+        <div id="batch-list" class="batch-list">
+          <div class="empty-state"><p>Nenhum lote preparado.</p></div>
+        </div>
+      </section>
     </section>
 
   </main>
@@ -447,6 +503,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>

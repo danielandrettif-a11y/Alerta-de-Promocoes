@@ -10,6 +10,7 @@ const PORT = Number(process.env.SMOKE_TEST_PORT || 3199);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const OUTPUT_DIR = path.join(ROOT, '.tmp', 'smoke-test');
 const SCREENSHOT_PATH = path.join(OUTPUT_DIR, 'dashboard.png');
+const WORKER_TOKEN = 'smoke-worker-token';
 
 function findBrowserPath() {
   const candidates = [
@@ -58,7 +59,41 @@ async function expectResponse(route, expectedStatus, options) {
 }
 
 async function run() {
+  fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  const runtimeDirectory = path.join(OUTPUT_DIR, 'data', 'runtime');
+  const assetDirectory = path.join(
+    runtimeDirectory,
+    'publication_queue_assets'
+  );
+  fs.mkdirSync(assetDirectory, { recursive: true });
+  fs.writeFileSync(
+    path.join(assetDirectory, 'smoke-ready.jpg'),
+    Buffer.from(
+      '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABAf/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=',
+      'base64'
+    )
+  );
+  fs.writeFileSync(
+    path.join(runtimeDirectory, 'publication_queue.json'),
+    JSON.stringify({
+      version: 1,
+      items: [{
+        id: 'smoke-ready',
+        dealId: 'smoke-deal',
+        platform: 'mercado_livre',
+        title: 'Produto pronto do smoke test',
+        originalPrice: 'R$ 199,90',
+        currentPrice: 'R$ 99,90',
+        discount: 50,
+        productLink: 'https://produto.mercadolivre.com.br/MLB-1',
+        affiliateLink: 'https://meli.la/SMOKE123',
+        storyFile: 'smoke-ready.jpg',
+        status: 'ready',
+        affiliateProcessing: { state: 'completed', attempts: 0 }
+      }]
+    }, null, 2)
+  );
 
   const server = spawn(process.execPath, ['server.js'], {
     cwd: ROOT,
@@ -70,7 +105,9 @@ async function run() {
       WHATSAPP_ENABLED: 'false',
       AUTO_RUN_ENABLED: 'false',
       DEALS_REFRESH_ENABLED: 'false',
-      PUBLICATION_QUEUE_ENABLED: 'true'
+      PUBLICATION_QUEUE_ENABLED: 'true',
+      LOCAL_AFFILIATE_WORKER_ENABLED: 'true',
+      LOCAL_AFFILIATE_WORKER_TOKEN: WORKER_TOKEN
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -114,6 +151,12 @@ async function run() {
     const publicationQueue = await (
       await expectResponse('/api/publication-queue', 200)
     ).json();
+    const workerStatus = await (
+      await expectResponse('/api/local-affiliate-worker/status', 200)
+    ).json();
+    const initialBatches = await (
+      await expectResponse('/api/publication-batches', 200)
+    ).json();
 
     if (!Array.isArray(deals.deals) || !Array.isArray(deals.coupons)) {
       throw new Error('/api/deals retornou formato invalido');
@@ -143,6 +186,70 @@ async function run() {
     ) {
       throw new Error('/api/publication-queue retornou formato invalido');
     }
+    if (
+      workerStatus.enabled !== true ||
+      !Array.isArray(workerStatus.workers) ||
+      !Array.isArray(initialBatches.batches)
+    ) {
+      throw new Error('Worker local ou lotes retornaram formato invalido');
+    }
+
+    await expectResponse('/api/local-affiliate-worker/heartbeat', 401, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'smoke-device' })
+    });
+    await expectResponse('/api/local-affiliate-worker/heartbeat', 200, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${WORKER_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        deviceId: 'smoke-device',
+        deviceName: 'Smoke test',
+        extensionVersion: '1.0.0',
+        status: 'idle'
+      })
+    });
+    const claimed = await (
+      await expectResponse('/api/local-affiliate-worker/claim', 200, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${WORKER_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ deviceId: 'smoke-device', limit: 1 })
+      })
+    ).json();
+    if (!Array.isArray(claimed.jobs)) {
+      throw new Error('/claim retornou formato invalido');
+    }
+    const createdBatch = await (
+      await expectResponse('/api/publication-batches', 201, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Smoke lote',
+          itemIds: ['smoke-ready']
+        })
+      })
+    ).json();
+    const zipResponse = await expectResponse(
+      createdBatch.batch.downloadUrl,
+      200
+    );
+    const zipBytes = Buffer.from(await zipResponse.arrayBuffer());
+    if (
+      zipBytes.subarray(0, 2).toString() !== 'PK' ||
+      !zipResponse.headers.get('content-disposition')?.includes('.zip')
+    ) {
+      throw new Error('Download do lote nao retornou um ZIP valido');
+    }
+    await expectResponse(
+      '/api/publication-batches/not-safe/download?token=x',
+      400
+    );
 
     await expectResponse('/api/proxy-image', 400);
     await expectResponse(

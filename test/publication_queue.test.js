@@ -12,6 +12,9 @@ const {
   validateAffiliateLink,
   enqueueOffer,
   setAffiliateLink,
+  claimAffiliateJobs,
+  releaseExpiredClaims,
+  recordAffiliateFailure,
   updateItemStatus,
   summarizeQueue
 } = require('../execution/publication_queue.js');
@@ -148,4 +151,96 @@ test('persiste a fila e resume os estados', () => {
     discarded: 0,
     expired: 0
   });
+  assert.equal(
+    fs.readdirSync(path.dirname(queuePath))
+      .some(file => file.endsWith('.tmp')),
+    false
+  );
+});
+
+test('reserva exclusiva expira e volta para outro dispositivo', () => {
+  const created = enqueueOffer(
+    emptyQueue(),
+    sampleOffer(),
+    new Date('2026-07-23T15:00:00Z')
+  );
+  const first = claimAffiliateJobs(created.queue, {
+    deviceId: 'device_home_01',
+    limit: 10,
+    leaseMs: 60000
+  }, new Date('2026-07-23T15:01:00Z'));
+  assert.equal(first.jobs.length, 1);
+
+  const second = claimAffiliateJobs(first.queue, {
+    deviceId: 'device_home_02',
+    limit: 10,
+    leaseMs: 60000
+  }, new Date('2026-07-23T15:01:30Z'));
+  assert.equal(second.jobs.length, 0);
+
+  const released = releaseExpiredClaims(
+    second.queue,
+    new Date('2026-07-23T15:02:01Z')
+  );
+  const third = claimAffiliateJobs(released, {
+    deviceId: 'device_home_02',
+    limit: 10,
+    leaseMs: 60000
+  }, new Date('2026-07-23T15:02:02Z'));
+  assert.equal(third.jobs.length, 1);
+  assert.equal(
+    third.jobs[0].affiliateProcessing.claimedBy,
+    'device_home_02'
+  );
+});
+
+test('falhas respeitam autenticacao e limite de tentativas', () => {
+  const created = enqueueOffer(emptyQueue(), sampleOffer());
+  let claimed = claimAffiliateJobs(created.queue, {
+    deviceId: 'device_home_01'
+  });
+  const authFailure = recordAffiliateFailure(
+    claimed.queue,
+    claimed.jobs[0].id,
+    {
+      deviceId: 'device_home_01',
+      code: 'AUTH_REQUIRED',
+      message: 'Login solicitado.',
+      maxAttempts: 2
+    }
+  );
+  assert.equal(authFailure.item.affiliateProcessing.attempts, 0);
+
+  claimed = claimAffiliateJobs(authFailure.queue, {
+    deviceId: 'device_home_01'
+  });
+  const firstFailure = recordAffiliateFailure(
+    claimed.queue,
+    claimed.jobs[0].id,
+    {
+      deviceId: 'device_home_01',
+      code: 'TIMEOUT',
+      message: 'Tempo esgotado.',
+      maxAttempts: 2
+    }
+  );
+  claimed = claimAffiliateJobs(firstFailure.queue, {
+    deviceId: 'device_home_01',
+    maxAttempts: 2
+  });
+  const lastFailure = recordAffiliateFailure(
+    claimed.queue,
+    claimed.jobs[0].id,
+    {
+      deviceId: 'device_home_01',
+      code: 'TIMEOUT',
+      message: 'Tempo esgotado.',
+      maxAttempts: 2
+    }
+  );
+  assert.equal(lastFailure.item.affiliateProcessing.state, 'error');
+  assert.equal(claimAffiliateJobs(lastFailure.queue, {
+    deviceId: 'device_home_02',
+    maxAttempts: 2
+  }).jobs.length, 0);
 });

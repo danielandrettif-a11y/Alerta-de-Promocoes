@@ -72,6 +72,21 @@ Storage sao preservados para manter a autenticacao.
 
 ## Primeira autenticacao do Mercado Livre
 
+O fluxo recomendado agora usa a extensao local descrita em
+`directives/local_affiliate_worker.md`. Ele nao precisa armazenar uma sessao do
+Mercado Livre na VPS. Configure:
+
+```env
+LOCAL_AFFILIATE_WORKER_ENABLED=true
+LOCAL_AFFILIATE_WORKER_TOKEN=um-segredo-longo-e-unico
+```
+
+Use o mesmo token nas opcoes da extensao. O arquivo de workers, os lotes e seus
+ZIPs ficam sob `APP_RUNTIME_DIR`, que deve continuar montado no volume
+persistente `/data`.
+
+O procedimento abaixo e legado e serve apenas para manutencao do script antigo.
+
 O perfil precisa ser autenticado diretamente no diretorio `MELI_PROFILE_DIR`.
 
 - Em uma instalacao Windows local, `abrir_login.bat` usa as mesmas variaveis.
