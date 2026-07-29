@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.0.3';
+const EXTENSION_VERSION = '1.0.4';
 const DEFAULTS = {
   serverUrl: '',
   token: '',
@@ -100,7 +100,20 @@ async function findOrCreateMercadoLivreTab() {
   });
 }
 
-function navigateTab(tabId, url, timeoutMs) {
+function samePageUrl(leftValue, rightValue) {
+  try {
+    const left = new URL(leftValue);
+    const right = new URL(rightValue);
+    left.hash = '';
+    right.hash = '';
+    return left.href === right.href;
+  } catch {
+    return false;
+  }
+}
+
+async function navigateTab(tabId, url, timeoutMs) {
+  const currentTab = await chrome.tabs.get(tabId);
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       chrome.tabs.onUpdated.removeListener(listener);
@@ -115,7 +128,10 @@ function navigateTab(tabId, url, timeoutMs) {
       resolve(tab);
     };
     chrome.tabs.onUpdated.addListener(listener);
-    chrome.tabs.update(tabId, { url, active: false }).catch(error => {
+    const navigation = samePageUrl(currentTab.url, url)
+      ? chrome.tabs.reload(tabId, { bypassCache: true })
+      : chrome.tabs.update(tabId, { url, active: false });
+    navigation.catch(error => {
       clearTimeout(timeout);
       chrome.tabs.onUpdated.removeListener(listener);
       reject(error);
