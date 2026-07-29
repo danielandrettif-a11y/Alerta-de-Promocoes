@@ -190,7 +190,7 @@
     return null;
   }
 
-  async function generateAffiliateLink(timeoutMs = 30000) {
+  async function locateAffiliateShareButton(timeoutMs = 30000) {
     const initialProblem = detectPageProblem();
     if (initialProblem) return { success: false, ...initialProblem };
     let stripe;
@@ -228,7 +228,17 @@
           : 'O botão Compartilhar não apareceu na barra de afiliados.'
       };
     }
-    shareButton.click();
+    const rect = shareButton.getBoundingClientRect();
+    return {
+      success: true,
+      clickPoint: {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2)
+      }
+    };
+  }
+
+  async function extractAffiliateLink(timeoutMs = 30000) {
     try {
       const earlyLink = await selectAffiliateLabelIfNeeded(timeoutMs);
       if (typeof earlyLink === 'string') {
@@ -252,10 +262,31 @@
     }
   }
 
+  async function generateAffiliateLink(timeoutMs = 30000) {
+    const locationResult = await locateAffiliateShareButton(timeoutMs);
+    if (!locationResult.success) return locationResult;
+    const shareButton = findShareButton(document.querySelector('#stripe'));
+    if (!shareButton) {
+      return {
+        success: false,
+        code: 'SHARE_BUTTON_NOT_FOUND',
+        message: 'O botão Compartilhar não foi encontrado.'
+      };
+    }
+    shareButton.click();
+    return extractAffiliateLink(timeoutMs);
+  }
+
   if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (message.type !== 'GENERATE_AFFILIATE_LINK') return;
-      generateAffiliateLink(message.timeoutMs).then(sendResponse);
+      const actions = {
+        LOCATE_AFFILIATE_SHARE: locateAffiliateShareButton,
+        EXTRACT_AFFILIATE_LINK: extractAffiliateLink,
+        GENERATE_AFFILIATE_LINK: generateAffiliateLink
+      };
+      const action = actions[message.type];
+      if (!action) return;
+      action(message.timeoutMs).then(sendResponse);
       return true;
     });
   }
@@ -272,6 +303,8 @@
       findLabelOption,
       findAffiliateLink,
       selectAffiliateLabelIfNeeded,
+      locateAffiliateShareButton,
+      extractAffiliateLink,
       generateAffiliateLink
     };
   }

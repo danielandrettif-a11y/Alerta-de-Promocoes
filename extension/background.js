@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.0.5';
+const EXTENSION_VERSION = '1.1.0';
 const DEFAULTS = {
   serverUrl: '',
   token: '',
@@ -139,22 +139,60 @@ async function navigateTab(tabId, url, timeoutMs) {
   });
 }
 
-async function runContentAction(tabId, timeoutMs) {
+async function sendContentMessage(tabId, message) {
   try {
-    return await chrome.tabs.sendMessage(tabId, {
-      type: 'GENERATE_AFFILIATE_LINK',
-      timeoutMs
-    });
+    return await chrome.tabs.sendMessage(tabId, message);
   } catch {
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['content/mercado_livre.js']
     });
-    return chrome.tabs.sendMessage(tabId, {
-      type: 'GENERATE_AFFILIATE_LINK',
-      timeoutMs
-    });
+    return chrome.tabs.sendMessage(tabId, message);
   }
+}
+
+async function dispatchTrustedClick(tabId, clickPoint) {
+  const target = { tabId };
+  let attached = false;
+  try {
+    await chrome.debugger.attach(target, '1.3');
+    attached = true;
+    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+      await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', {
+        type,
+        x: clickPoint.x,
+        y: clickPoint.y,
+        ...(type === 'mouseMoved'
+          ? {}
+          : { button: 'left', clickCount: 1 })
+      });
+    }
+  } finally {
+    if (attached) await chrome.debugger.detach(target).catch(() => {});
+  }
+}
+
+async function runContentAction(tabId, timeoutMs) {
+  const located = await sendContentMessage(tabId, {
+    type: 'LOCATE_AFFILIATE_SHARE',
+    timeoutMs
+  });
+  if (!located?.success) return located;
+  try {
+    await dispatchTrustedClick(tabId, located.clickPoint);
+  } catch (error) {
+    return {
+      success: false,
+      code: 'UNKNOWN_ERROR',
+      message:
+        'Não foi possível enviar o clique nativo. Feche o DevTools desta aba ' +
+        `e tente novamente: ${error.message}`
+    };
+  }
+  return sendContentMessage(tabId, {
+    type: 'EXTRACT_AFFILIATE_LINK',
+    timeoutMs
+  });
 }
 
 async function reportFailure(job, code, message) {

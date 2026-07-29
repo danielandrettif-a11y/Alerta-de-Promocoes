@@ -4,6 +4,11 @@ Extensão Manifest V3 para Chrome e Edge. Ela usa a sessão local já autenticad
 no Mercado Livre e envia ao servidor somente identificação do dispositivo,
 estado do trabalho, erros operacionais e o link público `meli.la` gerado.
 
+A permissão `debugger` é usada por alguns milissegundos somente para enviar um
+clique nativo ao botão **Compartilhar**, exigido pelo Mercado Livre. A extensão
+se desconecta logo depois e não usa essa permissão para ler cookies, rede,
+armazenamento ou credenciais.
+
 ## Configurar o servidor
 
 Defina no ambiente da aplicação:

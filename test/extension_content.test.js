@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   LINK_PATTERN,
@@ -21,4 +23,19 @@ test('content script normaliza texto e aceita somente link meli.la esperado', ()
   assert.equal(isUsableLabelOption('Criar etiqueta'), false);
   assert.equal(isUsableLabelOption('Nenhuma etiqueta disponível'), false);
   assert.equal(isUsableLabelOption('...'), false);
+});
+
+test('clique nativo usa debugger somente para eventos de entrada', () => {
+  const root = path.join(__dirname, '..', 'extension');
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, 'manifest.json'), 'utf8')
+  );
+  const background = fs.readFileSync(
+    path.join(root, 'background.js'),
+    'utf8'
+  );
+  assert.equal(manifest.permissions.includes('debugger'), true);
+  assert.match(background, /Input\.dispatchMouseEvent/);
+  assert.match(background, /chrome\.debugger\.detach/);
+  assert.doesNotMatch(background, /Network\.|Storage\.|Cookies\./);
 });
