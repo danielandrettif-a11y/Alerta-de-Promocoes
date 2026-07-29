@@ -20,4 +20,5 @@ test('content script normaliza texto e aceita somente link meli.la esperado', ()
   assert.equal(isUsableLabelOption('Selecione uma etiqueta'), false);
   assert.equal(isUsableLabelOption('Criar etiqueta'), false);
   assert.equal(isUsableLabelOption('Nenhuma etiqueta disponível'), false);
+  assert.equal(isUsableLabelOption('...'), false);
 });

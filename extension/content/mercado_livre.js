@@ -35,7 +35,7 @@
 
   function isUsableLabelOption(value) {
     const text = normalizedText(value).trim();
-    return Boolean(text) &&
+    return /[a-z0-9]/.test(text) &&
       !text.includes('selecione') &&
       !text.includes('criar etiqueta') &&
       !text.includes('nova etiqueta') &&
