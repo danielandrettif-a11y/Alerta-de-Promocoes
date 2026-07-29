@@ -231,15 +231,6 @@
     shareButton.click();
     try {
       const earlyLink = await selectAffiliateLabelIfNeeded(timeoutMs);
-      if (earlyLink === false) {
-        return {
-          success: false,
-          code: 'AFFILIATE_LABEL_NOT_FOUND',
-          message:
-            'Nenhuma etiqueta de afiliado foi encontrada. Crie uma etiqueta ' +
-            'no Mercado Livre e tente novamente.'
-        };
-      }
       if (typeof earlyLink === 'string') {
         return { success: true, affiliateLink: earlyLink };
       }
