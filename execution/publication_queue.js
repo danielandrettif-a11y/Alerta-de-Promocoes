@@ -396,6 +396,17 @@ function summarizeQueue(queue) {
   return summary;
 }
 
+function removeDiscardedItems(queue) {
+  const normalized = normalizeQueue(queue);
+  const removed = normalized.items.filter(item =>
+    item.status === STATUSES.DISCARDED
+  );
+  normalized.items = normalized.items.filter(item =>
+    item.status !== STATUSES.DISCARDED
+  );
+  return { queue: normalized, removed };
+}
+
 module.exports = {
   STATUSES,
   AFFILIATE_PROCESSING_STATES,
@@ -412,5 +423,6 @@ module.exports = {
   assertClaimOwner,
   recordAffiliateFailure,
   updateItemStatus,
-  summarizeQueue
+  summarizeQueue,
+  removeDiscardedItems
 };

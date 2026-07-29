@@ -26,7 +26,13 @@ test('preserva modelo e tensão como identidade do produto', () => {
   );
   assert.deepEqual(getIdentityTokens(query), ['130a', '220v']);
   const phoneQuery = cleanSearchQuery('Apple iPhone 15 128GB Preto');
-  assert.deepEqual(getIdentityTokens(phoneQuery), ['128gb', '15']);
+  assert.deepEqual(getIdentityTokens(phoneQuery), ['15', '128gb']);
+  assert.equal(
+    cleanSearchQuery(
+      'iPhone 17 de 256 GB - Lavanda - Distribuidor Autorizado'
+    ),
+    'iphone 17 256gb'
+  );
 });
 
 test('rejeita comparação muito discrepante', () => {
@@ -48,6 +54,13 @@ test('aceita o mesmo produto e rejeita acessório ou versão diferente', () => {
   const offer = 'Apple iPhone 15 128GB Preto';
   assert.equal(
     matchProduct(offer, 'Apple iPhone 15 128 GB Preto').accepted,
+    true
+  );
+  assert.equal(
+    matchProduct(
+      'iPhone 17 de 256 GB Lavanda Distribuidor Autorizado',
+      'Apple iPhone 17 256 GB Preto'
+    ).accepted,
     true
   );
   assert.equal(

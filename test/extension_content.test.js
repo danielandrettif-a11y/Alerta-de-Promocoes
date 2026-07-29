@@ -7,7 +7,8 @@ const {
   LINK_PATTERN,
   normalizedText,
   isShareLabel,
-  isUsableLabelOption
+  isUsableLabelOption,
+  parsePriceText
 } = require('../extension/content/mercado_livre.js');
 
 test('content script normaliza texto e aceita somente link meli.la esperado', () => {
@@ -23,6 +24,10 @@ test('content script normaliza texto e aceita somente link meli.la esperado', ()
   assert.equal(isUsableLabelOption('Criar etiqueta'), false);
   assert.equal(isUsableLabelOption('Nenhuma etiqueta disponível'), false);
   assert.equal(isUsableLabelOption('...'), false);
+  assert.equal(parsePriceText('R$ 5.299,78'), 5299.78);
+  assert.equal(parsePriceText('5299.78'), 5299.78);
+  assert.equal(parsePriceText('R$ 5.299'), 5299);
+  assert.equal(parsePriceText('Preço indisponível'), null);
 });
 
 test('clique nativo usa debugger somente para eventos de entrada', () => {
@@ -36,6 +41,7 @@ test('clique nativo usa debugger somente para eventos de entrada', () => {
   );
   assert.equal(manifest.permissions.includes('debugger'), true);
   assert.match(background, /Input\.dispatchMouseEvent/);
+  assert.match(background, /chrome\.tabs\.update\(tab\.id, \{ active: true \}\)/);
   assert.match(background, /chrome\.debugger\.detach/);
   assert.doesNotMatch(background, /Network\.|Storage\.|Cookies\./);
 });

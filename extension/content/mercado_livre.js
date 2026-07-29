@@ -113,6 +113,74 @@
     return String(root.body?.innerText || '').match(LINK_PATTERN)?.[0] || null;
   }
 
+  function parsePriceText(value) {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) && value > 0 ? value : null;
+    }
+    const text = String(value || '')
+      .replace(/R\$/gi, '')
+      .replace(/\s/g, '')
+      .replace(/[^\d.,]/g, '');
+    if (!text) return null;
+    let normalized = text;
+    if (text.includes(',')) {
+      normalized = text.replace(/\./g, '').replace(',', '.');
+    } else if (/^\d{1,3}(?:\.\d{3})+$/.test(text)) {
+      normalized = text.replace(/\./g, '');
+    }
+    const price = Number.parseFloat(normalized);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  }
+
+  function readMoneyElement(element) {
+    if (!element) return null;
+    const fraction = element.querySelector?.('.andes-money-amount__fraction');
+    if (fraction) {
+      const whole = fraction.textContent.replace(/\D/g, '');
+      const cents = element
+        .querySelector('.andes-money-amount__cents')
+        ?.textContent.replace(/\D/g, '') || '';
+      return parsePriceText(`${whole}${cents ? `,${cents}` : ''}`);
+    }
+    return parsePriceText(
+      element.getAttribute?.('content') ||
+      element.getAttribute?.('data-price') ||
+      element.textContent
+    );
+  }
+
+  function findCurrentPrice(root = document) {
+    const selectors = [
+      '.ui-pdp-price__second-line .andes-money-amount:not(.andes-money-amount--previous)',
+      '.ui-pdp-price__main-container .andes-money-amount:not(.andes-money-amount--previous)',
+      '[data-testid="price-part"] .andes-money-amount:not(.andes-money-amount--previous)',
+      '[itemprop="price"]'
+    ];
+    for (const selector of selectors) {
+      const price = readMoneyElement(root.querySelector(selector));
+      if (price) return price;
+    }
+    for (const script of root.querySelectorAll('script[type="application/ld+json"]')) {
+      try {
+        const entries = JSON.parse(script.textContent);
+        for (const entry of Array.isArray(entries) ? entries : [entries]) {
+          const type = Array.isArray(entry?.['@type'])
+            ? entry['@type']
+            : [entry?.['@type']];
+          if (!type.includes('Product')) continue;
+          const offers = Array.isArray(entry.offers)
+            ? entry.offers
+            : [entry.offers];
+          for (const offer of offers) {
+            const price = parsePriceText(offer?.price);
+            if (price) return price;
+          }
+        }
+      } catch {}
+    }
+    return null;
+  }
+
   function waitFor(check, timeoutMs, intervalMs = 250) {
     return new Promise((resolve, reject) => {
       const startedAt = Date.now();
@@ -242,13 +310,21 @@
     try {
       const earlyLink = await selectAffiliateLabelIfNeeded(timeoutMs);
       if (typeof earlyLink === 'string') {
-        return { success: true, affiliateLink: earlyLink };
+        return {
+          success: true,
+          affiliateLink: earlyLink,
+          observedPrice: findCurrentPrice(document)
+        };
       }
       const affiliateLink = await waitFor(
         () => findAffiliateLink(document),
         timeoutMs
       );
-      return { success: true, affiliateLink };
+      return {
+        success: true,
+        affiliateLink,
+        observedPrice: findCurrentPrice(document)
+      };
     } catch (error) {
       return {
         success: false,
@@ -302,6 +378,8 @@
       findLabelControl,
       findLabelOption,
       findAffiliateLink,
+      parsePriceText,
+      findCurrentPrice,
       selectAffiliateLabelIfNeeded,
       locateAffiliateShareButton,
       extractAffiliateLink,

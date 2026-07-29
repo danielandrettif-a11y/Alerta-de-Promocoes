@@ -2,7 +2,9 @@
 
 Extensão Manifest V3 para Chrome e Edge. Ela usa a sessão local já autenticada
 no Mercado Livre e envia ao servidor somente identificação do dispositivo,
-estado do trabalho, erros operacionais e o link público `meli.la` gerado.
+estado do trabalho, erros operacionais, o link público `meli.la` gerado e o
+preço à vista exibido na página. O servidor solicita revisão quando esse preço
+difere do Story.
 
 A permissão `debugger` é usada por alguns milissegundos somente para enviar um
 clique nativo ao botão **Compartilhar**, exigido pelo Mercado Livre. A extensão

@@ -118,9 +118,9 @@
 
     .watermark-layer .wm-ad {
       font-family: 'Outfit', sans-serif;
-      font-size: 68px;
+      font-size: 58px;
       font-style: italic;
-      letter-spacing: 0;
+      letter-spacing: 5px;
     }
 
     .watermark-layer line {
@@ -473,27 +473,15 @@
   <!-- Background decorative text outlines -->
   <svg class="watermark-layer" viewBox="0 0 1080 1920" aria-hidden="true">
     <defs>
-      <pattern id="brand-watermarks" width="800" height="315" patternUnits="userSpaceOnUse"
+      <pattern id="brand-watermarks" width="800" height="320" patternUnits="userSpaceOnUse"
         patternTransform="rotate(-28)">
         <text class="wm-name" x="30" y="82">ALERTA DE DESCONTOS</text>
-        <line x1="70" y1="235" x2="260" y2="235"></line>
+        <line x1="70" y1="235" x2="250" y2="235"></line>
+        <text class="wm-ad" x="292" y="253">AD</text>
+        <line x1="405" y1="235" x2="585" y2="235"></line>
       </pattern>
-      <pattern id="brand-watermarks-between" href="#brand-watermarks"
-        width="800" height="315" patternUnits="userSpaceOnUse"
-        patternTransform="translate(0 158) rotate(-28)"></pattern>
-      <pattern id="brand-ads" width="800" height="315" patternUnits="userSpaceOnUse"
-        patternTransform="rotate(-28)">
-        <text class="wm-ad" x="630" y="230">A</text>
-        <text class="wm-ad" x="672" y="260">D</text>
-      </pattern>
-      <pattern id="brand-ads-between" href="#brand-ads"
-        width="800" height="315" patternUnits="userSpaceOnUse"
-        patternTransform="translate(0 158) rotate(-28)"></pattern>
     </defs>
     <rect width="1080" height="1920" fill="url(#brand-watermarks)"></rect>
-    <rect width="1080" height="1920" fill="url(#brand-watermarks-between)"></rect>
-    <rect width="1080" height="1920" fill="url(#brand-ads)"></rect>
-    <rect width="1080" height="1920" fill="url(#brand-ads-between)"></rect>
   </svg>
 
   <!-- Header -->

@@ -25,6 +25,8 @@ os resultados com as ofertas coletadas e sem criar qualquer ação no WhatsApp.
 - A busca abre um único navegador e uma página por marketplace.
 - Links são aceitos somente quando usam HTTPS e pertencem ao domínio esperado.
 - Resultados precisam ter correspondência mínima com os termos pesquisados.
+- A comparação pesquisa pelos termos centrais do produto (até cinco), preserva
+  modelo/capacidade e ignora cor e expressões comerciais.
 - Falha em um marketplace não invalida os resultados dos demais.
 - A comparação usa no máximo um resultado validado por marketplace para que
   uma loja com muitos anúncios não distorça a mediana.

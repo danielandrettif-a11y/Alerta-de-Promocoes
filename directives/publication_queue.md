@@ -21,7 +21,7 @@ sticker and final publication remain manual.
 
 - `awaiting_affiliate`: Story prepared; waiting for a manually generated link.
 - `ready`: affiliate link validated and current offer data still matches.
-- `needs_review`: product disappeared or its price changed after preparation.
+- `needs_review`: a confirmed price change requires a new Story.
 - `published`: user confirmed the Story was published.
 - `discarded`: user chose not to publish the offer.
 - `expired`: offer is no longer usable.
@@ -42,18 +42,21 @@ Both paths must live inside the persistent Coolify volume.
 2. Add them to the publication queue.
 3. Process the queue with the local extension, or generate and paste the
    `https://meli.la/...` link manually.
-5. The server validates the link and rechecks the current catalog entry.
+5. The server validates the link and compares the price when the product is
+   still present in the current catalog snapshot.
 6. Copy the link and tap **Send Story to Instagram**.
 7. In the phone share sheet, choose Instagram and then Stories.
 8. Add the Instagram link sticker manually and publish.
 9. Mark the queue item as published, or group ready items into a downloadable
    batch.
+10. Clear discarded items in bulk only after explicit confirmation.
 
 ## Validation rules
 
 - Only HTTPS links on the exact `meli.la` hostname are accepted.
 - Credentials, fragments and empty paths are rejected.
-- An offer that is absent from the current catalog moves to `needs_review`.
+- Absence from the rotating catalog snapshot does not prove unavailability
+  and must not block the item.
 - A price change moves the item to `needs_review`.
 - A queue item can only be marked `published` from `ready`.
 - Active duplicates for the same product reuse the existing queue item.

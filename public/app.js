@@ -115,6 +115,7 @@ const elQueueTabCount = document.getElementById('queue-tab-count');
 const elQueueStatusFilter = document.getElementById('queue-status-filter');
 const elQueueFeedback = document.getElementById('queue-feedback');
 const elBtnRefreshQueue = document.getElementById('btn-refresh-queue');
+const elBtnClearDiscarded = document.getElementById('btn-clear-discarded');
 const elQueueSummaryAwaiting = document.getElementById('queue-summary-awaiting');
 const elQueueSummaryReady = document.getElementById('queue-summary-ready');
 const elQueueSummaryReview = document.getElementById('queue-summary-review');
@@ -1065,6 +1066,10 @@ function updateQueueSummary() {
   elQueueSummaryReady.textContent = summary.ready || 0;
   elQueueSummaryReview.textContent = summary.needsReview || 0;
   elQueueSummaryPublished.textContent = summary.published || 0;
+  const discardedCount = summary.discarded || 0;
+  elBtnClearDiscarded.hidden = discardedCount === 0;
+  elBtnClearDiscarded.textContent =
+    `Limpar descartadas (${discardedCount})`;
   const activeCount =
     (summary.awaitingAffiliate || 0) +
     (summary.ready || 0) +
@@ -2345,6 +2350,36 @@ function init() {
       fetchLocalWorkerStatus(),
       fetchPublicationBatches()
     ]);
+  });
+  elBtnClearDiscarded.addEventListener('click', async () => {
+    const count = publicationQueueSummary.discarded || 0;
+    if (
+      !count ||
+      !confirm(
+        `Remover permanentemente ${count} ` +
+        `${count === 1 ? 'oferta descartada' : 'ofertas descartadas'}?`
+      )
+    ) return;
+    elBtnClearDiscarded.disabled = true;
+    try {
+      const response = await fetch('/api/publication-queue/discarded', {
+        method: 'DELETE'
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Não foi possível limpar a fila.');
+      }
+      await fetchPublicationQueue({
+        feedback:
+          `${data.removedCount} ` +
+          `${data.removedCount === 1 ? 'oferta removida' : 'ofertas removidas'}.`,
+        type: 'success'
+      });
+    } catch (error) {
+      setQueueFeedback(error.message, 'error');
+    } finally {
+      elBtnClearDiscarded.disabled = false;
+    }
   });
   elBtnExplainLocalWorker.addEventListener('click', () => {
     alert(

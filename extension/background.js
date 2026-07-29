@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.1.0';
+const EXTENSION_VERSION = '1.2.0';
 const DEFAULTS = {
   serverUrl: '',
   token: '',
@@ -6,7 +6,7 @@ const DEFAULTS = {
   deviceName: 'PC de casa',
   batchSize: 10,
   pageTimeoutMs: 45000,
-  actionTimeoutMs: 30000,
+  actionTimeoutMs: 60000,
   intervalMs: 2500
 };
 
@@ -229,6 +229,9 @@ async function processJob(job, settings, tab) {
       message: 'O Mercado Livre solicitou autenticação.'
     };
   }
+  await chrome.windows.update(loadedTab.windowId, { focused: true });
+  await chrome.tabs.update(tab.id, { active: true });
+  await new Promise(resolve => setTimeout(resolve, 750));
   return runContentAction(tab.id, settings.actionTimeoutMs);
 }
 
@@ -298,7 +301,8 @@ async function processQueue() {
             method: 'POST',
             body: JSON.stringify({
               deviceId: settings.deviceId,
-              affiliateLink: result.affiliateLink
+              affiliateLink: result.affiliateLink,
+              observedPrice: result.observedPrice
             })
           }
         );

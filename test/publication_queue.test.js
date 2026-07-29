@@ -16,7 +16,8 @@ const {
   releaseExpiredClaims,
   recordAffiliateFailure,
   updateItemStatus,
-  summarizeQueue
+  summarizeQueue,
+  removeDiscardedItems
 } = require('../execution/publication_queue.js');
 
 function sampleOffer(overrides = {}) {
@@ -156,6 +157,22 @@ test('persiste a fila e resume os estados', () => {
       .some(file => file.endsWith('.tmp')),
     false
   );
+});
+
+test('limpa somente ofertas descartadas', () => {
+  const first = enqueueOffer(emptyQueue(), sampleOffer());
+  const second = enqueueOffer(
+    first.queue,
+    sampleOffer({ id: 'queue-2', dealId: 'deal_456' })
+  );
+  const discarded = updateItemStatus(
+    second.queue,
+    first.item.id,
+    STATUSES.DISCARDED
+  );
+  const result = removeDiscardedItems(discarded.queue);
+  assert.deepEqual(result.removed.map(item => item.id), ['queue-1']);
+  assert.deepEqual(result.queue.items.map(item => item.id), ['queue-2']);
 });
 
 test('reserva exclusiva expira e volta para outro dispositivo', () => {

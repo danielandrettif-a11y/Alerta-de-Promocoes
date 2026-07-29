@@ -5,8 +5,11 @@ const {
 } = require('./marketplace_search.js');
 
 const IGNORED_TOKENS = new Set([
-  'acompanha', 'combo', 'completo', 'frete', 'gratis', 'kit', 'modelo',
-  'novo', 'nova', 'oferta', 'oficial', 'original', 'para', 'produto'
+  'acompanha', 'amarelo', 'autorizada', 'autorizado', 'azul', 'branca',
+  'branco', 'cinza', 'combo', 'completo', 'distribuidor', 'dourado',
+  'frete', 'gratis', 'kit', 'lavanda', 'modelo', 'novo', 'nova', 'oferta',
+  'oficial', 'original', 'para', 'preta', 'preto', 'produto', 'rosa',
+  'roxo', 'verde', 'vermelho'
 ]);
 const ACCESSORY_TOKENS = new Set([
   'adaptador', 'cabo', 'capa', 'carregador', 'controle', 'pelicula',
@@ -39,21 +42,25 @@ function formatPrice(value) {
 }
 
 function cleanSearchQuery(title) {
-  const stopWords = new Set([
-    'com', 'cor', 'frete', 'gratis', 'modelo', 'nova', 'novo', 'oficial',
-    'original', 'para', 'promocao'
-  ]);
-  const tokens = getQueryTokens(title)
-    .filter(token => !stopWords.has(token));
-  const mixedIdentity = tokens.filter(token =>
-    /[a-z]/i.test(token) && /\d/.test(token)
+  const compactedTitle = normalizeText(title).replace(
+    /\b(\d+(?:[.,]\d+)?)\s+(a|btu|btus|cm|gb|kg|litro|litros|mah|mb|mm|pol|tb|v|w)\b/g,
+    '$1$2'
   );
-  const numericIdentity = tokens.filter(token => /^\d{2,}$/.test(token));
-  return [...new Set([
-    ...mixedIdentity,
-    ...numericIdentity,
-    ...tokens.filter(token => token.length >= 4)
-  ])].slice(0, 8).join(' ');
+  const tokens = getQueryTokens(compactedTitle)
+    .filter(token =>
+      !IGNORED_TOKENS.has(token) &&
+      token !== 'cor' &&
+      token !== 'promocao'
+    );
+  const isIdentity = token =>
+    (/[a-z]/i.test(token) && /\d/.test(token)) || /^\d{2,}$/.test(token);
+  const relevant = tokens.filter(token => isIdentity(token) || token.length >= 4);
+  const selected = new Set(relevant.filter(isIdentity).slice(0, 5));
+  for (const token of relevant) {
+    if (selected.size >= 5) break;
+    selected.add(token);
+  }
+  return relevant.filter(token => selected.has(token)).slice(0, 5).join(' ');
 }
 
 function getIdentityTokens(query) {

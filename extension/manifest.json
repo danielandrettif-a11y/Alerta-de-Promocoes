@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Promo Automator - Links Mercado Livre",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Gera links meli.la usando a sessão local do Mercado Livre.",
   "permissions": [
     "storage",

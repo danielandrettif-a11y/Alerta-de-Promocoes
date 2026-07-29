@@ -23,4 +23,5 @@ A set of vertical JPEG images (format: `story_[RANK]_discount_[PERCENT].jpg`) ge
 - Rating stars and sales information
 - Product title
 - Slashed original price vs. glowing current promo price
+- Alternating background watermark rows: page name, then lines with `AD`
 - Elegant visual cues pointing down to where the link sticker should be placed.

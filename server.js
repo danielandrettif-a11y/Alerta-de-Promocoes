@@ -24,7 +24,9 @@ const {
 } = require('./execution/automation_state.js');
 const {
   buildWhatsappComparison,
-  compareProductPrices
+  compareProductPrices,
+  formatPrice,
+  parsePrice
 } = require('./execution/price_comparison.js');
 const {
   searchMarketplaces
@@ -40,7 +42,8 @@ const {
   assertClaimOwner,
   recordAffiliateFailure,
   updateItemStatus,
-  summarizeQueue
+  summarizeQueue,
+  removeDiscardedItems
 } = require('./execution/publication_queue.js');
 const {
   FAILURE_CODES,
@@ -426,7 +429,12 @@ app.use('/api/local-affiliate-worker', (req, res, next) => {
   next();
 });
 
-function applyAffiliateLinkToQueue(queue, item, affiliateLink) {
+function applyAffiliateLinkToQueue(
+  queue,
+  item,
+  affiliateLink,
+  observedPrice
+) {
   const { deals } = loadAvailableDeals();
   const currentDeal = deals.find(deal =>
     deal.platform === 'mercado_livre' &&
@@ -434,14 +442,16 @@ function applyAffiliateLinkToQueue(queue, item, affiliateLink) {
   );
   let reviewReason = null;
   let latestPrice = null;
-  if (!currentDeal) {
-    reviewReason =
-      'O produto nao aparece mais no catalogo atual. Atualize as ofertas antes de publicar.';
-  } else if (
-    String(currentDeal.currentPrice || '') !==
-    String(item.currentPrice || '')
+  const verifiedPrice =
+    parsePrice(observedPrice) ||
+    parsePrice(currentDeal?.currentPrice);
+  const storyPrice = parsePrice(item.currentPrice);
+  if (
+    verifiedPrice &&
+    storyPrice &&
+    Math.abs(verifiedPrice - storyPrice) >= 0.01
   ) {
-    latestPrice = String(currentDeal.currentPrice || '');
+    latestPrice = formatPrice(verifiedPrice);
     reviewReason =
       `O preco mudou de ${item.currentPrice} para ${latestPrice}. ` +
       'Gere um novo Story antes de publicar.';
@@ -640,7 +650,8 @@ app.patch(
       const result = applyAffiliateLinkToQueue(
         queue,
         item,
-        req.body?.affiliateLink
+        req.body?.affiliateLink,
+        req.body?.observedPrice
       );
       savePublicationQueue(publicationQueuePath, result.queue);
       res.json({
@@ -782,7 +793,8 @@ app.post(
       const result = applyAffiliateLinkToQueue(
         queue,
         item,
-        req.body?.affiliateLink
+        req.body?.affiliateLink,
+        req.body?.observedPrice
       );
       savePublicationQueue(publicationQueuePath, result.queue);
 
@@ -886,6 +898,33 @@ app.post(
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
+  }
+);
+
+app.delete(
+  '/api/publication-queue/discarded',
+  requirePublicationQueue,
+  (req, res) => {
+    const result = removeDiscardedItems(
+      loadPublicationQueue(publicationQueuePath)
+    );
+    savePublicationQueue(publicationQueuePath, result.queue);
+    for (const item of result.removed) {
+      const fileName = path.basename(String(item.storyFile || ''));
+      if (!fileName || fileName !== item.storyFile) continue;
+      try {
+        fs.unlinkSync(path.join(publicationQueueAssetsPath, fileName));
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          console.error(`Erro ao remover Story descartado: ${error.message}`);
+        }
+      }
+    }
+    res.json({
+      success: true,
+      removedCount: result.removed.length,
+      summary: summarizeQueue(result.queue)
+    });
   }
 );
 

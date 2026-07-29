@@ -194,6 +194,60 @@ async function run() {
       throw new Error('Worker local ou lotes retornaram formato invalido');
     }
 
+    const revalidated = await (
+      await expectResponse(
+        '/api/publication-queue/smoke-ready/affiliate',
+        200,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            affiliateLink: 'https://meli.la/SMOKE123',
+            observedPrice: 99.9
+          })
+        }
+      )
+    ).json();
+    if (
+      revalidated.item?.status !== 'ready' ||
+      revalidated.item?.reviewReason
+    ) {
+      throw new Error('Item fora do recorte atual foi bloqueado indevidamente');
+    }
+
+    const changedPrice = await (
+      await expectResponse(
+        '/api/publication-queue/smoke-ready/affiliate',
+        200,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            affiliateLink: 'https://meli.la/SMOKE123',
+            observedPrice: 89.9
+          })
+        }
+      )
+    ).json();
+    if (
+      changedPrice.item?.status !== 'needs_review' ||
+      changedPrice.item?.latestPrice !== 'R$ 89,90'
+    ) {
+      throw new Error('Mudanca de preco observada nao solicitou revisao');
+    }
+    await expectResponse(
+      '/api/publication-queue/smoke-ready/affiliate',
+      200,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          affiliateLink: 'https://meli.la/SMOKE123',
+          observedPrice: 99.9
+        })
+      }
+    );
+
     await expectResponse('/api/local-affiliate-worker/heartbeat', 401, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -335,7 +389,8 @@ async function run() {
       '#grid-ml',
       '#grid-amazon',
       '#grid-coupons',
-      '#grid-queue'
+      '#grid-queue',
+      '#btn-clear-discarded'
     ];
     for (const selector of requiredSelectors) {
       await page.waitForSelector(selector, { timeout: 5000 });

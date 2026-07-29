@@ -19,8 +19,9 @@ enviados ao servidor.
 1. O painel adiciona ofertas à fila e gera os Stories existentes.
 2. A extensão envia heartbeat e reserva até o tamanho de lote escolhido.
 3. Uma única aba local abre cada produto, encontra `#stripe`, clica no
-   controle visível `Compartilhar` e extrai um link `meli.la`.
-4. O servidor valida o link pela mesma regra usada no preenchimento manual.
+   controle visível `Compartilhar`, extrai um link `meli.la` e lê o preço à
+   vista exibido na página.
+4. O servidor valida o link e compara o preço observado com o Story.
 5. O item fica `ready` ou `needs_review`.
 6. Itens prontos podem formar um lote e um ZIP persistente.
 
@@ -34,6 +35,8 @@ enviados ao servidor.
 - Outros erros respeitam `LOCAL_AFFILIATE_MAX_ATTEMPTS`.
 - O worker não contorna bloqueios e não usa endpoints internos do Mercado
   Livre.
+- Se a página não expuser um preço confiável, o link continua válido sem gerar
+  um falso alerta de indisponibilidade.
 - A escrita da fila e do registro de workers é atômica.
 - O preenchimento manual continua disponível.
 

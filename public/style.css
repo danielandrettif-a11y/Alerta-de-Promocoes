@@ -2923,6 +2923,25 @@ select:focus-visible {
   min-width: 220px;
 }
 
+#btn-clear-discarded {
+  border: 1px solid rgba(255, 93, 111, 0.45);
+  border-radius: 10px;
+  background: rgba(255, 93, 111, 0.08);
+  color: #ff8c98;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#btn-clear-discarded:hover:not(:disabled) {
+  background: rgba(255, 93, 111, 0.16);
+}
+
+#btn-clear-discarded:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .queue-feedback {
   min-height: 24px;
   margin: 8px 0;
