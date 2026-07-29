@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.0.0';
+const EXTENSION_VERSION = '1.0.1';
 const DEFAULTS = {
   serverUrl: '',
   token: '',
@@ -198,6 +198,7 @@ async function processQueue() {
       Number(settings.batchSize) || 10
     ));
     await persistState({ waitingCount: batchSize });
+    const attemptedItemIds = [];
     for (let index = 0; index < batchSize && !stopRequested; index += 1) {
       const claimed = await apiRequest('/api/local-affiliate-worker/claim', {
         method: 'POST',
@@ -205,11 +206,14 @@ async function processQueue() {
           deviceId: settings.deviceId,
           deviceName: settings.deviceName,
           extensionVersion: EXTENSION_VERSION,
-          limit: 1
+          limit: 1,
+          excludeItemIds: attemptedItemIds,
+          retryFailed: true
         })
       });
       const job = claimed.jobs?.[0];
       if (!job) break;
+      attemptedItemIds.push(job.id);
       try {
         const result = await processJob(job, settings, tab);
         if (!result?.success) {

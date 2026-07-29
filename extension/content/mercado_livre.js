@@ -16,6 +16,23 @@
       style.display !== 'none' && style.visibility !== 'hidden';
   }
 
+  function isShareLabel(value) {
+    return normalizedText(value).includes('compartilhar');
+  }
+
+  function findShareButton(root = document) {
+    return [...root.querySelectorAll('button, a, [role="button"]')]
+      .find(element =>
+        isVisible(element) &&
+        [
+          element.textContent,
+          element.getAttribute('aria-label'),
+          element.getAttribute('title'),
+          element.value
+        ].some(isShareLabel)
+      ) || null;
+  }
+
   function detectPageProblem() {
     const text = normalizedText(document.body?.innerText);
     if (
@@ -105,17 +122,21 @@
       };
     }
 
-    const shareButton = [...stripe.querySelectorAll(
-      'button, a, [role="button"]'
-    )].find(element =>
-      isVisible(element) &&
-      normalizedText(element.textContent).trim() === 'compartilhar'
-    );
-    if (!shareButton) {
+    let shareButton;
+    try {
+      shareButton = await waitFor(
+        () => findShareButton(stripe),
+        Math.min(timeoutMs, 15000)
+      );
+    } catch (error) {
       return {
         success: false,
-        code: 'SHARE_BUTTON_NOT_FOUND',
-        message: 'O botão Compartilhar não foi encontrado.'
+        code: error.code === 'AUTH_REQUIRED'
+          ? error.code
+          : 'SHARE_BUTTON_NOT_FOUND',
+        message: error.code === 'AUTH_REQUIRED'
+          ? error.message
+          : 'O botão Compartilhar não apareceu na barra de afiliados.'
       };
     }
     shareButton.click();
@@ -150,6 +171,8 @@
     module.exports = {
       LINK_PATTERN,
       normalizedText,
+      isShareLabel,
+      findShareButton,
       findAffiliateLink,
       generateAffiliateLink
     };

@@ -243,4 +243,18 @@ test('falhas respeitam autenticacao e limite de tentativas', () => {
     deviceId: 'device_home_02',
     maxAttempts: 2
   }).jobs.length, 0);
+
+  const manualRetry = claimAffiliateJobs(lastFailure.queue, {
+    deviceId: 'device_home_02',
+    maxAttempts: 2,
+    retryFailed: true
+  });
+  assert.equal(manualRetry.jobs.length, 1);
+  assert.equal(manualRetry.jobs[0].affiliateProcessing.attempts, 1);
+  assert.equal(claimAffiliateJobs(manualRetry.queue, {
+    deviceId: 'device_home_01',
+    maxAttempts: 2,
+    retryFailed: true,
+    excludeItemIds: [manualRetry.jobs[0].id]
+  }).jobs.length, 0);
 });

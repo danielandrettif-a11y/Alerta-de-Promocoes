@@ -241,30 +241,55 @@ function releaseExpiredClaims(queue, now = new Date()) {
 
 function claimAffiliateJobs(
   queue,
-  { deviceId, limit = 10, leaseMs = 5 * 60 * 1000, maxAttempts = 3 },
+  {
+    deviceId,
+    limit = 10,
+    leaseMs = 5 * 60 * 1000,
+    maxAttempts = 3,
+    excludeItemIds = [],
+    retryFailed = false
+  },
   now = new Date()
 ) {
   const normalized = releaseExpiredClaims(queue, now);
   const claimant = String(deviceId || '').trim();
   if (!claimant) throw new Error('deviceId obrigatorio.');
   const safeLimit = Math.min(30, Math.max(1, Number(limit) || 10));
+  const excluded = new Set(
+    (Array.isArray(excludeItemIds) ? excludeItemIds : [])
+      .slice(0, 1000)
+      .map(String)
+  );
   const expiresAt = new Date(now.getTime() + leaseMs).toISOString();
   const jobs = normalized.items.filter(item => {
     const processing = normalizeAffiliateProcessing(item);
+    const manuallyRetriable =
+      retryFailed &&
+      processing.state === AFFILIATE_PROCESSING_STATES.ERROR;
     return (
+      !excluded.has(item.id) &&
       item.status === STATUSES.AWAITING_AFFILIATE &&
-      processing.state === AFFILIATE_PROCESSING_STATES.PENDING &&
-      processing.attempts < maxAttempts
+      (
+        (
+          processing.state === AFFILIATE_PROCESSING_STATES.PENDING &&
+          processing.attempts < maxAttempts
+        ) ||
+        manuallyRetriable
+      )
     );
   }).slice(0, safeLimit);
 
   for (const item of jobs) {
+    const processing = normalizeAffiliateProcessing(item);
     item.affiliateProcessing = {
-      ...normalizeAffiliateProcessing(item),
+      ...processing,
       state: AFFILIATE_PROCESSING_STATES.CLAIMED,
       claimedBy: claimant,
       claimedAt: now.toISOString(),
       claimExpiresAt: expiresAt,
+      attempts: processing.state === AFFILIATE_PROCESSING_STATES.ERROR
+        ? Math.max(0, maxAttempts - 1)
+        : processing.attempts,
       lastError: null
     };
   }

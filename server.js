@@ -733,7 +733,9 @@ app.post(
         deviceId: req.body?.deviceId,
         limit: req.body?.limit,
         leaseMs,
-        maxAttempts
+        maxAttempts,
+        excludeItemIds: req.body?.excludeItemIds,
+        retryFailed: req.body?.retryFailed === true
       });
       savePublicationQueue(publicationQueuePath, result.queue);
 
