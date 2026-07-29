@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.0.1';
+const EXTENSION_VERSION = '1.0.2';
 const DEFAULTS = {
   serverUrl: '',
   token: '',

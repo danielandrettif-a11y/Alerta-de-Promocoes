@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const {
   LINK_PATTERN,
   normalizedText,
-  isShareLabel
+  isShareLabel,
+  isUsableLabelOption
 } = require('../extension/content/mercado_livre.js');
 
 test('content script normaliza texto e aceita somente link meli.la esperado', () => {
@@ -15,4 +16,8 @@ test('content script normaliza texto e aceita somente link meli.la esperado', ()
   assert.equal(isShareLabel('Compartilhar'), true);
   assert.equal(isShareLabel('Compartilhar e ganhar'), true);
   assert.equal(isShareLabel('Gerar link'), false);
+  assert.equal(isUsableLabelOption('Ofertas do Instagram'), true);
+  assert.equal(isUsableLabelOption('Selecione uma etiqueta'), false);
+  assert.equal(isUsableLabelOption('Criar etiqueta'), false);
+  assert.equal(isUsableLabelOption('Nenhuma etiqueta disponível'), false);
 });

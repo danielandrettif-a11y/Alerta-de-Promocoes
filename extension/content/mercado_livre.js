@@ -33,6 +33,44 @@
       ) || null;
   }
 
+  function isUsableLabelOption(value) {
+    const text = normalizedText(value).trim();
+    return Boolean(text) &&
+      !text.includes('selecione') &&
+      !text.includes('criar etiqueta') &&
+      !text.includes('nova etiqueta') &&
+      !text.includes('gerenciar etiqueta') &&
+      !text.includes('sem etiqueta') &&
+      !text.includes('nenhuma etiqueta');
+  }
+
+  function findAffiliateDialog(root = document) {
+    return [...root.querySelectorAll(
+      '[role="dialog"], .andes-modal, .andes-modal__content'
+    )].find(element =>
+      isVisible(element) &&
+      normalizedText(element.textContent).includes('etiqueta em uso')
+    ) || null;
+  }
+
+  function findLabelControl(dialog) {
+    return dialog?.querySelector(
+      'select, [role="combobox"], .andes-dropdown__trigger'
+    ) || null;
+  }
+
+  function findLabelOption(root = document, excluded = new Set()) {
+    const options = [...root.querySelectorAll(
+      '[role="option"], .andes-list__item'
+    )];
+    return options.find(element =>
+      !excluded.has(element) &&
+      isVisible(element) &&
+      !element.matches('[aria-disabled="true"], [disabled]') &&
+      isUsableLabelOption(element.textContent)
+    ) || null;
+  }
+
   function detectPageProblem() {
     const text = normalizedText(document.body?.innerText);
     if (
@@ -101,6 +139,57 @@
     });
   }
 
+  async function selectAffiliateLabelIfNeeded(timeoutMs) {
+    const firstResult = await waitFor(
+      () => findAffiliateLink(document) || findAffiliateDialog(document),
+      Math.min(timeoutMs, 10000)
+    );
+    if (typeof firstResult === 'string') return firstResult;
+
+    const control = await waitFor(
+      () => findLabelControl(firstResult),
+      Math.min(timeoutMs, 5000)
+    );
+    if (
+      control instanceof HTMLSelectElement &&
+      control.value
+    ) {
+      return null;
+    }
+    if (
+      !(control instanceof HTMLSelectElement) &&
+      isUsableLabelOption(control.textContent)
+    ) {
+      return null;
+    }
+
+    if (control instanceof HTMLSelectElement) {
+      const option = [...control.options].find(item =>
+        !item.disabled &&
+        item.value &&
+        isUsableLabelOption(item.textContent)
+      );
+      if (!option) return false;
+      control.value = option.value;
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      return null;
+    }
+
+    const visibleOptionsBefore = new Set(
+      [...document.querySelectorAll('[role="option"], .andes-list__item')]
+        .filter(isVisible)
+    );
+    control.click();
+    const option = await waitFor(
+      () => findLabelOption(document, visibleOptionsBefore),
+      Math.min(timeoutMs, 5000)
+    ).catch(() => null);
+    if (!option) return false;
+    option.click();
+    return null;
+  }
+
   async function generateAffiliateLink(timeoutMs = 30000) {
     const initialProblem = detectPageProblem();
     if (initialProblem) return { success: false, ...initialProblem };
@@ -141,6 +230,19 @@
     }
     shareButton.click();
     try {
+      const earlyLink = await selectAffiliateLabelIfNeeded(timeoutMs);
+      if (earlyLink === false) {
+        return {
+          success: false,
+          code: 'AFFILIATE_LABEL_NOT_FOUND',
+          message:
+            'Nenhuma etiqueta de afiliado foi encontrada. Crie uma etiqueta ' +
+            'no Mercado Livre e tente novamente.'
+        };
+      }
+      if (typeof earlyLink === 'string') {
+        return { success: true, affiliateLink: earlyLink };
+      }
       const affiliateLink = await waitFor(
         () => findAffiliateLink(document),
         timeoutMs
@@ -172,8 +274,13 @@
       LINK_PATTERN,
       normalizedText,
       isShareLabel,
+      isUsableLabelOption,
       findShareButton,
+      findAffiliateDialog,
+      findLabelControl,
+      findLabelOption,
       findAffiliateLink,
+      selectAffiliateLabelIfNeeded,
       generateAffiliateLink
     };
   }
