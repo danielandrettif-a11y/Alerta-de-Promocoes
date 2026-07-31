@@ -73,7 +73,8 @@ function hasCurrentReportShape(outputPath) {
   const report = loadJson(outputPath, null);
   return (
     Array.isArray(report?.catalog) &&
-    Number.isFinite(Number(report?.filters?.recurringMinDiscount))
+    Number.isFinite(Number(report?.filters?.recurringMinDiscount)) &&
+    report.selectionVersion === 2
   );
 }
 

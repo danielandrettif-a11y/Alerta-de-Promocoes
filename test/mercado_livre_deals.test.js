@@ -41,6 +41,7 @@ test('seleciona no maximo 400 ofertas e reserva espaco para recompra', () => {
   const result = selectTopDeals(products);
 
   assert.equal(result.deals.length, 400);
-  assert.equal(result.deals[0].recurringPurchase, true);
+  assert.equal(result.deals[0].recurringPurchase, false);
+  assert.equal(result.deals[3].recurringPurchase, true);
   assert.equal(result.catalog.length, 451);
 });

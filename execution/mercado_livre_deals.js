@@ -6,7 +6,8 @@ const {
   ensureSessionDirectories
 } = require('./session_config.js');
 const {
-  getRecurringPurchaseCategory
+  getRecurringPurchaseCategory,
+  mixRecurringDeals
 } = require('./category_helper.js');
 
 ensureSessionDirectories();
@@ -107,7 +108,10 @@ function selectTopDeals(products, options = {}) {
   const rank = (left, right) =>
     right.rating - left.rating || right.discount - left.discount;
   const regular = products
-    .filter(product => product.discount >= minDiscount)
+    .filter(product =>
+      !product.recurringPurchase &&
+      product.discount >= minDiscount
+    )
     .sort(rank);
   const recurring = products
     .filter(product =>
@@ -115,15 +119,12 @@ function selectTopDeals(products, options = {}) {
       product.discount >= recurringMinDiscount
     )
     .sort(rank);
-  const selectedLinks = new Set();
-  const deals = [
-    ...recurring.slice(0, maxRecurringProducts),
-    ...regular
-  ].filter(product => {
-    if (selectedLinks.has(product.link)) return false;
-    selectedLinks.add(product.link);
-    return true;
-  }).slice(0, maxProducts);
+  const deals = mixRecurringDeals(
+    regular,
+    recurring,
+    maxProducts,
+    maxRecurringProducts
+  );
   const catalog = [...new Map(
     [...recurring, ...regular].map(product => [product.link, product])
   ).values()];

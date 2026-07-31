@@ -188,7 +188,8 @@ test('reimporta relatorio antigo mesmo quando o feed nao mudou', t => {
   assert.equal(hasCurrentReportShape(reportPath), false);
   fs.writeFileSync(reportPath, JSON.stringify({
     catalog: [],
-    filters: { recurringMinDiscount: 5 }
+    filters: { recurringMinDiscount: 5 },
+    selectionVersion: 2
   }), 'utf-8');
   assert.equal(hasCurrentReportShape(reportPath), true);
 });

@@ -121,6 +121,51 @@ function getRecurringPurchaseCategory(title) {
   return null;
 }
 
+function mixRecurringDeals(
+  regularDeals,
+  recurringDeals,
+  maxProducts,
+  maxRecurringProducts
+) {
+  const recurringLimit = Math.min(
+    maxProducts,
+    maxRecurringProducts,
+    recurringDeals.length
+  );
+  const regularLimit = Math.min(
+    regularDeals.length,
+    maxProducts - recurringLimit
+  );
+  const regular = regularDeals.slice(0, regularLimit);
+  const recurring = recurringDeals.slice(0, recurringLimit);
+  const mixed = [];
+  let regularIndex = 0;
+  let recurringIndex = 0;
+  while (
+    mixed.length < maxProducts &&
+    (regularIndex < regular.length || recurringIndex < recurring.length)
+  ) {
+    for (
+      let count = 0;
+      count < 3 &&
+      regularIndex < regular.length &&
+      mixed.length < maxProducts;
+      count += 1
+    ) {
+      mixed.push(regular[regularIndex]);
+      regularIndex += 1;
+    }
+    if (
+      recurringIndex < recurring.length &&
+      mixed.length < maxProducts
+    ) {
+      mixed.push(recurring[recurringIndex]);
+      recurringIndex += 1;
+    }
+  }
+  return mixed;
+}
+
 /**
  * Infere a categoria e subcategoria a partir do título do produto.
  * @param {string} title Título do produto
@@ -169,5 +214,6 @@ function inferCategoryAndSub(title) {
 module.exports = {
   TAXONOMY,
   inferCategoryAndSub,
-  getRecurringPurchaseCategory
+  getRecurringPurchaseCategory,
+  mixRecurringDeals
 };

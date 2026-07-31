@@ -3,7 +3,8 @@ const path = require('path');
 const readline = require('readline');
 const { saveJsonAtomic } = require('./json_store.js');
 const {
-  getRecurringPurchaseCategory
+  getRecurringPurchaseCategory,
+  mixRecurringDeals
 } = require('./category_helper.js');
 
 const REQUIRED_HEADERS = [
@@ -368,7 +369,7 @@ async function importShopeeFeeds(inputPaths, options = {}) {
         recurringPurchase: deal.recurringPurchase,
         recurringPurchaseCategory: deal.recurringPurchaseCategory
       });
-      if (deal.discount >= minDiscount) {
+      if (deal.discount >= minDiscount && !deal.recurringPurchase) {
         keepBest(candidates, deal, maxProducts);
       }
       if (deal.recurringPurchase) {
@@ -379,14 +380,12 @@ async function importShopeeFeeds(inputPaths, options = {}) {
 
   candidates.sort(compareDeals);
   recurringCandidates.sort(compareDeals);
-  const selectedDeals = [];
-  const selectedIds = new Set();
-  for (const deal of [...recurringCandidates, ...candidates]) {
-    if (selectedIds.has(deal.dealId)) continue;
-    selectedIds.add(deal.dealId);
-    selectedDeals.push(deal);
-    if (selectedDeals.length === maxProducts) break;
-  }
+  const selectedDeals = mixRecurringDeals(
+    candidates,
+    recurringCandidates,
+    maxProducts,
+    maxRecurringProducts
+  );
   const generatedAt = new Date();
   const report = {
     generatedAt: generatedAt.toISOString(),
@@ -394,6 +393,7 @@ async function importShopeeFeeds(inputPaths, options = {}) {
       timeZone: 'America/Sao_Paulo'
     }),
     source: 'Shopee Affiliate Product Feed',
+    selectionVersion: 2,
     filters: {
       minDiscount,
       recurringMinDiscount,
