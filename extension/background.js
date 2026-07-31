@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.5.0';
+const EXTENSION_VERSION = '1.5.1';
 const SHOPEE_CONVERTER_URL =
   'https://affiliate.shopee.com.br/offer/custom_link';
 const WORKER_WINDOW_KEY = 'affiliateWorkerWindowId';
@@ -10,7 +10,7 @@ const DEFAULTS = {
   batchSize: 10,
   pageTimeoutMs: 45000,
   actionTimeoutMs: 60000,
-  intervalMs: 2500
+  intervalMs: 1000
 };
 
 let stopRequested = false;
@@ -150,7 +150,9 @@ async function getOrCreateWorkerTab(platform) {
       url,
       type: 'normal',
       focused: false,
-      state: 'minimized'
+      state: 'normal',
+      width: 900,
+      height: 900
     });
     await chrome.storage.session.set({
       [WORKER_WINDOW_KEY]: workerWindow.id
@@ -164,7 +166,10 @@ async function getOrCreateWorkerTab(platform) {
     url,
     active: false
   });
-  await chrome.windows.update(workerWindow.id, { state: 'minimized' });
+  await chrome.windows.update(workerWindow.id, {
+    state: 'normal',
+    focused: false
+  });
   return tab;
 }
 
@@ -188,8 +193,20 @@ function samePageUrl(leftValue, rightValue) {
   }
 }
 
-async function navigateTab(tabId, url, timeoutMs) {
+async function navigateTab(
+  tabId,
+  url,
+  timeoutMs,
+  { reloadSamePage = true } = {}
+) {
   const currentTab = await chrome.tabs.get(tabId);
+  if (
+    !reloadSamePage &&
+    currentTab.status === 'complete' &&
+    samePageUrl(currentTab.url, url)
+  ) {
+    return currentTab;
+  }
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       chrome.tabs.onUpdated.removeListener(listener);
@@ -301,7 +318,8 @@ async function processJob(job, settings, tab) {
   const loadedTab = await navigateTab(
     tab.id,
     shopee ? SHOPEE_CONVERTER_URL : job.productLink,
-    settings.pageTimeoutMs
+    settings.pageTimeoutMs,
+    { reloadSamePage: !shopee }
   );
   if (/login|captcha|verification|challenge/i.test(loadedTab.url || '')) {
     return {
@@ -311,8 +329,11 @@ async function processJob(job, settings, tab) {
     };
   }
   await chrome.tabs.update(tab.id, { active: true });
-  await chrome.windows.update(loadedTab.windowId, { state: 'minimized' });
-  await new Promise(resolve => setTimeout(resolve, 750));
+  await chrome.windows.update(loadedTab.windowId, {
+    state: 'normal',
+    focused: false
+  });
+  await new Promise(resolve => setTimeout(resolve, 200));
   if (shopee) {
     return sendContentMessage(tab.id, {
       type: 'GENERATE_SHOPEE_AFFILIATE_LINK',

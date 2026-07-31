@@ -215,6 +215,7 @@
   }
 
   async function detectProductCoupon(candidates = [], timeoutMs = 5000) {
+    if (!candidates.length) return { success: true, coupon: null };
     let coupon = findProductCoupon(candidates, document);
     if (!coupon) {
       const trigger = [...document.querySelectorAll(

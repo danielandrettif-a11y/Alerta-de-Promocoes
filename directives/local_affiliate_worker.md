@@ -18,8 +18,9 @@ servidor.
 
 1. O painel adiciona ofertas à fila e gera os Stories existentes.
 2. A extensão envia heartbeat e reserva até o tamanho de lote escolhido.
-3. A extensão abre uma janela de trabalho separada e minimizada, reutilizada
-   durante todo o lote.
+3. A extensão abre uma janela de trabalho separada, sem foco e atrás da janela
+   principal. Ela permanece renderizada para os marketplaces não reduzirem a
+   velocidade nem ignorarem cliques, e é reutilizada durante todo o lote.
 4. Para Mercado Livre, uma aba nessa janela abre o produto, usa o controle
    `Compartilhar`, extrai o link `meli.la`, lê o preço exibido e procura um
    cupom candidato confirmado na própria página.

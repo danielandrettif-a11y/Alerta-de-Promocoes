@@ -73,12 +73,18 @@
       };
     }
     try {
+      const previousLink = findAffiliateLink(document);
       const input = await waitFor(() => findProductInput(document), timeoutMs);
       setFieldValue(input, productLink);
       const button = await waitFor(() => findGenerateButton(document), timeoutMs);
       button.click();
       const affiliateLink = await waitFor(
-        () => findAffiliateLink(document),
+        () => {
+          const currentLink = findAffiliateLink(document);
+          return currentLink && currentLink !== previousLink
+            ? currentLink
+            : null;
+        },
         timeoutMs
       );
       return { success: true, affiliateLink, observedPrice: null };

@@ -40,11 +40,19 @@ test('clique nativo usa debugger somente para eventos de entrada', () => {
     path.join(root, 'background.js'),
     'utf8'
   );
+  const mercadoLivre = fs.readFileSync(
+    path.join(root, 'content', 'mercado_livre.js'),
+    'utf8'
+  );
   assert.equal(manifest.permissions.includes('debugger'), true);
   assert.match(background, /Input\.dispatchMouseEvent/);
   assert.match(background, /chrome\.tabs\.update\(tab\.id, \{ active: true \}\)/);
   assert.match(background, /chrome\.debugger\.detach/);
-  assert.match(background, /state: 'minimized'/);
+  assert.match(background, /focused: false,\s+state: 'normal'/);
+  assert.match(background, /reloadSamePage: !shopee/);
+  assert.match(background, /intervalMs: 1000/);
+  assert.match(background, /setTimeout\(resolve, 200\)/);
+  assert.match(mercadoLivre, /if \(!candidates\.length\) return/);
   assert.match(background, /chrome\.windows\.remove\(workerWindow\.id\)/);
   assert.match(background, /state: 'normal',\s+focused: true/);
   assert.doesNotMatch(background, /Network\.|Storage\.|Cookies\./);
@@ -67,12 +75,18 @@ test('content script aceita somente link curto oficial da Shopee', () => {
     path.join(root, 'background.js'),
     'utf8'
   );
+  const shopeeContent = fs.readFileSync(
+    path.join(root, 'content', 'shopee.js'),
+    'utf8'
+  );
   assert.equal(
     manifest.host_permissions.includes('https://affiliate.shopee.com.br/*'),
     true
   );
+  assert.match(background, /reloadSamePage: !shopee/);
   assert.match(background, /GENERATE_SHOPEE_AFFILIATE_LINK/);
   assert.match(background, /job\.platform === 'shopee'/);
+  assert.match(shopeeContent, /currentLink !== previousLink/);
 });
 
 test('detecta somente cupom candidato com preço menor no produto', () => {

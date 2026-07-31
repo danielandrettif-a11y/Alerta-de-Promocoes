@@ -49,8 +49,10 @@ Faça o deploy e confirme que o painel abre normalmente por HTTPS.
 1. No painel, adicione ofertas à fila.
 2. No popup, escolha 5, 10, 20, 30 ou 40 itens.
 3. Clique em **Processar fila**.
-4. A extensão abre uma janela separada e minimizada, reutilizando uma aba por
-   marketplace e processando uma oferta por vez.
+4. A extensão abre uma janela separada sem foco, mantida atrás do navegador
+   principal, reutilizando uma aba por marketplace e processando uma oferta
+   por vez. A janela não pode ficar minimizada porque os sites reduzem a
+   renderização e podem ignorar os cliques.
 5. No Mercado Livre, ela também captura cupons exibidos no próprio produto.
 6. Ao concluir, ela fecha automaticamente a janela de trabalho.
 7. Use **Parar** para interromper; reservas não concluídas voltam à fila quando
