@@ -403,13 +403,14 @@ app.get('/api/amazon-deals', (req, res) => {
   });
 });
 
+function storyUrlForItem(item) {
+  if (!item.storyFile) return null;
+  return `/api/publication-queue/assets/${encodeURIComponent(item.storyFile)}` +
+    `?v=${encodeURIComponent(item.updatedAt || '')}`;
+}
+
 function queueItemForResponse(item) {
-  return {
-    ...item,
-    storyUrl: item.storyFile
-      ? `/api/publication-queue/assets/${encodeURIComponent(item.storyFile)}`
-      : null
-  };
+  return { ...item, storyUrl: storyUrlForItem(item) };
 }
 
 function requirePublicationQueue(req, res, next) {
@@ -768,8 +769,7 @@ function batchForResponse(batch) {
       `?token=${encodeURIComponent(batch.downloadToken)}`,
     items: batch.items.map(item => ({
       ...item,
-      storyUrl:
-        `/api/publication-queue/assets/${encodeURIComponent(item.storyFile)}`
+      storyUrl: storyUrlForItem(item)
     }))
   };
 }
@@ -899,6 +899,7 @@ app.get(
     if (!fileName || !ownsAsset) {
       return res.status(404).send('Story nao encontrado.');
     }
+    res.setHeader('Cache-Control', 'no-store');
     res.sendFile(
       path.join(publicationQueueAssetsPath, fileName),
       { dotfiles: 'allow' }

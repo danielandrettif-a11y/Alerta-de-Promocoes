@@ -20,4 +20,7 @@ test('fila usa uma selecao e valida em segundo plano', () => {
   assert.match(app, /job\.phase === 'updating_catalogs'/);
   assert.match(server, /applyObservedQueuePrices\(queue, catalog\)/);
   assert.match(server, /item\.status = PUBLICATION_QUEUE_STATUSES\.READY/);
+  assert.match(server, /Cache-Control', 'no-store'/);
+  assert.match(server, /\?v=\$\{encodeURIComponent\(item\.updatedAt/);
+  assert.match(app, /fetch\(item\.storyUrl, \{ cache: 'no-store' \}\)/);
 });

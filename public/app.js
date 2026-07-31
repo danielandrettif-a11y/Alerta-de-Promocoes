@@ -1684,7 +1684,7 @@ async function shareQueueStory(item) {
       'O envio direto exige HTTPS válido. Ative o certificado do site no Coolify.'
     );
   }
-  const response = await fetch(item.storyUrl);
+  const response = await fetch(item.storyUrl, { cache: 'no-store' });
   if (!response.ok) throw new Error('Não foi possível carregar o Story.');
   const blob = await response.blob();
   const file = new File(
