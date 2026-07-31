@@ -23,6 +23,7 @@ let shopeeDealsLoaded = false;
 let whatsappReady = false;
 let activeDealPlatform = 'ml';
 let lastFocusedElement = null;
+let stopQueueGenerationRequested = false;
 const tabScrollPositions = new Map();
 const DEALS_PAGE_SIZE = 20;
 let visibleMLLimit = DEALS_PAGE_SIZE;
@@ -890,12 +891,16 @@ async function postSelectedDeals(platform) {
   const title = document.getElementById('progress-title');
   const logEl = document.getElementById('progress-log');
   const spinner = modal.querySelector('.progress-spinner');
+  const stopButton = document.getElementById('btn-stop-progress');
+  const closeButton = document.getElementById('btn-close-progress');
   
   lastFocusedElement = document.activeElement;
   title.textContent = 'Postando Stories no WhatsApp...';
   modal.classList.remove('hidden');
   modal.querySelector('.progress-modal-content').focus();
   spinner.style.display = 'block';
+  stopButton.hidden = true;
+  closeButton.disabled = false;
   logEl.replaceChildren();
 
   const addLog = (msg, type = 'info') => {
@@ -1608,15 +1613,39 @@ async function readQueueValidationResponse(response) {
   }
 }
 
-async function enqueueDealsForPublication(deals, platform = 'mercado_livre') {
-  if (!publicationQueueEnabled || deals.length === 0) return;
+function getSelectedPublicationDeals() {
+  return [
+    ...Array.from(selectedMLIndices, index => ({
+      deal: allMLDeals[index],
+      index,
+      platform: 'mercado_livre'
+    })),
+    ...Array.from(selectedShopeeIndices, index => ({
+      deal: allShopeeDeals[index],
+      index,
+      platform: 'shopee'
+    }))
+  ].filter(item => item.deal);
+}
+
+async function enqueueDealsForPublication(items = getSelectedPublicationDeals()) {
+  if (!publicationQueueEnabled || items.length === 0) return;
   const modal = document.getElementById('progress-modal');
   const title = document.getElementById('progress-title');
   const logEl = document.getElementById('progress-log');
   const spinner = modal.querySelector('.progress-spinner');
+  const stopButton = document.getElementById('btn-stop-progress');
+  const closeButton = document.getElementById('btn-close-progress');
+  lastFocusedElement = document.activeElement;
   title.textContent = 'Preparando fila de publicação...';
   modal.classList.remove('hidden');
+  modal.querySelector('.progress-modal-content').focus();
   spinner.style.display = 'block';
+  stopQueueGenerationRequested = false;
+  stopButton.hidden = false;
+  stopButton.disabled = false;
+  stopButton.textContent = 'Parar geração';
+  closeButton.disabled = true;
   logEl.replaceChildren();
 
   const addLog = (message, type = 'info') => {
@@ -1624,15 +1653,20 @@ async function enqueueDealsForPublication(deals, platform = 'mercado_livre') {
     line.className = `progress-line progress-${type}`;
     line.textContent = message;
     logEl.appendChild(line);
+    requestAnimationFrame(() => {
+      logEl.scrollTop = logEl.scrollHeight;
+    });
   };
 
   let created = 0;
   let reused = 0;
   let failed = 0;
-  for (let index = 0; index < deals.length; index++) {
-    const deal = deals[index];
+  let completed = 0;
+  for (let index = 0; index < items.length; index++) {
+    if (stopQueueGenerationRequested) break;
+    const { deal, platform, index: sourceIndex } = items[index];
     addLog(
-      `[${index + 1}/${deals.length}] Gerando Story: ` +
+      `[${index + 1}/${items.length}] Gerando Story: ` +
       `${deal.title.substring(0, 45)}...`
     );
     try {
@@ -1653,20 +1687,21 @@ async function enqueueDealsForPublication(deals, platform = 'mercado_livre') {
         reused += 1;
         addLog('A oferta já estava na fila.', 'warning');
       }
+      (platform === 'shopee'
+        ? selectedShopeeIndices
+        : selectedMLIndices).delete(sourceIndex);
     } catch (err) {
       failed += 1;
       addLog(`Falha: ${err.message}`, 'error');
     }
+    completed += 1;
   }
 
   spinner.style.display = 'none';
-  if (platform === 'shopee') {
-    selectedShopeeIndices.clear();
-    updateShopeeSelectionUI();
-  } else {
-    selectedMLIndices.clear();
-    updateMLSelectionUI();
-  }
+  stopButton.hidden = true;
+  closeButton.disabled = false;
+  updateMLSelectionUI();
+  updateShopeeSelectionUI();
   await fetchPublicationQueue({
     render: true,
     feedback:
@@ -1675,6 +1710,17 @@ async function enqueueDealsForPublication(deals, platform = 'mercado_livre') {
     type: failed ? 'error' : 'success'
   });
   switchTab(elTabQueue, elPanelQueue);
+
+  if (stopQueueGenerationRequested && completed < items.length) {
+    addLog(
+      `Geração interrompida: ${completed} de ${items.length} processado(s).`,
+      'warning'
+    );
+  } else if (failed > 0) {
+    addLog(`Geração concluída com ${failed} falha(s).`, 'error');
+  } else {
+    addLog('Todos os Stories foram gerados.', 'success');
+  }
 }
 
 async function copyQueueText(text) {
@@ -2646,9 +2692,7 @@ function updateMLSelectionUI() {
 
   const count = selectedMLIndices.size;
   elTxtSelectedCountML.textContent = count;
-  elTxtQueueCountML.textContent = count;
   elBtnGenerateML.disabled = count === 0 || !whatsappReady;
-  elBtnQueueML.disabled = count === 0;
   elBtnClearSelectionML.disabled = count === 0;
 
   const visibleCards = elGridML.querySelectorAll('.deal-card:not(.hidden-filter)');
@@ -2661,7 +2705,7 @@ function updateMLSelectionUI() {
   } else {
     elChkSelectAllML.checked = false;
   }
-  updateMobileSelectionBar();
+  updatePublicationQueueSelectionUI();
 }
 
 function updateAmazonSelectionUI() {
@@ -2707,8 +2751,6 @@ function updateShopeeSelectionUI() {
   });
 
   const count = selectedShopeeIndices.size;
-  elTxtQueueCountShopee.textContent = count;
-  elBtnQueueShopee.disabled = count === 0;
   elBtnClearSelectionShopee.disabled = count === 0;
   const visibleCards = elGridShopee.querySelectorAll(
     '.deal-card:not(.hidden-filter)'
@@ -2717,6 +2759,15 @@ function updateShopeeSelectionUI() {
     [...visibleCards].every(card =>
       selectedShopeeIndices.has(Number(card.dataset.index))
     );
+  updatePublicationQueueSelectionUI();
+}
+
+function updatePublicationQueueSelectionUI() {
+  const count = selectedMLIndices.size + selectedShopeeIndices.size;
+  elTxtQueueCountML.textContent = count;
+  elTxtQueueCountShopee.textContent = count;
+  elBtnQueueML.disabled = count === 0;
+  elBtnQueueShopee.disabled = count === 0;
   updateMobileSelectionBar();
 }
 
@@ -2771,6 +2822,11 @@ function init() {
   document.getElementById('btn-close-progress').addEventListener('click', () => {
     document.getElementById('progress-modal').classList.add('hidden');
     lastFocusedElement?.focus();
+  });
+  document.getElementById('btn-stop-progress').addEventListener('click', event => {
+    stopQueueGenerationRequested = true;
+    event.currentTarget.disabled = true;
+    event.currentTarget.textContent = 'Parando após o Story atual...';
   });
 
   // Tab Switchers
@@ -2836,28 +2892,15 @@ function init() {
   elBtnMobileSend.addEventListener('click', () =>
     postSelectedDeals(activeDealPlatform)
   );
-  elBtnMobileQueue.addEventListener('click', () => {
-    const shopee = activeDealPlatform === 'shopee';
-    const deals = (shopee ? allShopeeDeals : allMLDeals).filter((_, index) =>
-      (shopee ? selectedShopeeIndices : selectedMLIndices).has(index)
-    );
-    enqueueDealsForPublication(
-      deals,
-      shopee ? 'shopee' : 'mercado_livre'
-    );
-  });
-  elBtnQueueML.addEventListener('click', () => {
-    const deals = allMLDeals.filter((_, index) =>
-      selectedMLIndices.has(index)
-    );
-    enqueueDealsForPublication(deals);
-  });
-  elBtnQueueShopee.addEventListener('click', () => {
-    const deals = allShopeeDeals.filter((_, index) =>
-      selectedShopeeIndices.has(index)
-    );
-    enqueueDealsForPublication(deals, 'shopee');
-  });
+  elBtnMobileQueue.addEventListener('click', () =>
+    enqueueDealsForPublication()
+  );
+  elBtnQueueML.addEventListener('click', () =>
+    enqueueDealsForPublication()
+  );
+  elBtnQueueShopee.addEventListener('click', () =>
+    enqueueDealsForPublication()
+  );
   elBtnRefreshQueue.addEventListener('click', async () => {
     await Promise.all([
       fetchPublicationQueue({

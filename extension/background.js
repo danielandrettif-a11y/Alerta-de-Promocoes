@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.4.0';
+const EXTENSION_VERSION = '1.4.1';
 const SHOPEE_CONVERTER_URL =
   'https://affiliate.shopee.com.br/offer/custom_link';
 const DEFAULTS = {
@@ -289,7 +289,7 @@ async function processQueue() {
     });
     await heartbeat('processing');
     const tabs = {};
-    const batchSize = Math.min(30, Math.max(
+    const batchSize = Math.min(40, Math.max(
       1,
       Number(settings.batchSize) || 10
     ));

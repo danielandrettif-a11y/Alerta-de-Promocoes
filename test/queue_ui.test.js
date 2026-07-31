@@ -24,3 +24,29 @@ test('fila usa uma selecao e valida em segundo plano', () => {
   assert.match(server, /\?v=\$\{encodeURIComponent\(item\.updatedAt/);
   assert.match(app, /fetch\(item\.storyUrl, \{ cache: 'no-store' \}\)/);
 });
+
+test('prepara Mercado Livre e Shopee juntos com progresso cancelavel', () => {
+  const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
+
+  assert.match(app, /function getSelectedPublicationDeals\(\)/);
+  assert.match(app, /selectedMLIndices\.size \+ selectedShopeeIndices\.size/);
+  assert.match(app, /logEl\.scrollTop = logEl\.scrollHeight/);
+  assert.match(app, /Todos os Stories foram gerados\./);
+  assert.match(app, /stopQueueGenerationRequested/);
+  assert.match(page, /id="btn-stop-progress"/);
+});
+
+test('extensao permite processar ate 40 ofertas por lote', () => {
+  const popup = fs.readFileSync(
+    path.join(root, 'extension', 'popup.html'),
+    'utf8'
+  );
+  const background = fs.readFileSync(
+    path.join(root, 'extension', 'background.js'),
+    'utf8'
+  );
+
+  assert.match(popup, /<option value="40">40 ofertas<\/option>/);
+  assert.match(background, /Math\.min\(40,/);
+});

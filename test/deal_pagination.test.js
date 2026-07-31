@@ -21,7 +21,8 @@ test('renderiza ofertas em lotes de 20 sem blur por card', () => {
   assert.match(html, /id="chk-select-all-shopee"/);
   assert.match(html, /id="btn-queue-shopee"/);
   assert.match(app, /const selectedShopeeIndices = new Set\(\)/);
-  assert.match(app, /enqueueDealsForPublication\(deals, 'shopee'\)/);
+  assert.match(app, /function getSelectedPublicationDeals\(\)/);
+  assert.match(app, /platform: 'shopee'/);
   assert.match(css, /#btn-tab-amazon,[\s\S]*display:\s*none\s*!important/);
   assert.match(html, /id="btn-tab-products"/);
   assert.match(html, /id="btn-tab-search"/);
