@@ -16,7 +16,6 @@ let publicationQueueEnabled = false;
 let publicationQueueItems = [];
 let publicationQueueSummary = {};
 let publicationBatches = [];
-const selectedReadyBatchIds = new Set();
 const selectedQueueItemIds = new Set();
 let publicationHistorySignature = '';
 let amazonDealsLoaded = false;
@@ -154,8 +153,8 @@ const elQueueFeedback = document.getElementById('queue-feedback');
 const elBtnRefreshQueue = document.getElementById('btn-refresh-queue');
 const elBtnClearDiscarded = document.getElementById('btn-clear-discarded');
 const elBtnValidateQueue = document.getElementById('btn-validate-queue');
-const elBtnSelectVisibleQueue =
-  document.getElementById('btn-select-visible-queue');
+const elChkSelectVisibleQueue =
+  document.getElementById('chk-select-visible-queue');
 const elBtnDeleteSelectedQueue =
   document.getElementById('btn-delete-selected-queue');
 const elTxtSelectedQueueCount =
@@ -1249,12 +1248,11 @@ function updateQueueSelection(visibleItems = null) {
     publicationQueueItems.filter(queueItemMatchesFilter);
   elTxtSelectedQueueCount.textContent = selectedQueueItemIds.size;
   elBtnDeleteSelectedQueue.disabled = selectedQueueItemIds.size === 0;
-  elBtnSelectVisibleQueue.disabled = visible.length === 0;
-  elBtnSelectVisibleQueue.textContent =
+  elChkSelectVisibleQueue.disabled = visible.length === 0;
+  elChkSelectVisibleQueue.checked =
     visible.length > 0 &&
-    visible.every(item => selectedQueueItemIds.has(item.id))
-      ? 'Desmarcar todos desta lista'
-      : 'Marcar todos desta lista';
+    visible.every(item => selectedQueueItemIds.has(item.id));
+  updateBatchSelection();
 }
 
 function renderPublicationQueue() {
@@ -1278,7 +1276,9 @@ function renderPublicationQueue() {
     );
     const card = document.createElement('article');
     card.className =
-      `queue-card ${status.className} platform-${item.platform}`;
+      `queue-card ${status.className} platform-${item.platform} ${
+        selectedQueueItemIds.has(item.id) ? 'selected' : ''
+      }`;
     card.dataset.itemId = item.id;
 
     const marketplace = item.platform === 'shopee'
@@ -1356,16 +1356,6 @@ function renderPublicationQueue() {
       `
       : '';
 
-    const batchSelector = item.status === 'ready'
-      ? `
-        <label class="queue-batch-selector">
-          <input type="checkbox" data-batch-select="${escapeQueueHtml(item.id)}"
-            ${selectedReadyBatchIds.has(item.id) ? 'checked' : ''}>
-          Incluir no lote
-        </label>
-      `
-      : '';
-
     const secondaryAction = [
       'awaiting_affiliate',
       'ready',
@@ -1393,13 +1383,15 @@ function renderPublicationQueue() {
       : '';
 
     card.innerHTML = `
-      <div class="queue-story-column">
-        <label class="queue-selection-control">
+      <div class="card-checkbox queue-card-checkbox">
+        <label class="checkbox-container"
+          aria-label="Selecionar ${escapeQueueHtml(item.title)}">
           <input type="checkbox" data-queue-select="${escapeQueueHtml(item.id)}"
             ${selectedQueueItemIds.has(item.id) ? 'checked' : ''}>
-          Selecionar
+          <span class="checkmark"></span>
         </label>
-        ${batchSelector}
+      </div>
+      <div class="queue-story-column">
         <img
           class="queue-story-preview"
           src="${escapeQueueHtml(item.storyUrl || '')}"
@@ -1440,12 +1432,6 @@ function renderPublicationQueue() {
         <div class="queue-secondary-actions">${secondaryAction}</div>
       </div>
     `;
-    const batchCheckbox = card.querySelector('[data-batch-select]');
-    batchCheckbox?.addEventListener('change', () => {
-      if (batchCheckbox.checked) selectedReadyBatchIds.add(item.id);
-      else selectedReadyBatchIds.delete(item.id);
-      updateBatchSelection();
-    });
     const queueCheckbox = card.querySelector('[data-queue-select]');
     queueCheckbox.addEventListener('change', () => {
       if (queueCheckbox.checked) selectedQueueItemIds.add(item.id);
@@ -1454,7 +1440,6 @@ function renderPublicationQueue() {
     });
     elGridQueue.appendChild(card);
   }
-  updateBatchSelection();
   updateQueueSelection(visibleItems);
 }
 
@@ -1537,26 +1522,64 @@ async function deleteSelectedQueueItems() {
 
 async function validateEntireQueue() {
   elBtnValidateQueue.disabled = true;
-  setQueueFeedback('Validando ofertas e atualizando Stories...');
+  elBtnValidateQueue.textContent = 'Validando...';
+  setQueueFeedback('Comparando a fila com os catálogos atuais...');
   try {
     const response = await fetch('/api/publication-queue/validate', {
       method: 'POST'
     });
-    const data = await response.json();
+    const data = await readQueueValidationResponse(response);
     if (!response.ok) {
       throw new Error(data.error || 'Não foi possível validar a fila.');
     }
+    let job = data;
+    while (job.state === 'running') {
+      const progress = job.total > 0
+        ? ` (${job.processed}/${job.total} Stories)`
+        : '';
+      elBtnValidateQueue.textContent = `Validando${progress}`;
+      setQueueFeedback(
+        `Validando ofertas e atualizando Stories${progress}...`
+      );
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const statusResponse = await fetch(
+        '/api/publication-queue/validation'
+      );
+      job = await readQueueValidationResponse(statusResponse);
+      if (!statusResponse.ok) {
+        throw new Error(job.error || 'Falha ao consultar a validação.');
+      }
+    }
+    if (job.state === 'failed') {
+      throw new Error(job.error || 'A validação da fila falhou.');
+    }
+    const result = job.result || {};
     await fetchPublicationQueue({
       render: true,
       feedback:
-        `${data.removed} removida(s), ${data.updated} atualizada(s) e ` +
-        `${data.unchanged} sem alterações.`,
+        `${result.removed || 0} removida(s), ` +
+        `${result.updated || 0} atualizada(s) e ` +
+        `${result.unchanged || 0} sem alterações.`,
       type: 'success'
     });
   } catch (error) {
     setQueueFeedback(error.message, 'error');
   } finally {
     elBtnValidateQueue.disabled = false;
+    elBtnValidateQueue.textContent = '↻ Validar fila';
+  }
+}
+
+async function readQueueValidationResponse(response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      response.ok
+        ? 'O servidor retornou uma resposta inválida.'
+        : `O servidor não conseguiu validar a fila (HTTP ${response.status}).`
+    );
   }
 }
 
@@ -1743,10 +1766,9 @@ function updateBatchSelection() {
       .filter(item => item.status === 'ready')
       .map(item => item.id)
   );
-  for (const itemId of selectedReadyBatchIds) {
-    if (!readyIds.has(itemId)) selectedReadyBatchIds.delete(itemId);
-  }
-  const count = selectedReadyBatchIds.size;
+  const count = [...selectedQueueItemIds]
+    .filter(itemId => readyIds.has(itemId))
+    .length;
   elBatchSelectionCount.textContent =
     `${count} ${count === 1 ? 'oferta pronta selecionada' : 'ofertas prontas selecionadas'}`;
   elBtnPrepareBatch.disabled = count === 0;
@@ -1807,7 +1829,12 @@ async function fetchPublicationBatches() {
 }
 
 async function preparePublicationBatch() {
-  if (selectedReadyBatchIds.size === 0) return;
+  const readyItemIds = [...selectedQueueItemIds].filter(itemId =>
+    publicationQueueItems.some(item =>
+      item.id === itemId && item.status === 'ready'
+    )
+  );
+  if (readyItemIds.length === 0) return;
   const name = prompt('Nome do lote:', `Lote ${new Date().toLocaleDateString('pt-BR')}`);
   if (name === null) return;
   elBtnPrepareBatch.disabled = true;
@@ -1817,12 +1844,12 @@ async function preparePublicationBatch() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name,
-        itemIds: [...selectedReadyBatchIds]
+        itemIds: readyItemIds
       })
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Falha ao preparar lote.');
-    selectedReadyBatchIds.clear();
+    readyItemIds.forEach(itemId => selectedQueueItemIds.delete(itemId));
     await fetchPublicationBatches();
     renderPublicationQueue();
     setQueueFeedback('Lote e pacote ZIP preparados.', 'success');
@@ -2860,13 +2887,10 @@ function init() {
   };
   elQueueStatusFilter.addEventListener('change', applyQueueFilter);
   elQueuePlatformFilter.addEventListener('change', applyQueueFilter);
-  elBtnSelectVisibleQueue.addEventListener('click', () => {
+  elChkSelectVisibleQueue.addEventListener('change', () => {
     const visible = publicationQueueItems.filter(queueItemMatchesFilter);
-    const allSelected = visible.every(item =>
-      selectedQueueItemIds.has(item.id)
-    );
     visible.forEach(item => {
-      if (allSelected) selectedQueueItemIds.delete(item.id);
+      if (!elChkSelectVisibleQueue.checked) selectedQueueItemIds.delete(item.id);
       else selectedQueueItemIds.add(item.id);
     });
     renderPublicationQueue();

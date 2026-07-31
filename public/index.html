@@ -14,7 +14,7 @@
   <!-- CSS Link -->
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
 
@@ -527,34 +527,44 @@
       </section>
 
       <div class="queue-toolbar">
-        <button id="btn-validate-queue" type="button">
-          Validar fila
-        </button>
-        <button id="btn-select-visible-queue" type="button">
-          Marcar todos desta lista
-        </button>
-        <button id="btn-delete-selected-queue" type="button" disabled>
-          Excluir selecionados (<span id="txt-selected-queue-count">0</span>)
-        </button>
-        <button id="btn-clear-discarded" type="button" hidden>
-          Limpar descartadas
-        </button>
-        <label for="queue-status-filter">Mostrar</label>
-        <select id="queue-status-filter" class="select-premium">
-          <option value="active">Pendentes e prontas</option>
-          <option value="all">Todas</option>
-          <option value="awaiting_affiliate">Aguardando link</option>
-          <option value="ready">Prontas</option>
-          <option value="needs_review">Precisam de revisão</option>
-          <option value="published">Publicadas</option>
-          <option value="discarded">Descartadas</option>
-        </select>
-        <label for="queue-platform-filter">Loja</label>
-        <select id="queue-platform-filter" class="select-premium">
-          <option value="all">Todas</option>
-          <option value="mercado_livre">Mercado Livre</option>
-          <option value="shopee">Shopee</option>
-        </select>
+        <div class="queue-selection-actions">
+          <label class="checkbox-container">
+            <input id="chk-select-visible-queue" type="checkbox">
+            <span class="checkmark"></span>
+            Selecionar todos
+          </label>
+        </div>
+        <div class="queue-filters">
+          <label for="queue-status-filter">Mostrar</label>
+          <select id="queue-status-filter" class="select-premium">
+            <option value="active">Pendentes e prontas</option>
+            <option value="all">Todas</option>
+            <option value="awaiting_affiliate">Aguardando link</option>
+            <option value="ready">Prontas</option>
+            <option value="needs_review">Precisam de revisão</option>
+            <option value="published">Publicadas</option>
+            <option value="discarded">Descartadas</option>
+          </select>
+          <label for="queue-platform-filter">Loja</label>
+          <select id="queue-platform-filter" class="select-premium">
+            <option value="all">Todas</option>
+            <option value="mercado_livre">Mercado Livre</option>
+            <option value="shopee">Shopee</option>
+          </select>
+        </div>
+        <div class="queue-toolbar-actions">
+          <button id="btn-validate-queue" class="queue-action-validate"
+            type="button">
+            ↻ Validar fila
+          </button>
+          <button id="btn-delete-selected-queue" class="queue-action-delete"
+            type="button" disabled>
+            Excluir (<span id="txt-selected-queue-count">0</span>)
+          </button>
+          <button id="btn-clear-discarded" type="button" hidden>
+            Limpar descartadas
+          </button>
+        </div>
       </div>
 
       <p id="queue-feedback" class="queue-feedback" aria-live="polite"></p>
@@ -619,6 +629,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=28"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>

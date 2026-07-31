@@ -4,7 +4,7 @@ const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
 const archiver = require('archiver');
-const { exec, execSync } = require('child_process');
+const { exec, execFile, execSync } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./execution/category_helper.js');
 const {
   printSessionStatus,
@@ -157,6 +157,13 @@ const publicationQueueEnabled =
   readEnv().PUBLICATION_QUEUE_ENABLED !== 'false';
 const localAffiliateWorkerEnabled =
   readEnv().LOCAL_AFFILIATE_WORKER_ENABLED === 'true';
+let queueValidationJob = {
+  state: 'idle',
+  processed: 0,
+  total: 0,
+  result: null,
+  error: null
+};
 const GROUP_NAME =
   readEnv().WHATSAPP_GROUP_ID ||
   readEnv().WHATSAPP_GROUP_NAME ||
@@ -545,18 +552,117 @@ function loadQueueValidationCatalog(queue) {
   return catalog;
 }
 
-function validatePublicationQueue(queue) {
-  const catalog = loadQueueValidationCatalog(queue);
-  const coupons = loadAvailableDeals().coupons;
-  const result = validateQueueItems(queue, catalog);
-  for (const { item, current } of result.updated) {
-    const storyImagePath = generateStory(current, coupons);
-    fs.copyFileSync(
-      storyImagePath,
-      path.join(publicationQueueAssetsPath, item.storyFile)
+function generateStoryBuffer(deal, coupons) {
+  const runId = crypto.randomUUID();
+  const storiesDir = path.join(
+    APP_RUNTIME_DIR,
+    `queue-validation-${runId}`
+  );
+  const selectionPath = path.join(
+    APP_RUNTIME_DIR,
+    `queue-validation-${runId}.json`
+  );
+  const confirmedCoupon = coupons.find(
+    coupon => coupon.verificationStatus === 'manually_confirmed'
+  ) || null;
+  fs.mkdirSync(storiesDir, { recursive: true });
+  fs.writeFileSync(selectionPath, JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    deals: [deal],
+    selectedCoupon: confirmedCoupon
+  }, null, 2), 'utf-8');
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      process.execPath,
+      [
+        path.join(__dirname, 'execution', 'generate_stories.js'),
+        selectionPath
+      ],
+      {
+        cwd: __dirname,
+        env: { ...process.env, STORIES_OUTPUT_DIR: storiesDir },
+        timeout: 120000,
+        windowsHide: true
+      },
+      error => {
+        try {
+          if (error) throw error;
+          const generated = fs.readdirSync(storiesDir)
+            .find(file => file.endsWith('.jpg'));
+          if (!generated) {
+            throw new Error('Nenhum arquivo de Story foi gerado.');
+          }
+          resolve(fs.readFileSync(path.join(storiesDir, generated)));
+        } catch (generationError) {
+          reject(generationError);
+        } finally {
+          try { fs.unlinkSync(selectionPath); } catch {}
+          fs.rmSync(storiesDir, { recursive: true, force: true });
+        }
+      }
     );
+  });
+}
+
+async function runPublicationQueueValidation(jobId) {
+  if (queueValidationJob.id !== jobId) return;
+  try {
+    const catalog = loadQueueValidationCatalog(
+      loadPublicationQueue(publicationQueuePath)
+    );
+    const coupons = loadAvailableDeals().coupons;
+    const preview = validateQueueItems(
+      loadPublicationQueue(publicationQueuePath),
+      catalog
+    );
+    queueValidationJob.total = preview.updated.length;
+    const storiesByDealId = new Map();
+
+    for (const { item, current } of preview.updated) {
+      storiesByDealId.set(
+        item.dealId,
+        await generateStoryBuffer(current, coupons)
+      );
+      queueValidationJob.processed += 1;
+    }
+
+    const result = validateQueueItems(
+      loadPublicationQueue(publicationQueuePath),
+      catalog
+    );
+    fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
+    for (const { item, current } of result.updated) {
+      let story = storiesByDealId.get(item.dealId);
+      if (!story) story = await generateStoryBuffer(current, coupons);
+      if (!item.storyFile) item.storyFile = `${item.id}.jpg`;
+      fs.writeFileSync(
+        path.join(publicationQueueAssetsPath, item.storyFile),
+        story
+      );
+    }
+    savePublicationQueue(publicationQueuePath, result.queue);
+    removePublicationQueueAssets(result.removed);
+    queueValidationJob = {
+      ...queueValidationJob,
+      state: 'completed',
+      completedAt: new Date().toISOString(),
+      result: {
+        removed: result.removed.length,
+        updated: result.updated.length,
+        unchanged: result.unchanged,
+        summary: summarizeQueue(result.queue)
+      }
+    };
+  } catch (error) {
+    console.error(`Erro ao validar fila: ${error.message}`);
+    queueValidationJob = {
+      ...queueValidationJob,
+      state: 'failed',
+      completedAt: new Date().toISOString(),
+      error: error.message
+    };
   }
-  return { ...result, updated: result.updated.length };
 }
 
 function getAffiliateProcessingSummary(queue) {
@@ -789,23 +895,29 @@ app.post(
   '/api/publication-queue/validate',
   requirePublicationQueue,
   (req, res) => {
-    try {
-      const result = validatePublicationQueue(
-        loadPublicationQueue(publicationQueuePath)
+    if (queueValidationJob.state !== 'running') {
+      queueValidationJob = {
+        id: crypto.randomUUID(),
+        state: 'running',
+        startedAt: new Date().toISOString(),
+        completedAt: null,
+        processed: 0,
+        total: 0,
+        result: null,
+        error: null
+      };
+      setImmediate(() =>
+        runPublicationQueueValidation(queueValidationJob.id)
       );
-      savePublicationQueue(publicationQueuePath, result.queue);
-      removePublicationQueueAssets(result.removed);
-      res.json({
-        success: true,
-        removed: result.removed.length,
-        updated: result.updated,
-        unchanged: result.unchanged,
-        summary: summarizeQueue(result.queue)
-      });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
     }
+    res.status(202).json(queueValidationJob);
   }
+);
+
+app.get(
+  '/api/publication-queue/validation',
+  requirePublicationQueue,
+  (req, res) => res.json(queueValidationJob)
 );
 
 app.get('/api/local-affiliate-worker/status', (req, res) => {

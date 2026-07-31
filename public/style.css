@@ -2931,11 +2931,15 @@ select:focus-visible {
 }
 
 .queue-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin: 16px 0 8px;
+  gap: 16px;
+  margin: 16px 0 10px;
+  padding: 13px 15px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .queue-toolbar label {
@@ -2943,17 +2947,63 @@ select:focus-visible {
   font-size: 13px;
 }
 
-.queue-toolbar select {
-  min-width: 220px;
+.queue-selection-actions,
+.queue-filters,
+.queue-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.queue-selection-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  font-weight: 700;
+.queue-selection-actions .checkbox-container {
+  color: var(--text-main);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.queue-filters {
+  justify-content: center;
+}
+
+.queue-toolbar-actions {
+  justify-content: flex-end;
+}
+
+.queue-toolbar select {
+  min-width: 175px;
+}
+
+.queue-toolbar-actions button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.045);
+  font-weight: 750;
   cursor: pointer;
+}
+
+.queue-toolbar-actions button:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.queue-toolbar-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.queue-toolbar-actions .queue-action-validate {
+  border-color: rgba(88, 211, 154, 0.38);
+  color: #72e8af;
+  background: rgba(88, 211, 154, 0.08);
+}
+
+.queue-toolbar-actions .queue-action-delete:not(:disabled) {
+  border-color: rgba(255, 98, 89, 0.42);
+  color: #ff8a83;
+  background: rgba(255, 98, 89, 0.08);
 }
 
 .queue-card.platform-shopee {
@@ -2981,11 +3031,6 @@ select:focus-visible {
 .platform-mercado_livre .queue-marketplace-badge {
   background: rgba(255, 230, 0, 0.14);
   color: #ffe95a;
-}
-
-#btn-delete-selected-queue:not(:disabled) {
-  border-color: #ff6259;
-  color: #ff837c;
 }
 
 .recurring-badge {
@@ -3050,6 +3095,17 @@ select:focus-visible {
   border-radius: 22px;
   background: var(--bg-card);
   box-shadow: var(--shadow-main);
+  position: relative;
+}
+
+.queue-card.selected {
+  border-color: rgba(242, 113, 33, 0.7);
+  box-shadow: 0 0 0 2px rgba(242, 113, 33, 0.16);
+}
+
+.queue-card-checkbox {
+  top: 30px;
+  left: 30px;
 }
 
 .queue-card.is-ready {
@@ -3346,18 +3402,6 @@ select:focus-visible {
   text-decoration: none;
 }
 
-.queue-batch-selector {
-  position: absolute;
-  z-index: 1;
-  top: 10px;
-  left: 10px;
-  padding: 7px 10px;
-  border-radius: 10px;
-  color: #07150f;
-  background: #72e8af;
-  font-weight: 700;
-}
-
 .queue-story-column {
   position: relative;
 }
@@ -3430,10 +3474,30 @@ select:focus-visible {
 
   .queue-toolbar {
     align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .queue-selection-actions,
+  .queue-filters,
+  .queue-toolbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .queue-filters {
+    justify-content: flex-start;
+  }
+
+  .queue-toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-toolbar-actions button {
+    width: 100%;
   }
 
   .queue-toolbar select {
+    flex: 1 1 190px;
     width: 100%;
   }
 
@@ -3443,6 +3507,11 @@ select:focus-visible {
     max-width: 100%;
     padding: 14px;
     overflow: hidden;
+  }
+
+  .queue-card-checkbox {
+    top: 24px;
+    left: 24px;
   }
 
   .queue-story-column {
