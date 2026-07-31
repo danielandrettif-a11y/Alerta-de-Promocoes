@@ -100,6 +100,8 @@ const elTxtSelectedCountAmazon = document.getElementById('txt-selected-count-ama
 
 // DOM elements - Shopee Actions
 const elBtnUpdateShopee = document.getElementById('btn-update-shopee');
+const elTxtShopeeCatalogUpdate =
+  document.getElementById('txt-shopee-catalog-update');
 
 // DOM elements - Filters ML
 const elFilterNameML = document.getElementById('ipt-filter-name-ml');
@@ -268,6 +270,13 @@ function updateLastUpdateUI(platform) {
   }
 }
 
+function updateShopeeCatalogUpdate(value) {
+  const date = parseBackendDate(value);
+  elTxtShopeeCatalogUpdate.textContent = date
+    ? `atualizado em ${date.toLocaleString('pt-BR')}`
+    : 'nenhuma atualização registrada';
+}
+
 async function fetchDataStatus() {
   try {
     const response = await fetch('/api/data-status');
@@ -281,6 +290,7 @@ async function fetchDataStatus() {
     lastUpdateML = status.mercadoLivre?.generatedAt || lastUpdateML;
     lastUpdateAmazon = status.amazon?.generatedAt || lastUpdateAmazon;
     lastUpdateShopee = status.shopee?.generatedAt || lastUpdateShopee;
+    updateShopeeCatalogUpdate(lastUpdateShopee);
     if (previousMLUpdate && lastUpdateML !== previousMLUpdate) fetchMLDeals();
     if (previousAmazonUpdate && lastUpdateAmazon !== previousAmazonUpdate) {
       if (
@@ -747,6 +757,7 @@ async function fetchShopeeDeals() {
 
     if (data.generatedAt) {
       lastUpdateShopee = data.generatedAt;
+      updateShopeeCatalogUpdate(lastUpdateShopee);
       if (
         elTabProducts.classList.contains('active') &&
         activeDealPlatform === 'shopee'

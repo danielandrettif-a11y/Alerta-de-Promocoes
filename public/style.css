@@ -2814,6 +2814,11 @@ select:focus-visible {
   display: none !important;
 }
 
+#btn-tab-amazon,
+#panel-amazon {
+  display: none !important;
+}
+
 .queue-tab-count {
   display: inline-grid;
   place-items: center;
