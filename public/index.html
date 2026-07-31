@@ -185,7 +185,7 @@
           <span aria-hidden="true">🛍️</span> Mercado Livre
         </button>
         <button id="btn-tab-amazon" class="source-tab" type="button" role="tab"
-          aria-selected="false" aria-controls="panel-amazon">
+          aria-selected="false" aria-controls="panel-amazon" hidden>
           <span aria-hidden="true">🟡</span> Amazon
         </button>
         <button id="btn-tab-shopee" class="source-tab" type="button" role="tab"
@@ -267,7 +267,8 @@
       </div>
 
       <!-- Amazon source panel -->
-      <div id="panel-amazon" class="source-panel" role="tabpanel" aria-labelledby="btn-tab-amazon">
+      <div id="panel-amazon" class="source-panel" role="tabpanel"
+        aria-labelledby="btn-tab-amazon" hidden>
       <p class="source-note">
         A fila com link afiliado é exclusiva do Mercado Livre.
         Na Amazon, as ofertas selecionadas podem ser enviadas diretamente ao WhatsApp.
