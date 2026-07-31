@@ -26,6 +26,8 @@
       --badge-border: rgba(30, 21, 10, 0.12);
       --outer-text: #ffffff;
       --outer-muted: #f1d497;
+      --marketplace-color: #ffe600;
+      --marketplace-text: #241f52;
     }
 
     /* Tema: Ofertas de Campanha (Frio - Azul Suave) */
@@ -58,6 +60,16 @@
       --text-muted: #825254;
       --badge-border: rgba(140, 29, 32, 0.12);
       --outer-muted: #f0bec4;
+    }
+
+    body.platform-shopee {
+      --marketplace-color: #ee4d2d;
+      --marketplace-text: #ffffff;
+    }
+
+    body.platform-amazon {
+      --marketplace-color: #146eb4;
+      --marketplace-text: #ffffff;
     }
 
     * {
@@ -167,6 +179,106 @@
       letter-spacing: 4px;
       text-transform: uppercase;
       font-family: 'Montserrat', sans-serif;
+    }
+
+    .marketplace-signature {
+      min-width: 340px;
+      padding: 14px 28px;
+      background: var(--marketplace-color);
+      color: var(--marketplace-text);
+      border: 3px solid #ffffff;
+      font: 900 24px/1 'Montserrat', sans-serif;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.24);
+    }
+
+    body.story-b .marketplace-signature {
+      position: absolute;
+      top: 185px;
+      left: 65px;
+      width: 950px;
+      padding: 14px 28px;
+      border-radius: 0;
+      font-size: 24px;
+      box-shadow: none;
+      z-index: 20;
+    }
+
+    body.story-b .card {
+      border-top: 18px solid var(--marketplace-color);
+    }
+
+    body.story-c .marketplace-signature {
+      background: transparent;
+      color: var(--outer-text);
+      border-color: var(--marketplace-color);
+      box-shadow: inset 0 -8px 0 var(--marketplace-color);
+    }
+
+    body.story-d .marketplace-signature {
+      position: absolute;
+      top: 278px;
+      left: 54px;
+      width: 370px;
+      height: 66px;
+      min-width: 0;
+      padding: 0 34px;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-left: 0;
+      border-radius: 0 16px 16px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        linear-gradient(
+          115deg,
+          rgba(255, 255, 255, 0.28) 0%,
+          transparent 32%,
+          rgba(0, 0, 0, 0.14) 100%
+        ),
+        var(--marketplace-color);
+      box-shadow:
+        0 13px 22px rgba(0, 0, 0, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.45);
+      font-size: 24px;
+      text-align: center;
+      z-index: 30;
+    }
+
+    body.story-d .header {
+      z-index: 31;
+    }
+
+    body.story-d .deal-ribbon {
+      display: none;
+    }
+
+    body.story-d .marketplace-signature::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: -16px;
+      width: 24px;
+      height: 17px;
+      background: color-mix(in srgb, var(--marketplace-color) 55%, #000000);
+      clip-path: polygon(0 0, 100% 0, 100% 100%);
+      z-index: -1;
+    }
+
+    body.story-d .marketplace-signature::after {
+      content: '';
+      position: absolute;
+      left: 28px;
+      right: 28px;
+      top: 8px;
+      height: 1px;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.72),
+        transparent
+      );
     }
 
     /* Card Central */
@@ -443,6 +555,26 @@
       letter-spacing: 1px;
     }
 
+    .marketplace-cta {
+      padding: 18px 34px;
+      background: var(--marketplace-color);
+      color: var(--marketplace-text);
+      border: 3px solid #ffffff;
+      font: 900 27px/1 'Montserrat', sans-serif;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    body.story-a .marketplace-cta,
+    body.story-b .marketplace-cta,
+    body.story-d .marketplace-cta {
+      background: transparent;
+      color: var(--outer-muted);
+      border: 0;
+      padding: 0;
+      font-size: 21px;
+    }
+
     /* Area limpa invisivel de espacamento para colar o sticker do Instagram */
     .sticker-placement-area {
       width: 440px;
@@ -468,7 +600,7 @@
     }
   </style>
 </head>
-<body class="{{THEME_CLASS}}">
+<body class="{{THEME_CLASS}} platform-{{MARKETPLACE_CLASS}} story-{{STORY_VARIANT}}">
 
   <!-- Background decorative text outlines -->
   <svg class="watermark-layer" viewBox="0 0 1080 1920" aria-hidden="true">
@@ -488,6 +620,7 @@
   <div class="header">
     <div class="page-handle">Alerta de Descontos</div>
     <div class="header-tagline">Curadoria diária de promoções</div>
+    <div class="marketplace-signature">Oferta {{MARKETPLACE_NAME}}</div>
   </div>
 
   <!-- Main Card -->
@@ -541,6 +674,7 @@
     <div class="arrow-down"></div>
     <div class="cta-container">
       <div class="cta-text">Toque no Link para Comprar</div>
+      <div class="marketplace-cta">{{MARKETPLACE_CTA}}</div>
       <div class="cta-subtext">Estoque limitado com esse valor!</div>
       <!-- Area limpa e harmônica para colar o sticker de link por cima -->
       <div class="sticker-placement-area"></div>

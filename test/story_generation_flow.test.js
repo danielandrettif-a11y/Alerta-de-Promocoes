@@ -15,7 +15,7 @@ test('todos os fluxos usam o template compartilhado de Stories', () => {
 
   assert.doesNotMatch(app, /drawStoryOnCanvas|imageBuffer/);
   assert.equal(
-    server.match(/generateStory\(deal, coupons\)/g)?.length,
+    server.match(/(?<!function )generateStory\(/g)?.length,
     4
   );
   assert.match(template, /class="watermark-layer"/);
@@ -27,4 +27,6 @@ test('todos os fluxos usam o template compartilhado de Stories', () => {
   assert.match(template, /<text class="wm-name" x="30" y="82">/);
   assert.match(template, /<text class="wm-ad" x="292" y="253">AD<\/text>/);
   assert.equal(template.match(/<line x1=/g)?.length, 2);
+  assert.match(template, /Oferta \{\{MARKETPLACE_NAME\}\}/);
+  assert.match(template, /\{\{MARKETPLACE_CTA\}\}/);
 });

@@ -69,6 +69,14 @@ function configuredFeeds(env) {
   ];
 }
 
+function hasCurrentReportShape(outputPath) {
+  const report = loadJson(outputPath, null);
+  return (
+    Array.isArray(report?.catalog) &&
+    Number.isFinite(Number(report?.filters?.recurringMinDiscount))
+  );
+}
+
 function validateDownloadResponse(response) {
   const finalUrl = new URL(response.url);
   if (
@@ -160,7 +168,12 @@ async function refreshShopeeFeeds(options = {}) {
   const unchanged = probes.every(probe =>
     previousState.feeds?.[probe.id]?.version === probe.version
   );
-  if (!options.force && unchanged && fs.existsSync(outputPath)) {
+  if (
+    !options.force &&
+    unchanged &&
+    fs.existsSync(outputPath) &&
+    hasCurrentReportShape(outputPath)
+  ) {
     return { status: 'skipped', reason: 'unchanged', probes };
   }
 
@@ -180,6 +193,8 @@ async function refreshShopeeFeeds(options = {}) {
       minItemRating: env.SHOPEE_MIN_ITEM_RATING,
       minShopRating: env.SHOPEE_MIN_SHOP_RATING,
       maxProducts: env.SHOPEE_MAX_PRODUCTS,
+      recurringMinDiscount: env.SHOPEE_RECURRING_MIN_DISCOUNT,
+      maxRecurringProducts: env.SHOPEE_MAX_RECURRING_PRODUCTS,
       includeCrossBorder:
         String(env.SHOPEE_INCLUDE_CROSS_BORDER).toLowerCase() === 'true',
       outputPath
@@ -233,5 +248,6 @@ module.exports = {
   configuredFeeds,
   probeFeed,
   downloadFeed,
+  hasCurrentReportShape,
   refreshShopeeFeeds
 };

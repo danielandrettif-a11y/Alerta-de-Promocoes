@@ -14,7 +14,7 @@
   <!-- CSS Link -->
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=27">
+  <link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
 
@@ -250,6 +250,14 @@
             <option value="50">50% OFF ou mais</option>
           </select>
         </div>
+        <div class="filter-group">
+          <span class="filter-icon">🔁</span>
+          <select id="sel-filter-recurring-ml" class="select-premium"
+            aria-label="Filtrar produtos de compra recorrente">
+            <option value="">Todos os tipos</option>
+            <option value="recurring">Compra recorrente</option>
+          </select>
+        </div>
       </div>
 
       <!-- Grid -->
@@ -408,6 +416,14 @@
               <option value="70">70% OFF ou mais</option>
             </select>
           </div>
+          <div class="filter-group">
+            <span class="filter-icon">🔁</span>
+            <select id="sel-filter-recurring-shopee" class="select-premium"
+              aria-label="Filtrar produtos de compra recorrente">
+              <option value="">Todos os tipos</option>
+              <option value="recurring">Compra recorrente</option>
+            </select>
+          </div>
         </div>
 
         <div id="grid-shopee" class="grid-layout">
@@ -511,6 +527,15 @@
       </section>
 
       <div class="queue-toolbar">
+        <button id="btn-validate-queue" type="button">
+          Validar fila
+        </button>
+        <button id="btn-select-visible-queue" type="button">
+          Marcar todos desta lista
+        </button>
+        <button id="btn-delete-selected-queue" type="button" disabled>
+          Excluir selecionados (<span id="txt-selected-queue-count">0</span>)
+        </button>
         <button id="btn-clear-discarded" type="button" hidden>
           Limpar descartadas
         </button>
@@ -523,6 +548,12 @@
           <option value="needs_review">Precisam de revisão</option>
           <option value="published">Publicadas</option>
           <option value="discarded">Descartadas</option>
+        </select>
+        <label for="queue-platform-filter">Loja</label>
+        <select id="queue-platform-filter" class="select-premium">
+          <option value="all">Todas</option>
+          <option value="mercado_livre">Mercado Livre</option>
+          <option value="shopee">Shopee</option>
         </select>
       </div>
 
@@ -588,6 +619,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=27"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>

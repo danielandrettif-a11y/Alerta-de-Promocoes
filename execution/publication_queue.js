@@ -173,6 +173,7 @@ function enqueueOffer(queue, input, now = new Date()) {
     affiliateLink: null,
     affiliateProcessing: emptyAffiliateProcessing(),
     reviewReason: null,
+    reviewUpdatedStory: false,
     createdAt: timestamp,
     updatedAt: timestamp,
     readyAt: null,
@@ -199,6 +200,7 @@ function setAffiliateLink(
   item.affiliateLink = validateAffiliateLink(rawLink, item.platform);
   item.updatedAt = now.toISOString();
   item.reviewReason = options.reviewReason || null;
+  item.reviewUpdatedStory = options.reviewUpdatedStory === true;
   item.latestPrice = options.latestPrice || null;
   if (item.reviewReason) {
     item.status = STATUSES.NEEDS_REVIEW;
@@ -372,6 +374,19 @@ function updateItemStatus(queue, itemId, nextStatus, now = new Date()) {
       : item.affiliateLink
         ? STATUSES.READY
         : STATUSES.AWAITING_AFFILIATE;
+  } else if (nextStatus === 'approve_review') {
+    if (
+      item.status !== STATUSES.NEEDS_REVIEW ||
+      !item.affiliateLink ||
+      item.reviewUpdatedStory !== true
+    ) {
+      throw new Error('Somente um Story revisado pode ser aprovado.');
+    }
+    item.status = STATUSES.READY;
+    item.reviewReason = null;
+    item.reviewUpdatedStory = false;
+    item.latestPrice = null;
+    item.readyAt = now.toISOString();
   } else {
     throw new Error('Transicao de status nao permitida.');
   }
@@ -413,6 +428,61 @@ function removeDiscardedItems(queue) {
   return { queue: normalized, removed };
 }
 
+function removeItems(queue, itemIds) {
+  const normalized = normalizeQueue(queue);
+  const ids = new Set(
+    (Array.isArray(itemIds) ? itemIds : [])
+      .slice(0, 1000)
+      .map(String)
+  );
+  if (ids.size === 0) throw new Error('Selecione ao menos uma oferta.');
+  const removed = normalized.items.filter(item => ids.has(item.id));
+  normalized.items = normalized.items.filter(item => !ids.has(item.id));
+  return { queue: normalized, removed };
+}
+
+function validateQueueItems(queue, catalog) {
+  const normalized = normalizeQueue(queue);
+  const activeStatuses = new Set([
+    STATUSES.AWAITING_AFFILIATE,
+    STATUSES.READY,
+    STATUSES.NEEDS_REVIEW
+  ]);
+  const removed = [];
+  const updated = [];
+  let unchanged = 0;
+  normalized.items = normalized.items.filter(item => {
+    if (!activeStatuses.has(item.status)) return true;
+    const current = catalog.get(item.dealId);
+    if (!current) {
+      removed.push(item);
+      return false;
+    }
+    if (
+      String(current.currentPrice) === String(item.currentPrice) &&
+      Number(current.discount) === Number(item.discount)
+    ) {
+      unchanged += 1;
+      return true;
+    }
+    item.originalPrice = String(current.originalPrice || item.originalPrice);
+    item.currentPrice = String(current.currentPrice || item.currentPrice);
+    item.discount = Number(current.discount) || 0;
+    item.image = String(current.image || item.image);
+    item.updatedAt = new Date().toISOString();
+    if (item.affiliateLink) {
+      item.status = STATUSES.NEEDS_REVIEW;
+      item.reviewReason =
+        'Preco ou desconto mudou. O Story foi atualizado; revise e aprove.';
+      item.reviewUpdatedStory = true;
+      item.readyAt = null;
+    }
+    updated.push({ item, current });
+    return true;
+  });
+  return { queue: normalized, removed, updated, unchanged };
+}
+
 module.exports = {
   STATUSES,
   AFFILIATE_PROCESSING_STATES,
@@ -430,5 +500,7 @@ module.exports = {
   recordAffiliateFailure,
   updateItemStatus,
   summarizeQueue,
-  removeDiscardedItems
+  removeDiscardedItems,
+  removeItems,
+  validateQueueItems
 };

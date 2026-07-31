@@ -17,6 +17,7 @@ let publicationQueueItems = [];
 let publicationQueueSummary = {};
 let publicationBatches = [];
 const selectedReadyBatchIds = new Set();
+const selectedQueueItemIds = new Set();
 let publicationHistorySignature = '';
 let amazonDealsLoaded = false;
 let shopeeDealsLoaded = false;
@@ -116,6 +117,8 @@ const elFilterNameML = document.getElementById('ipt-filter-name-ml');
 const elFilterCategoryML = document.getElementById('sel-filter-category-ml');
 const elFilterSubcategoryML = document.getElementById('sel-filter-subcategory-ml');
 const elFilterDiscountML = document.getElementById('sel-filter-discount-ml');
+const elFilterRecurringML =
+  document.getElementById('sel-filter-recurring-ml');
 
 // DOM elements - Filters Amazon
 const elFilterNameAmazon = document.getElementById('ipt-filter-name-amazon');
@@ -128,6 +131,8 @@ const elFilterNameShopee = document.getElementById('ipt-filter-name-shopee');
 const elFilterCategoryShopee = document.getElementById('sel-filter-category-shopee');
 const elFilterSubcategoryShopee = document.getElementById('sel-filter-subcategory-shopee');
 const elFilterDiscountShopee = document.getElementById('sel-filter-discount-shopee');
+const elFilterRecurringShopee =
+  document.getElementById('sel-filter-recurring-shopee');
 
 let globalTaxonomy = {};
 
@@ -143,9 +148,18 @@ const elMarketplaceSearchStatus = document.getElementById('marketplace-search-st
 const elMarketplaceSearchResults = document.getElementById('marketplace-search-results');
 const elQueueTabCount = document.getElementById('queue-tab-count');
 const elQueueStatusFilter = document.getElementById('queue-status-filter');
+const elQueuePlatformFilter =
+  document.getElementById('queue-platform-filter');
 const elQueueFeedback = document.getElementById('queue-feedback');
 const elBtnRefreshQueue = document.getElementById('btn-refresh-queue');
 const elBtnClearDiscarded = document.getElementById('btn-clear-discarded');
+const elBtnValidateQueue = document.getElementById('btn-validate-queue');
+const elBtnSelectVisibleQueue =
+  document.getElementById('btn-select-visible-queue');
+const elBtnDeleteSelectedQueue =
+  document.getElementById('btn-delete-selected-queue');
+const elTxtSelectedQueueCount =
+  document.getElementById('txt-selected-queue-count');
 const elQueueSummaryAwaiting = document.getElementById('queue-summary-awaiting');
 const elQueueSummaryReady = document.getElementById('queue-summary-ready');
 const elQueueSummaryReview = document.getElementById('queue-summary-review');
@@ -1210,6 +1224,10 @@ function updateQueueSummary() {
 }
 
 function queueItemMatchesFilter(item) {
+  if (
+    elQueuePlatformFilter.value !== 'all' &&
+    item.platform !== elQueuePlatformFilter.value
+  ) return false;
   const filter = elQueueStatusFilter.value;
   if (filter === 'all') return true;
   if (filter === 'active') {
@@ -1222,6 +1240,23 @@ function queueItemMatchesFilter(item) {
   return item.status === filter;
 }
 
+function updateQueueSelection(visibleItems = null) {
+  const existingIds = new Set(publicationQueueItems.map(item => item.id));
+  for (const itemId of selectedQueueItemIds) {
+    if (!existingIds.has(itemId)) selectedQueueItemIds.delete(itemId);
+  }
+  const visible = visibleItems ||
+    publicationQueueItems.filter(queueItemMatchesFilter);
+  elTxtSelectedQueueCount.textContent = selectedQueueItemIds.size;
+  elBtnDeleteSelectedQueue.disabled = selectedQueueItemIds.size === 0;
+  elBtnSelectVisibleQueue.disabled = visible.length === 0;
+  elBtnSelectVisibleQueue.textContent =
+    visible.length > 0 &&
+    visible.every(item => selectedQueueItemIds.has(item.id))
+      ? 'Desmarcar todos desta lista'
+      : 'Marcar todos desta lista';
+}
+
 function renderPublicationQueue() {
   updateQueueSummary();
   const visibleItems = publicationQueueItems.filter(queueItemMatchesFilter);
@@ -1232,6 +1267,7 @@ function renderPublicationQueue() {
     empty.className = 'empty-state';
     empty.innerHTML = '<p>Nenhuma oferta corresponde a este filtro.</p>';
     elGridQueue.appendChild(empty);
+    updateQueueSelection(visibleItems);
     return;
   }
 
@@ -1241,7 +1277,8 @@ function renderPublicationQueue() {
       processingState === 'claimed' ? 'processing' : item.status
     );
     const card = document.createElement('article');
-    card.className = `queue-card ${status.className}`;
+    card.className =
+      `queue-card ${status.className} platform-${item.platform}`;
     card.dataset.itemId = item.id;
 
     const marketplace = item.platform === 'shopee'
@@ -1277,6 +1314,11 @@ function renderPublicationQueue() {
         <div class="queue-review-message">
           <strong>Revisão necessária:</strong>
           ${escapeQueueHtml(item.reviewReason)}
+          ${item.reviewUpdatedStory
+            ? `<button type="button" data-queue-action="approve-review">
+              Aprovar Story atualizado
+            </button>`
+            : ''}
         </div>
       `
       : '';
@@ -1352,6 +1394,11 @@ function renderPublicationQueue() {
 
     card.innerHTML = `
       <div class="queue-story-column">
+        <label class="queue-selection-control">
+          <input type="checkbox" data-queue-select="${escapeQueueHtml(item.id)}"
+            ${selectedQueueItemIds.has(item.id) ? 'checked' : ''}>
+          Selecionar
+        </label>
         ${batchSelector}
         <img
           class="queue-story-preview"
@@ -1364,6 +1411,9 @@ function renderPublicationQueue() {
       </div>
       <div class="queue-content">
         <div class="queue-card-heading">
+          <span class="queue-marketplace-badge">
+            ${marketplace.name}
+          </span>
           <span class="queue-status ${status.className}">
             ${escapeQueueHtml(status.label)}
           </span>
@@ -1396,9 +1446,16 @@ function renderPublicationQueue() {
       else selectedReadyBatchIds.delete(item.id);
       updateBatchSelection();
     });
+    const queueCheckbox = card.querySelector('[data-queue-select]');
+    queueCheckbox.addEventListener('change', () => {
+      if (queueCheckbox.checked) selectedQueueItemIds.add(item.id);
+      else selectedQueueItemIds.delete(item.id);
+      updateQueueSelection(visibleItems);
+    });
     elGridQueue.appendChild(card);
   }
   updateBatchSelection();
+  updateQueueSelection(visibleItems);
 }
 
 async function fetchPublicationQueue(options = {}) {
@@ -1422,7 +1479,13 @@ async function fetchPublicationQueue(options = {}) {
 
     publicationQueueItems = data.items || [];
     publicationQueueSummary = data.summary || {};
-    if (elPanelQueue.classList.contains('active') || options.render) {
+    const shouldRender =
+      options.render === true ||
+      (
+        options.render !== false &&
+        elPanelQueue.classList.contains('active')
+      );
+    if (shouldRender) {
       renderPublicationQueue();
     } else {
       updateQueueSummary();
@@ -1439,6 +1502,61 @@ async function fetchPublicationQueue(options = {}) {
   } catch (err) {
     console.error('Erro ao carregar fila de publicação:', err);
     setQueueFeedback('Não foi possível carregar a fila.', 'error');
+  }
+}
+
+async function deleteSelectedQueueItems() {
+  const itemIds = [...selectedQueueItemIds];
+  if (
+    itemIds.length === 0 ||
+    !confirm(`Excluir permanentemente ${itemIds.length} oferta(s) da fila?`)
+  ) return;
+  elBtnDeleteSelectedQueue.disabled = true;
+  try {
+    const response = await fetch('/api/publication-queue', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemIds })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Não foi possível excluir as ofertas.');
+    }
+    selectedQueueItemIds.clear();
+    await fetchPublicationQueue({
+      render: true,
+      feedback: `${data.removedCount} oferta(s) excluída(s).`,
+      type: 'success'
+    });
+  } catch (error) {
+    setQueueFeedback(error.message, 'error');
+  } finally {
+    updateQueueSelection();
+  }
+}
+
+async function validateEntireQueue() {
+  elBtnValidateQueue.disabled = true;
+  setQueueFeedback('Validando ofertas e atualizando Stories...');
+  try {
+    const response = await fetch('/api/publication-queue/validate', {
+      method: 'POST'
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Não foi possível validar a fila.');
+    }
+    await fetchPublicationQueue({
+      render: true,
+      feedback:
+        `${data.removed} removida(s), ${data.updated} atualizada(s) e ` +
+        `${data.unchanged} sem alterações.`,
+      type: 'success'
+    });
+  } catch (error) {
+    setQueueFeedback(error.message, 'error');
+  } finally {
+    elBtnValidateQueue.disabled = false;
   }
 }
 
@@ -1729,20 +1847,23 @@ function getFilteredDealEntries(deals, platform) {
     : platform === 'shopee'
       ? [
         elFilterNameShopee,
-        elFilterCategoryShopee,
-        elFilterSubcategoryShopee,
-        elFilterDiscountShopee
+      elFilterCategoryShopee,
+      elFilterSubcategoryShopee,
+      elFilterDiscountShopee,
+      elFilterRecurringShopee
       ]
       : [
         elFilterNameML,
         elFilterCategoryML,
         elFilterSubcategoryML,
-        elFilterDiscountML
+        elFilterDiscountML,
+        elFilterRecurringML
       ];
   const searchTerm = filters[0].value.toLowerCase().trim();
   const selectedCategory = filters[1].value;
   const selectedSubcategory = filters[2].value;
   const selectedDiscount = filters[3].value;
+  const recurringOnly = filters[4]?.value === 'recurring';
 
   return deals
     .map((deal, index) => ({ deal, index }))
@@ -1752,7 +1873,8 @@ function getFilteredDealEntries(deals, platform) {
         deal.title.toLowerCase().includes(searchTerm) &&
         (!selectedCategory || category.category === selectedCategory) &&
         (!selectedSubcategory || category.subcategory === selectedSubcategory) &&
-        (!selectedDiscount || deal.discount >= Number(selectedDiscount))
+        (!selectedDiscount || deal.discount >= Number(selectedDiscount)) &&
+        (!recurringOnly || deal.recurringPurchase === true)
       );
     });
 }
@@ -1880,6 +2002,11 @@ function renderMLDeals(deals) {
           <span class="card-orig-price">De: ${deal.originalPrice}</span>
           <span class="card-promo-price">Por: ${deal.currentPrice}</span>
         </div>
+        ${deal.recurringPurchase
+          ? `<span class="recurring-badge">🔁 ${escapeQueueHtml(
+            deal.recurringPurchaseCategory || 'Compra recorrente'
+          )}</span>`
+          : ''}
         ${couponBadgeHtml}
         <button
           type="button"
@@ -2110,6 +2237,11 @@ function renderShopeeDeals(deals) {
           <span class="card-orig-price">De: ${escapeQueueHtml(deal.originalPrice)}</span>
           <span class="card-promo-price">Por: ${escapeQueueHtml(deal.currentPrice)}</span>
         </div>
+        ${deal.recurringPurchase
+          ? `<span class="recurring-badge">🔁 ${escapeQueueHtml(
+            deal.recurringPurchaseCategory || 'Compra recorrente'
+          )}</span>`
+          : ''}
         <div class="price-comparison-area">
           <button type="button" class="btn-compare-buscape">
             ${deal.comparison ? '↻ Atualizar comparação' : '🔍 Comparar preços'}
@@ -2722,7 +2854,28 @@ function init() {
       window.location.assign(publicationBatches[0].downloadUrl);
     }
   });
-  elQueueStatusFilter.addEventListener('change', renderPublicationQueue);
+  const applyQueueFilter = () => {
+    selectedQueueItemIds.clear();
+    renderPublicationQueue();
+  };
+  elQueueStatusFilter.addEventListener('change', applyQueueFilter);
+  elQueuePlatformFilter.addEventListener('change', applyQueueFilter);
+  elBtnSelectVisibleQueue.addEventListener('click', () => {
+    const visible = publicationQueueItems.filter(queueItemMatchesFilter);
+    const allSelected = visible.every(item =>
+      selectedQueueItemIds.has(item.id)
+    );
+    visible.forEach(item => {
+      if (allSelected) selectedQueueItemIds.delete(item.id);
+      else selectedQueueItemIds.add(item.id);
+    });
+    renderPublicationQueue();
+  });
+  elBtnDeleteSelectedQueue.addEventListener(
+    'click',
+    deleteSelectedQueueItems
+  );
+  elBtnValidateQueue.addEventListener('click', validateEntireQueue);
 
   // Select All ML Toggle
   elChkSelectAllML.addEventListener('change', () => {
@@ -2780,6 +2933,7 @@ function init() {
   // Filters ML listeners
   elFilterNameML.addEventListener('input', applyMLFilters);
   elFilterDiscountML.addEventListener('change', applyMLFilters);
+  elFilterRecurringML.addEventListener('change', applyMLFilters);
 
   // Filters Amazon listeners
   elFilterNameAmazon.addEventListener('input', applyAmazonFilters);
@@ -2788,6 +2942,7 @@ function init() {
   // Filters Shopee listeners
   elFilterNameShopee.addEventListener('input', applyShopeeFilters);
   elFilterDiscountShopee.addEventListener('change', applyShopeeFilters);
+  elFilterRecurringShopee.addEventListener('change', applyShopeeFilters);
   elBtnToggleFiltersML.addEventListener('click', () => {
     const open = elFiltersML.classList.toggle('is-open');
     elBtnToggleFiltersML.setAttribute('aria-expanded', String(open));
@@ -2839,6 +2994,18 @@ function init() {
   setInterval(fetchWhatsAppStatus, 30000);
   setInterval(syncPublicationHistory, 30000);
   setInterval(fetchLocalWorkerStatus, 30000);
+  setInterval(() => {
+    if (
+      publicationQueueEnabled &&
+      elPanelQueue.classList.contains('active')
+    ) {
+      fetchPublicationQueue({
+        render: !document.activeElement?.classList
+          .contains('queue-affiliate-input')
+      });
+      fetchLocalWorkerStatus();
+    }
+  }, 3000);
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(err =>
@@ -3036,6 +3203,12 @@ document.addEventListener('click', async (event) => {
       }
       await updateQueueItemStatus(item.id, 'published');
       setQueueFeedback('Oferta marcada como publicada.', 'success');
+      return;
+    }
+
+    if (action === 'approve-review') {
+      await updateQueueItemStatus(item.id, 'approve_review');
+      setQueueFeedback('Story atualizado aprovado.', 'success');
       return;
     }
 

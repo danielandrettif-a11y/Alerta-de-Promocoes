@@ -17,7 +17,9 @@ const {
   recordAffiliateFailure,
   updateItemStatus,
   summarizeQueue,
-  removeDiscardedItems
+  removeDiscardedItems,
+  removeItems,
+  validateQueueItems
 } = require('../execution/publication_queue.js');
 
 function sampleOffer(overrides = {}) {
@@ -102,7 +104,11 @@ test('link valido deixa oferta pronta e revisao impede publicacao', () => {
     second.queue,
     second.item.id,
     'https://meli.la/DEF456',
-    { reviewReason: 'Preco mudou.', latestPrice: 'R$ 189,90' },
+    {
+      reviewReason: 'Preco mudou.',
+      latestPrice: 'R$ 189,90',
+      reviewUpdatedStory: true
+    },
     now
   );
   assert.equal(review.item.status, STATUSES.NEEDS_REVIEW);
@@ -129,6 +135,14 @@ test('link valido deixa oferta pronta e revisao impede publicacao', () => {
     now
   );
   assert.equal(restored.item.status, STATUSES.NEEDS_REVIEW);
+  const approved = updateItemStatus(
+    restored.queue,
+    restored.item.id,
+    'approve_review',
+    now
+  );
+  assert.equal(approved.item.status, STATUSES.READY);
+  assert.equal(approved.item.reviewReason, null);
 });
 
 test('persiste a fila e resume os estados', () => {
@@ -200,6 +214,45 @@ test('limpa somente ofertas descartadas', () => {
   const result = removeDiscardedItems(discarded.queue);
   assert.deepEqual(result.removed.map(item => item.id), ['queue-1']);
   assert.deepEqual(result.queue.items.map(item => item.id), ['queue-2']);
+});
+
+test('remove somente os itens selecionados da fila', () => {
+  const first = enqueueOffer(emptyQueue(), sampleOffer());
+  const second = enqueueOffer(
+    first.queue,
+    sampleOffer({ id: 'queue-2', dealId: 'deal_456' })
+  );
+  const result = removeItems(second.queue, ['queue-1']);
+  assert.deepEqual(result.removed.map(item => item.id), ['queue-1']);
+  assert.deepEqual(result.queue.items.map(item => item.id), ['queue-2']);
+  assert.throws(() => removeItems(second.queue, []), /Selecione/);
+});
+
+test('valida a fila removendo oferta encerrada e separando Story alterado', () => {
+  const first = enqueueOffer(emptyQueue(), sampleOffer());
+  const second = enqueueOffer(
+    first.queue,
+    sampleOffer({ id: 'queue-2', dealId: 'deal_456' })
+  );
+  const ready = setAffiliateLink(
+    second.queue,
+    first.item.id,
+    'https://meli.la/ABC123'
+  );
+  const catalog = new Map([[
+    'deal_123',
+    sampleOffer({
+      currentPrice: 'R$ 179,90',
+      discount: 40
+    })
+  ]]);
+  const result = validateQueueItems(ready.queue, catalog);
+
+  assert.deepEqual(result.removed.map(item => item.id), ['queue-2']);
+  assert.equal(result.updated.length, 1);
+  assert.equal(result.updated[0].item.status, STATUSES.NEEDS_REVIEW);
+  assert.equal(result.updated[0].item.reviewUpdatedStory, true);
+  assert.equal(result.updated[0].item.currentPrice, 'R$ 179,90');
 });
 
 test('reserva exclusiva expira e volta para outro dispositivo', () => {

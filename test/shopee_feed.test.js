@@ -11,7 +11,8 @@ const {
 const {
   validateFeedUrl,
   configuredFeeds,
-  probeFeed
+  probeFeed,
+  hasCurrentReportShape
 } = require('../execution/shopee_refresh.js');
 
 const HEADERS = [
@@ -179,6 +180,19 @@ test('sonda somente um byte e usa o ETag como versao', async () => {
   assert.equal(result.version, '"versao-1"');
 });
 
+test('reimporta relatorio antigo mesmo quando o feed nao mudou', t => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shopee-shape-'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  const reportPath = path.join(tempDir, 'report.json');
+  fs.writeFileSync(reportPath, JSON.stringify({ deals: [] }), 'utf-8');
+  assert.equal(hasCurrentReportShape(reportPath), false);
+  fs.writeFileSync(reportPath, JSON.stringify({
+    catalog: [],
+    filters: { recurringMinDiscount: 5 }
+  }), 'utf-8');
+  assert.equal(hasCurrentReportShape(reportPath), true);
+});
+
 test('filtra, ranqueia e grava relatorio Shopee compativel', async t => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shopee-feed-'));
   t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
@@ -269,4 +283,33 @@ test('filtra, ranqueia e grava relatorio Shopee compativel', async t => {
   assert.equal(report.deals[0].affiliateLink, null);
   assert.equal(report.deals[0].currentPrice, 'R$ 60,00');
   assert.deepEqual(JSON.parse(fs.readFileSync(outputPath, 'utf-8')), report);
+});
+
+test('inclui produto de recompra mesmo com desconto menor', async t => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shopee-recurring-'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  const inputPath = path.join(tempDir, 'Shopee Oficial.csv');
+  const outputPath = path.join(tempDir, 'report.json');
+  fs.writeFileSync(inputPath, [
+    HEADERS.join(','),
+    csvRow({
+      itemId: '20',
+      salePrice: '90',
+      itemRating: '5',
+      discount: '10',
+      price: '100',
+      title: 'Kit Shampoo e Condicionador'
+    })
+  ].join('\n'), 'utf-8');
+
+  const report = await importShopeeFeeds([inputPath], {
+    outputPath,
+    minDiscount: 30,
+    recurringMinDiscount: 5
+  });
+
+  assert.equal(report.deals.length, 1);
+  assert.equal(report.deals[0].recurringPurchase, true);
+  assert.equal(report.stats.selectedRecurring, 1);
+  assert.equal(report.catalog.length, 1);
 });

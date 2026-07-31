@@ -80,6 +80,47 @@ const TAXONOMY = {
   }
 };
 
+const RECURRING_PURCHASE_GROUPS = {
+  'Higiene e cuidados pessoais': [
+    'shampoo', 'condicionador', 'sabonete', 'desodorante', 'creme dental',
+    'pasta de dente', 'escova de dentes', 'fio dental', 'enxaguante bucal',
+    'absorvente', 'papel higienico', 'fralda', 'lenco umedecido'
+  ],
+  'Limpeza da casa': [
+    'detergente', 'sabao em po', 'lava roupas', 'amaciante', 'desinfetante',
+    'agua sanitaria', 'limpador', 'esponja', 'saco de lixo'
+  ],
+  'Alimentos e bebidas': [
+    'cafe em grao', 'cafe moido', 'capsula de cafe', 'arroz', 'feijao',
+    'macarrao', 'azeite', 'leite em po', 'biscoito', 'chocolate'
+  ],
+  'Saude e suplementos': [
+    'creatina', 'whey', 'proteina', 'vitamina', 'omega 3', 'colageno',
+    'suplemento', 'pre treino'
+  ],
+  'Cuidados com pets': [
+    'racao', 'areia higienica', 'tapete higienico', 'petisco'
+  ]
+};
+
+function normalizeProductText(value) {
+  return ` ${String(value || '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()} `;
+}
+
+function getRecurringPurchaseCategory(title) {
+  const normalized = normalizeProductText(title);
+  for (const [group, keywords] of Object.entries(RECURRING_PURCHASE_GROUPS)) {
+    if (keywords.some(keyword =>
+      normalized.includes(normalizeProductText(keyword))
+    )) return group;
+  }
+  return null;
+}
+
 /**
  * Infere a categoria e subcategoria a partir do título do produto.
  * @param {string} title Título do produto
@@ -127,5 +168,6 @@ function inferCategoryAndSub(title) {
 
 module.exports = {
   TAXONOMY,
-  inferCategoryAndSub
+  inferCategoryAndSub,
+  getRecurringPurchaseCategory
 };

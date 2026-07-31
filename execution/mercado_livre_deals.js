@@ -5,6 +5,9 @@ const {
   APP_RUNTIME_DIR,
   ensureSessionDirectories
 } = require('./session_config.js');
+const {
+  getRecurringPurchaseCategory
+} = require('./category_helper.js');
 
 ensureSessionDirectories();
 const couponConfirmationsPath = path.join(
@@ -92,6 +95,41 @@ function extractProductImage(cardHtml) {
   return srcset.split(',')[0]?.trim().split(/\s+/)[0] || '';
 }
 
+function selectTopDeals(products, options = {}) {
+  const minDiscount = Number(options.minDiscount) || 30;
+  const recurringMinDiscount =
+    Number(options.recurringMinDiscount) || 5;
+  const maxProducts = Number(options.maxProducts) || 400;
+  const maxRecurringProducts = Math.min(
+    maxProducts,
+    Number(options.maxRecurringProducts) || 100
+  );
+  const rank = (left, right) =>
+    right.rating - left.rating || right.discount - left.discount;
+  const regular = products
+    .filter(product => product.discount >= minDiscount)
+    .sort(rank);
+  const recurring = products
+    .filter(product =>
+      product.recurringPurchase &&
+      product.discount >= recurringMinDiscount
+    )
+    .sort(rank);
+  const selectedLinks = new Set();
+  const deals = [
+    ...recurring.slice(0, maxRecurringProducts),
+    ...regular
+  ].filter(product => {
+    if (selectedLinks.has(product.link)) return false;
+    selectedLinks.add(product.link);
+    return true;
+  }).slice(0, maxProducts);
+  const catalog = [...new Map(
+    [...recurring, ...regular].map(product => [product.link, product])
+  ).values()];
+  return { deals, catalog };
+}
+
 async function scrapeLiveCoupons() {
   console.log("Buscando cupons ativos na Cuponomia...");
   const scraped = [];
@@ -172,7 +210,15 @@ async function main() {
 
   // Configurations
   const minDiscount = parseInt(envVars['MIN_DISCOUNT'] || '30', 10);
+  const recurringMinDiscount = parseInt(
+    envVars['RECURRING_MIN_DISCOUNT'] || '5',
+    10
+  );
   const maxProducts = parseInt(envVars['MAX_PRODUCTS'] || '400', 10);
+  const maxRecurringProducts = Math.min(
+    maxProducts,
+    parseInt(envVars['MAX_RECURRING_PRODUCTS'] || '100', 10)
+  );
   const maxPages = Math.max(
     1,
     Math.min(30, parseInt(envVars['ML_MAX_PAGES'] || '15', 10))
@@ -275,6 +321,8 @@ async function main() {
           }
         }
 
+        const recurringPurchaseCategory =
+          getRecurringPurchaseCategory(title);
         products.push({
           title,
           link,
@@ -287,7 +335,9 @@ async function main() {
           isFull,
           isFreeShipping,
           dealType,
-          timeLeft
+          timeLeft,
+          recurringPurchase: !!recurringPurchaseCategory,
+          recurringPurchaseCategory
         });
         pageProductsCount++;
       }
@@ -308,18 +358,13 @@ async function main() {
 
     console.log(`Found ${products.length} products total.`);
 
-    // Filter and Sort: Best rated first (4.5+), then highest discount, with at least minDiscount
-    const filteredProducts = products.filter(p => p.discount >= minDiscount);
-    
-    // Sort logic: Rating descending, then discount descending
-    const sortedProducts = filteredProducts.sort((a, b) => {
-      if (b.rating !== a.rating) {
-        return b.rating - a.rating;
-      }
-      return b.discount - a.discount;
+    const selection = selectTopDeals(products, {
+      minDiscount,
+      recurringMinDiscount,
+      maxProducts,
+      maxRecurringProducts
     });
-
-    const topDeals = sortedProducts.slice(0, maxProducts);
+    const topDeals = selection.deals;
 
     // Active Coupons Database (Retrieved dynamically from coupons.json)
     const couponsPath = path.join(__dirname, '..', 'coupons.json');
@@ -442,7 +487,8 @@ Ordenados por **Avaliação (Estrelas)** e depois por **Percentual de Desconto**
       generatedAt: new Date().toISOString(),
       generatedAtDisplay: nowStr,
       coupons: coupons,
-      deals: topDeals
+      deals: topDeals,
+      catalog: selection.catalog
     };
     fs.writeFileSync(jsonOutputPath, JSON.stringify(jsonData, null, 2), 'utf-8');
 
@@ -457,4 +503,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { extractProductImage };
+module.exports = { extractProductImage, selectTopDeals };

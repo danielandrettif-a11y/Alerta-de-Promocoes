@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { saveJsonAtomic } = require('./json_store.js');
+const {
+  getRecurringPurchaseCategory
+} = require('./category_helper.js');
 
 const REQUIRED_HEADERS = [
   'itemid',
@@ -167,6 +170,7 @@ function normalizeShopeeProduct(row, source = {}) {
   const likes = Math.max(0, Number.parseInt(row.like || '0', 10) || 0);
   const title = String(row.title || '').trim();
   const shopName = String(row.shop_name || '').trim();
+  const recurringPurchaseCategory = getRecurringPurchaseCategory(title);
 
   if (
     !identity ||
@@ -217,6 +221,8 @@ function normalizeShopeeProduct(row, source = {}) {
     modelIds: String(row.model_ids || '').trim(),
     modelNames: String(row.model_names || '').trim(),
     officialFeed: source.officialFeed === true,
+    recurringPurchase: !!recurringPurchaseCategory,
+    recurringPurchaseCategory,
     isFull: false,
     isFreeShipping: false,
     dealType: source.officialFeed
@@ -251,17 +257,27 @@ function positiveOption(value, fallback) {
 
 async function importShopeeFeeds(inputPaths, options = {}) {
   const minDiscount = positiveOption(options.minDiscount, 30);
+  const recurringMinDiscount = positiveOption(
+    options.recurringMinDiscount,
+    5
+  );
   // ponytail: cap extreme feed discounts; replace with variant-level price
   // validation if Shopee adds per-model prices to the official feed.
   const maxDiscount = positiveOption(options.maxDiscount, 80);
   const minItemRating = positiveOption(options.minItemRating, 4.5);
   const minShopRating = positiveOption(options.minShopRating, 4.5);
   const maxProducts = Math.floor(positiveOption(options.maxProducts, 400));
+  const maxRecurringProducts = Math.min(
+    maxProducts,
+    Math.floor(positiveOption(options.maxRecurringProducts, 100))
+  );
   const includeCrossBorder = options.includeCrossBorder === true;
   const outputPath = options.outputPath
     ? path.resolve(options.outputPath)
     : path.resolve('shopee_deals_report.json');
   const candidates = [];
+  const recurringCandidates = [];
+  const catalog = [];
   const seen = new Set();
   const stats = {
     rowsRead: 0,
@@ -310,7 +326,13 @@ async function importShopeeFeeds(inputPaths, options = {}) {
         stats.rejected.crossBorder += 1;
         continue;
       }
-      if (deal.discount < minDiscount) {
+      if (
+        deal.discount < minDiscount &&
+        (
+          !deal.recurringPurchase ||
+          deal.discount < recurringMinDiscount
+        )
+      ) {
         stats.rejected.discount += 1;
         continue;
       }
@@ -333,12 +355,38 @@ async function importShopeeFeeds(inputPaths, options = {}) {
         stats.acceptedWithoutShopRating += 1;
       }
       stats.accepted += 1;
-      keepBest(candidates, deal, maxProducts);
+      catalog.push({
+        dealId: deal.dealId,
+        platform: deal.platform,
+        title: deal.title,
+        link: deal.link,
+        image: deal.image,
+        rating: deal.rating,
+        discount: deal.discount,
+        originalPrice: deal.originalPrice,
+        currentPrice: deal.currentPrice,
+        recurringPurchase: deal.recurringPurchase,
+        recurringPurchaseCategory: deal.recurringPurchaseCategory
+      });
+      if (deal.discount >= minDiscount) {
+        keepBest(candidates, deal, maxProducts);
+      }
+      if (deal.recurringPurchase) {
+        keepBest(recurringCandidates, deal, maxRecurringProducts);
+      }
     }
   }
 
   candidates.sort(compareDeals);
-  candidates.length = Math.min(candidates.length, maxProducts);
+  recurringCandidates.sort(compareDeals);
+  const selectedDeals = [];
+  const selectedIds = new Set();
+  for (const deal of [...recurringCandidates, ...candidates]) {
+    if (selectedIds.has(deal.dealId)) continue;
+    selectedIds.add(deal.dealId);
+    selectedDeals.push(deal);
+    if (selectedDeals.length === maxProducts) break;
+  }
   const generatedAt = new Date();
   const report = {
     generatedAt: generatedAt.toISOString(),
@@ -348,20 +396,26 @@ async function importShopeeFeeds(inputPaths, options = {}) {
     source: 'Shopee Affiliate Product Feed',
     filters: {
       minDiscount,
+      recurringMinDiscount,
       maxDiscount,
       minItemRating,
       minShopRating,
       includeCrossBorder,
-      maxProducts
+      maxProducts,
+      maxRecurringProducts
     },
     sourceFiles,
     stats: {
       ...stats,
       uniqueProducts: seen.size,
-      selected: candidates.length
+      selected: selectedDeals.length,
+      selectedRecurring: selectedDeals.filter(deal =>
+        deal.recurringPurchase
+      ).length
     },
     coupons: [],
-    deals: candidates
+    deals: selectedDeals,
+    catalog
   };
   saveJsonAtomic(outputPath, report);
   return report;
@@ -376,10 +430,12 @@ async function main() {
   }
   const report = await importShopeeFeeds(inputPaths, {
     minDiscount: process.env.SHOPEE_MIN_DISCOUNT,
+    recurringMinDiscount: process.env.SHOPEE_RECURRING_MIN_DISCOUNT,
     maxDiscount: process.env.SHOPEE_MAX_DISCOUNT,
     minItemRating: process.env.SHOPEE_MIN_ITEM_RATING,
     minShopRating: process.env.SHOPEE_MIN_SHOP_RATING,
     maxProducts: process.env.SHOPEE_MAX_PRODUCTS,
+    maxRecurringProducts: process.env.SHOPEE_MAX_RECURRING_PRODUCTS,
     includeCrossBorder:
       String(process.env.SHOPEE_INCLUDE_CROSS_BORDER).toLowerCase() === 'true',
     outputPath:

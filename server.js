@@ -43,7 +43,9 @@ const {
   recordAffiliateFailure,
   updateItemStatus,
   summarizeQueue,
-  removeDiscardedItems
+  removeDiscardedItems,
+  removeItems,
+  validateQueueItems
 } = require('./execution/publication_queue.js');
 const {
   FAILURE_CODES,
@@ -506,6 +508,57 @@ function applyAffiliateLinkToQueue(
   );
 }
 
+function loadQueueValidationCatalog(queue) {
+  const reports = {
+    mercado_livre: mlDealsReportPath,
+    shopee: shopeeDealsReportPath
+  };
+  const activeStatuses = new Set([
+    PUBLICATION_QUEUE_STATUSES.AWAITING_AFFILIATE,
+    PUBLICATION_QUEUE_STATUSES.READY,
+    PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW
+  ]);
+  const platforms = new Set(
+    queue.items
+      .filter(item => activeStatuses.has(item.status))
+      .map(item => item.platform)
+  );
+  const catalog = new Map();
+  for (const platform of platforms) {
+    const reportPath = reports[platform];
+    if (!reportPath || !fs.existsSync(reportPath)) {
+      throw new Error(`Catalogo ${platform} indisponivel.`);
+    }
+    const report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
+    if (!Array.isArray(report.catalog)) {
+      throw new Error(
+        `Atualize o catalogo ${platform} antes de validar a fila.`
+      );
+    }
+    for (const deal of report.catalog) {
+      catalog.set(
+        generateDealId({ ...deal, platform }),
+        { ...deal, platform }
+      );
+    }
+  }
+  return catalog;
+}
+
+function validatePublicationQueue(queue) {
+  const catalog = loadQueueValidationCatalog(queue);
+  const coupons = loadAvailableDeals().coupons;
+  const result = validateQueueItems(queue, catalog);
+  for (const { item, current } of result.updated) {
+    const storyImagePath = generateStory(current, coupons);
+    fs.copyFileSync(
+      storyImagePath,
+      path.join(publicationQueueAssetsPath, item.storyFile)
+    );
+  }
+  return { ...result, updated: result.updated.length };
+}
+
 function getAffiliateProcessingSummary(queue) {
   const result = {
     awaiting: 0,
@@ -640,7 +693,10 @@ app.post(
 
       if (result.created) {
         const { coupons } = loadAvailableDeals();
-        const storyImagePath = generateStory(deal, coupons);
+        const storyImagePath = generateStory(
+          { ...deal, platform: normalizedPlatform },
+          coupons
+        );
         fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
         result.item.storyFile = `${result.item.id}.jpg`;
         fs.copyFileSync(
@@ -725,6 +781,29 @@ app.patch(
       });
     } catch (err) {
       res.status(400).json({ error: err.message });
+    }
+  }
+);
+
+app.post(
+  '/api/publication-queue/validate',
+  requirePublicationQueue,
+  (req, res) => {
+    try {
+      const result = validatePublicationQueue(
+        loadPublicationQueue(publicationQueuePath)
+      );
+      savePublicationQueue(publicationQueuePath, result.queue);
+      removePublicationQueueAssets(result.removed);
+      res.json({
+        success: true,
+        removed: result.removed.length,
+        updated: result.updated,
+        unchanged: result.unchanged,
+        summary: summarizeQueue(result.queue)
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
     }
   }
 );
@@ -944,15 +1023,8 @@ app.post(
   }
 );
 
-app.delete(
-  '/api/publication-queue/discarded',
-  requirePublicationQueue,
-  (req, res) => {
-    const result = removeDiscardedItems(
-      loadPublicationQueue(publicationQueuePath)
-    );
-    savePublicationQueue(publicationQueuePath, result.queue);
-    for (const item of result.removed) {
+function removePublicationQueueAssets(items) {
+  for (const item of items) {
       const fileName = path.basename(String(item.storyFile || ''));
       if (!fileName || fileName !== item.storyFile) continue;
       try {
@@ -963,6 +1035,39 @@ app.delete(
         }
       }
     }
+}
+
+app.delete(
+  '/api/publication-queue',
+  requirePublicationQueue,
+  (req, res) => {
+    try {
+      const result = removeItems(
+        loadPublicationQueue(publicationQueuePath),
+        req.body?.itemIds
+      );
+      savePublicationQueue(publicationQueuePath, result.queue);
+      removePublicationQueueAssets(result.removed);
+      res.json({
+        success: true,
+        removedCount: result.removed.length,
+        summary: summarizeQueue(result.queue)
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+app.delete(
+  '/api/publication-queue/discarded',
+  requirePublicationQueue,
+  (req, res) => {
+    const result = removeDiscardedItems(
+      loadPublicationQueue(publicationQueuePath)
+    );
+    savePublicationQueue(publicationQueuePath, result.queue);
+    removePublicationQueueAssets(result.removed);
     res.json({
       success: true,
       removedCount: result.removed.length,

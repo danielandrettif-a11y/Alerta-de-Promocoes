@@ -2,6 +2,33 @@ const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
 
+function getMarketplaceBrand(platform) {
+  const brands = {
+    mercado_livre: {
+      className: 'mercado-livre',
+      name: 'Mercado Livre',
+      cta: 'Compre no Mercado Livre'
+    },
+    shopee: {
+      className: 'shopee',
+      name: 'Shopee',
+      cta: 'Compre na Shopee'
+    },
+    amazon: {
+      className: 'amazon',
+      name: 'Amazon',
+      cta: 'Compre na Amazon'
+    }
+  };
+  return brands[platform] || brands.mercado_livre;
+}
+
+function getStoryVariant(value) {
+  return ['a', 'b', 'c', 'd'].includes(String(value).toLowerCase())
+    ? String(value).toLowerCase()
+    : 'd';
+}
+
 // Encontra o executável do navegador Chrome ou Edge no Windows
 function findBrowserPath() {
   const possiblePaths = [
@@ -92,6 +119,8 @@ async function main() {
       const deal = deals[i];
       const rank = i + 1;
       const cleanTitle = deal.title.replace(/"/g, '&quot;');
+      const marketplace = getMarketplaceBrand(deal.platform);
+      const storyVariant = getStoryVariant(deal.storyVariant);
       
       console.log(`[${rank}/${deals.length}] Processando: "${deal.title.substring(0, 40)}..."`);
 
@@ -144,6 +173,10 @@ async function main() {
         .replace(/\{\{DEAL_TYPE_CLASS\}\}/g, dealTypeClass)
         .replace(/\{\{TIME_LEFT_CLASS\}\}/g, timeLeftClass)
         .replace(/\{\{TIME_LEFT_TEXT\}\}/g, timeLeftText)
+        .replace(/\{\{MARKETPLACE_CLASS\}\}/g, marketplace.className)
+        .replace(/\{\{MARKETPLACE_NAME\}\}/g, marketplace.name)
+        .replace(/\{\{MARKETPLACE_CTA\}\}/g, marketplace.cta)
+        .replace(/\{\{STORY_VARIANT\}\}/g, storyVariant)
         .replace(/\{\{THEME_CLASS\}\}/g, themeClass);
 
       // Cria um arquivo HTML temporário local
@@ -220,4 +253,9 @@ async function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = {
+  getMarketplaceBrand,
+  getStoryVariant
+};

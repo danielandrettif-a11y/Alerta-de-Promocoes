@@ -2947,6 +2947,59 @@ select:focus-visible {
   min-width: 220px;
 }
 
+.queue-selection-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.queue-card.platform-shopee {
+  border-left: 5px solid #ee4d2d;
+}
+
+.queue-card.platform-mercado_livre {
+  border-left: 5px solid #ffe600;
+}
+
+.queue-marketplace-badge {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.platform-shopee .queue-marketplace-badge {
+  background: rgba(238, 77, 45, 0.18);
+  color: #ff8d76;
+}
+
+.platform-mercado_livre .queue-marketplace-badge {
+  background: rgba(255, 230, 0, 0.14);
+  color: #ffe95a;
+}
+
+#btn-delete-selected-queue:not(:disabled) {
+  border-color: #ff6259;
+  color: #ff837c;
+}
+
+.recurring-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid rgba(72, 232, 167, 0.35);
+  border-radius: 999px;
+  color: #65e7ad;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 #btn-clear-discarded {
   border: 1px solid rgba(255, 93, 111, 0.45);
   border-radius: 10px;
