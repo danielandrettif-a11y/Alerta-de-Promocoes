@@ -1537,10 +1537,21 @@ async function validateEntireQueue() {
       const progress = job.total > 0
         ? ` (${job.processed}/${job.total} Stories)`
         : '';
-      elBtnValidateQueue.textContent = `Validando${progress}`;
-      setQueueFeedback(
-        `Validando ofertas e atualizando Stories${progress}...`
-      );
+      if (job.phase === 'updating_catalogs') {
+        const stores = (job.platforms || [])
+          .map(platform => platform === 'shopee' ? 'Shopee' : 'Mercado Livre')
+          .join(' e ');
+        elBtnValidateQueue.textContent = 'Atualizando catálogos...';
+        setQueueFeedback(
+          `Atualizando ${stores || 'catálogos'} antes da validação...`
+        );
+      } else if (job.phase === 'updating_stories') {
+        elBtnValidateQueue.textContent = `Atualizando${progress}`;
+        setQueueFeedback(`Atualizando Stories${progress}...`);
+      } else {
+        elBtnValidateQueue.textContent = 'Verificando ofertas...';
+        setQueueFeedback('Verificando preços e promoções...');
+      }
       await new Promise(resolve => setTimeout(resolve, 1500));
       const statusResponse = await fetch(
         '/api/publication-queue/validation'

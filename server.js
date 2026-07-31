@@ -159,11 +159,13 @@ const localAffiliateWorkerEnabled =
   readEnv().LOCAL_AFFILIATE_WORKER_ENABLED === 'true';
 let queueValidationJob = {
   state: 'idle',
+  phase: null,
   processed: 0,
   total: 0,
   result: null,
   error: null
 };
+const catalogRefreshInProgress = new Map();
 const GROUP_NAME =
   readEnv().WHATSAPP_GROUP_ID ||
   readEnv().WHATSAPP_GROUP_NAME ||
@@ -552,6 +554,20 @@ function loadQueueValidationCatalog(queue) {
   return catalog;
 }
 
+function getQueueValidationPlatforms(queue) {
+  const activeStatuses = new Set([
+    PUBLICATION_QUEUE_STATUSES.AWAITING_AFFILIATE,
+    PUBLICATION_QUEUE_STATUSES.READY,
+    PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW
+  ]);
+  return [...new Set(
+    queue.items
+      .filter(item => activeStatuses.has(item.status))
+      .map(item => item.platform)
+      .filter(platform => platform === 'mercado_livre' || platform === 'shopee')
+  )];
+}
+
 function generateStoryBuffer(deal, coupons) {
   const runId = crypto.randomUUID();
   const storiesDir = path.join(
@@ -608,15 +624,21 @@ function generateStoryBuffer(deal, coupons) {
 async function runPublicationQueueValidation(jobId) {
   if (queueValidationJob.id !== jobId) return;
   try {
-    const catalog = loadQueueValidationCatalog(
-      loadPublicationQueue(publicationQueuePath)
-    );
+    const queue = loadPublicationQueue(publicationQueuePath);
+    const platforms = getQueueValidationPlatforms(queue);
+    queueValidationJob.platforms = platforms;
+    await Promise.all(platforms.map(refreshCatalog));
+    queueValidationJob.phase = 'validating';
+    const catalog = loadQueueValidationCatalog(queue);
     const coupons = loadAvailableDeals().coupons;
     const preview = validateQueueItems(
       loadPublicationQueue(publicationQueuePath),
       catalog
     );
     queueValidationJob.total = preview.updated.length;
+    queueValidationJob.phase = preview.updated.length > 0
+      ? 'updating_stories'
+      : 'validating';
     const storiesByDealId = new Map();
 
     for (const { item, current } of preview.updated) {
@@ -646,6 +668,7 @@ async function runPublicationQueueValidation(jobId) {
     queueValidationJob = {
       ...queueValidationJob,
       state: 'completed',
+      phase: 'completed',
       completedAt: new Date().toISOString(),
       result: {
         removed: result.removed.length,
@@ -659,6 +682,7 @@ async function runPublicationQueueValidation(jobId) {
     queueValidationJob = {
       ...queueValidationJob,
       state: 'failed',
+      phase: 'failed',
       completedAt: new Date().toISOString(),
       error: error.message
     };
@@ -899,8 +923,10 @@ app.post(
       queueValidationJob = {
         id: crypto.randomUUID(),
         state: 'running',
+        phase: 'updating_catalogs',
         startedAt: new Date().toISOString(),
         completedAt: null,
+        platforms: [],
         processed: 0,
         total: 0,
         result: null,
@@ -1219,40 +1245,37 @@ app.get(
 );
 
 // POST /api/scrape - Dispara scraping do Mercado Livre + Cupons (concorrente)
-app.post('/api/scrape', (req, res) => {
+app.post('/api/scrape', async (req, res) => {
   console.log('Disparando scraper de ofertas do Mercado Livre e Cupons...');
-  exec('node execution/mercado_livre_deals.js', (error, stdout, stderr) => {
-    if (error) {
-      console.error(`Erro no scraping do ML: ${error.message}`);
-      return res.status(500).json({ error: `Falha ao atualizar ofertas do ML: ${error.message}` });
-    }
-    
+  try {
+    await refreshCatalog('mercado_livre');
     console.log('Scraping do ML e Cupons concluído!');
-    try {
-      const rawData = fs.readFileSync(mlDealsReportPath, 'utf-8');
-      const parsedData = JSON.parse(rawData);
-      
-      let coupons = [];
-      if (fs.existsSync(couponsPath)) {
-        coupons = JSON.parse(fs.readFileSync(couponsPath, 'utf-8'));
-      }
+    const rawData = fs.readFileSync(mlDealsReportPath, 'utf-8');
+    const parsedData = JSON.parse(rawData);
 
-      res.json({
-        success: true,
-        data: {
-          deals: parsedData.deals || [],
-          coupons,
-          generatedAt: parsedData.generatedAt || null,
-          freshness: getFreshness(
-            parsedData.generatedAt,
-            Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
-          )
-        }
-      });
-    } catch (e) {
-      res.status(500).json({ error: 'Scraping concluído, mas erro ao ler os resultados.' });
+    let coupons = [];
+    if (fs.existsSync(couponsPath)) {
+      coupons = JSON.parse(fs.readFileSync(couponsPath, 'utf-8'));
     }
-  });
+
+    res.json({
+      success: true,
+      data: {
+        deals: parsedData.deals || [],
+        coupons,
+        generatedAt: parsedData.generatedAt || null,
+        freshness: getFreshness(
+          parsedData.generatedAt,
+          Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
+        )
+      }
+    });
+  } catch (error) {
+    console.error(`Erro no scraping do ML: ${error.message}`);
+    res.status(500).json({
+      error: `Falha ao atualizar ofertas do ML: ${error.message}`
+    });
+  }
 });
 
 // POST /api/scrape-amazon - Dispara o scraper de ofertas da Amazon
@@ -1288,7 +1311,7 @@ app.post('/api/scrape-amazon', (req, res) => {
 // POST /api/refresh-shopee - Verifica o ETag e importa somente se mudou
 app.post('/api/refresh-shopee', async (req, res) => {
   try {
-    await runExecutionScript('shopee_refresh.js');
+    await refreshCatalog('shopee');
     const parsedData = JSON.parse(
       fs.readFileSync(shopeeDealsReportPath, 'utf-8')
     );
@@ -1981,6 +2004,24 @@ function runExecutionScript(scriptName) {
   });
 }
 
+function refreshCatalog(platform) {
+  const scripts = {
+    mercado_livre: 'mercado_livre_deals.js',
+    amazon: 'amazon_deals.js',
+    shopee: 'shopee_refresh.js'
+  };
+  if (!scripts[platform]) {
+    return Promise.reject(new Error(`Catalogo ${platform} desconhecido.`));
+  }
+  if (catalogRefreshInProgress.has(platform)) {
+    return catalogRefreshInProgress.get(platform);
+  }
+  const refresh = runExecutionScript(scripts[platform])
+    .finally(() => catalogRefreshInProgress.delete(platform));
+  catalogRefreshInProgress.set(platform, refresh);
+  return refresh;
+}
+
 async function refreshDealsData() {
   const env = readEnv();
   if (env.DEALS_REFRESH_ENABLED === 'false' || dealsRefreshInProgress) return;
@@ -1989,9 +2030,9 @@ async function refreshDealsData() {
   console.log(`\n🔄 [${new Date().toLocaleTimeString('pt-BR')}] Atualizando bases de ofertas...`);
   try {
     const results = await Promise.allSettled([
-      runExecutionScript('mercado_livre_deals.js'),
-      runExecutionScript('amazon_deals.js'),
-      runExecutionScript('shopee_refresh.js')
+      refreshCatalog('mercado_livre'),
+      refreshCatalog('amazon'),
+      refreshCatalog('shopee')
     ]);
     const failed = results.filter(result => result.status === 'rejected');
     if (failed.length > 0) {

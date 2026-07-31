@@ -16,4 +16,6 @@ test('fila usa uma selecao e valida em segundo plano', () => {
   assert.match(server, /\/api\/publication-queue\/validation/);
   assert.match(server, /res\.status\(202\)\.json\(queueValidationJob\)/);
   assert.match(server, /execFile\(/);
+  assert.match(server, /await Promise\.all\(platforms\.map\(refreshCatalog\)\)/);
+  assert.match(app, /job\.phase === 'updating_catalogs'/);
 });
