@@ -32,6 +32,10 @@ const {
   searchMarketplaces
 } = require('./execution/marketplace_search.js');
 const {
+  findCouponCandidates,
+  normalizeVerifiedCoupon
+} = require('./execution/coupon_rules.js');
+const {
   STATUSES: PUBLICATION_QUEUE_STATUSES,
   loadQueue: loadPublicationQueue,
   saveQueue: savePublicationQueue,
@@ -322,6 +326,10 @@ app.get('/api/deals', (req, res) => {
       console.error('Erro ao ler cupons:', err);
     }
   }
+  deals = deals.map(deal => ({
+    ...deal,
+    couponCandidates: findCouponCandidates(deal, coupons)
+  }));
 
   res.json({
     deals,
@@ -468,7 +476,6 @@ app.get('/api/shopee-deals', (req, res) => {
       console.error('Erro ao ler ofertas da Shopee:', err);
     }
   }
-
   res.json({
     deals,
     generatedAt,
@@ -479,21 +486,25 @@ app.get('/api/shopee-deals', (req, res) => {
   });
 });
 
-function applyAffiliateLinkToQueue(
-  queue,
-  item,
-  affiliateLink,
-  observedPrice
-) {
+function findCurrentDealForQueueItem(item) {
   let deals = loadAvailableDeals().deals;
   if (item.platform === 'shopee' && fs.existsSync(shopeeDealsReportPath)) {
     deals = JSON.parse(
       fs.readFileSync(shopeeDealsReportPath, 'utf-8')
     ).deals || [];
   }
-  const currentDeal = deals.find(deal =>
+  return deals.find(deal =>
     generateDealId({ ...deal, platform: item.platform }) === item.dealId
   );
+}
+
+function applyAffiliateLinkToQueue(
+  queue,
+  item,
+  affiliateLink,
+  observedPrice
+) {
+  const currentDeal = findCurrentDealForQueueItem(item);
   let reviewReason = null;
   let latestPrice = null;
   const verifiedPrice =
@@ -599,9 +610,7 @@ function generateStoryBuffer(deal, coupons) {
     APP_RUNTIME_DIR,
     `queue-validation-${runId}.json`
   );
-  const confirmedCoupon = coupons.find(
-    coupon => coupon.verificationStatus === 'manually_confirmed'
-  ) || null;
+  const confirmedCoupon = deal.coupon || null;
   fs.mkdirSync(storiesDir, { recursive: true });
   fs.writeFileSync(selectionPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
@@ -1071,6 +1080,9 @@ app.post(
           platform: item.platform,
           title: item.title,
           productLink: item.productLink,
+          couponCandidates: item.platform === 'mercado_livre'
+            ? findCouponCandidates(item, loadAvailableDeals().coupons)
+            : [],
           claimExpiresAt: item.affiliateProcessing.claimExpiresAt,
           attempts: item.affiliateProcessing.attempts
         }))
@@ -1084,7 +1096,7 @@ app.post(
 app.post(
   '/api/local-affiliate-worker/jobs/:itemId/complete',
   requireLocalAffiliateWorker,
-  (req, res) => {
+  async (req, res) => {
     try {
       const deviceId = String(req.body?.deviceId || '').trim();
       const queue = loadPublicationQueue(publicationQueuePath);
@@ -1099,6 +1111,32 @@ app.post(
         req.body?.affiliateLink,
         req.body?.observedPrice
       );
+      result.item.coupon = normalizeVerifiedCoupon(
+        result.item,
+        req.body?.coupon,
+        loadAvailableDeals().coupons
+      );
+      if (result.item.coupon) {
+        const currentDeal = findCurrentDealForQueueItem(result.item) || {};
+        const story = await generateStoryBuffer({
+          ...currentDeal,
+          ...result.item,
+          currentPrice:
+            result.item.latestPrice || result.item.currentPrice,
+          coupon: result.item.coupon
+        }, []);
+        if (!result.item.storyFile) {
+          result.item.storyFile = `${result.item.id}.jpg`;
+        }
+        fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
+        fs.writeFileSync(
+          path.join(publicationQueueAssetsPath, result.item.storyFile),
+          story
+        );
+        result.item.reviewUpdatedStory =
+          result.item.status === PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW;
+        result.item.updatedAt = new Date().toISOString();
+      }
       savePublicationQueue(publicationQueuePath, result.queue);
 
       const workers = loadWorkers(localAffiliateWorkersPath);
@@ -1304,7 +1342,10 @@ app.post('/api/scrape', async (req, res) => {
     res.json({
       success: true,
       data: {
-        deals: parsedData.deals || [],
+        deals: (parsedData.deals || []).map(deal => ({
+          ...deal,
+          couponCandidates: findCouponCandidates(deal, coupons)
+        })),
         coupons,
         generatedAt: parsedData.generatedAt || null,
         freshness: getFreshness(
@@ -2135,9 +2176,7 @@ function generateStory(deal, coupons) {
     APP_RUNTIME_DIR,
     `automatic_story_${process.pid}.json`
   );
-  const confirmedCoupon = coupons.find(
-    coupon => coupon.verificationStatus === 'manually_confirmed'
-  ) || null;
+  const confirmedCoupon = deal.coupon || null;
 
   fs.writeFileSync(selectionPath, JSON.stringify({
     generatedAt: new Date().toISOString(),

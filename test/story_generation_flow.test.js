@@ -30,4 +30,7 @@ test('todos os fluxos usam o template compartilhado de Stories', () => {
   assert.equal(template.match(/<line x1=/g)?.length, 2);
   assert.match(template, /Oferta \{\{MARKETPLACE_NAME\}\}/);
   assert.match(template, /\{\{MARKETPLACE_CTA\}\}/);
+  assert.match(template, /Com cupom:/);
+  assert.match(template, /\{\{COUPON_PRICE\}\}/);
+  assert.match(server, /const confirmedCoupon = deal\.coupon \|\| null/);
 });

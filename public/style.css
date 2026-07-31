@@ -3203,6 +3203,22 @@ select:focus-visible {
   font-size: 22px;
 }
 
+.queue-coupon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: -2px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 230, 0, 0.35);
+  border-radius: 10px;
+  color: #fff4a3;
+  background: rgba(255, 230, 0, 0.08);
+}
+
+.queue-coupon strong {
+  color: #ffe600;
+}
+
 .queue-product-link {
   display: inline-flex;
   margin-bottom: 18px;

@@ -73,3 +73,33 @@ test('content script aceita somente link curto oficial da Shopee', () => {
   assert.match(background, /GENERATE_SHOPEE_AFFILIATE_LINK/);
   assert.match(background, /job\.platform === 'shopee'/);
 });
+
+test('detecta somente cupom candidato com preço menor no produto', () => {
+  const mercadoLivre = require('../extension/content/mercado_livre.js');
+  const priceElement = {
+    querySelector: () => null,
+    getAttribute: name => name === 'content' ? '199.99' : null,
+    textContent: 'R$ 199,99'
+  };
+  const root = {
+    body: {
+      innerText: 'Use o cupom MODA10 e pague R$ 179,99 com Cupom',
+      textContent: 'Use o cupom MODA10 e pague R$ 179,99 com Cupom'
+    },
+    querySelector: selector =>
+      selector === '[itemprop="price"]' ? priceElement : null,
+    querySelectorAll: () => []
+  };
+  assert.deepEqual(
+    mercadoLivre.findProductCoupon([{ code: 'MODA10' }], root),
+    {
+      code: 'MODA10',
+      priceWithoutCoupon: 199.99,
+      priceWithCoupon: 179.99
+    }
+  );
+  assert.equal(
+    mercadoLivre.findProductCoupon([{ code: 'OUTRO10' }], root),
+    null
+  );
+});

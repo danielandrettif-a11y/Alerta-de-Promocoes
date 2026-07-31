@@ -19,12 +19,15 @@ servidor.
 1. O painel adiciona ofertas à fila e gera os Stories existentes.
 2. A extensão envia heartbeat e reserva até o tamanho de lote escolhido.
 3. Para Mercado Livre, uma aba local abre o produto, usa o controle
-   `Compartilhar`, extrai o link `meli.la` e lê o preço exibido.
+   `Compartilhar`, extrai o link `meli.la`, lê o preço exibido e procura um
+   cupom candidato confirmado na própria página.
 4. Para Shopee, uma aba abre `Oferta > Link personalizado`, preenche o produto
    e extrai o link `s.shopee.com.br`.
 5. O servidor valida o link e compara o preço observado com o Story.
 6. O item fica `ready` ou `needs_review`.
-7. Itens prontos podem formar um lote e um ZIP persistente.
+7. Quando houver cupom comprovado para o produto, o servidor recria o Story
+   com o preço normal, o preço com cupom e o código.
+8. Itens prontos podem formar um lote e um ZIP persistente.
 
 ## Segurança e falhas
 

@@ -181,6 +181,59 @@
     return null;
   }
 
+  function findProductCoupon(candidates = [], root = document) {
+    const visibleText = String(root.body?.innerText || '');
+    const upperText = visibleText.toUpperCase();
+    const pricePatterns = [
+      /R\$\s*([\d.]+(?:,\d{1,2})?)\s*(?:à vista\s*)?com\s+cupom/ig,
+      /com\s+cupom[^\d]{0,30}R\$\s*([\d.]+(?:,\d{1,2})?)/ig
+    ];
+    const priceWithoutCoupon = findCurrentPrice(root);
+    for (const candidate of candidates) {
+      const code = String(candidate.code || '').trim().toUpperCase();
+      const codeIndex = code.length >= 4 ? upperText.indexOf(code) : -1;
+      if (codeIndex < 0) continue;
+      const context = visibleText.slice(
+        Math.max(0, codeIndex - 250),
+        codeIndex + code.length + 250
+      );
+      for (const pattern of pricePatterns) {
+        pattern.lastIndex = 0;
+        for (const match of context.matchAll(pattern)) {
+          const priceWithCoupon = parsePriceText(match[1]);
+          if (
+            priceWithCoupon &&
+            priceWithoutCoupon &&
+            priceWithCoupon < priceWithoutCoupon
+          ) {
+            return { code, priceWithoutCoupon, priceWithCoupon };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  async function detectProductCoupon(candidates = [], timeoutMs = 5000) {
+    let coupon = findProductCoupon(candidates, document);
+    if (!coupon) {
+      const trigger = [...document.querySelectorAll(
+        'button, a, [role="button"]'
+      )].find(element =>
+        isVisible(element) &&
+        normalizedText(element.textContent).includes('cupom')
+      );
+      if (trigger) {
+        trigger.click();
+        coupon = await waitFor(
+          () => findProductCoupon(candidates, document),
+          Math.min(timeoutMs, 5000)
+        ).catch(() => null);
+      }
+    }
+    return { success: true, coupon };
+  }
+
   function waitFor(check, timeoutMs, intervalMs = 250) {
     return new Promise((resolve, reject) => {
       const startedAt = Date.now();
@@ -355,6 +408,13 @@
 
   if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === 'DETECT_PRODUCT_COUPON') {
+        detectProductCoupon(
+          message.candidates,
+          message.timeoutMs
+        ).then(sendResponse);
+        return true;
+      }
       const actions = {
         LOCATE_AFFILIATE_SHARE: locateAffiliateShareButton,
         EXTRACT_AFFILIATE_LINK: extractAffiliateLink,
@@ -380,6 +440,8 @@
       findAffiliateLink,
       parsePriceText,
       findCurrentPrice,
+      findProductCoupon,
+      detectProductCoupon,
       selectAffiliateLabelIfNeeded,
       locateAffiliateShareButton,
       extractAffiliateLink,

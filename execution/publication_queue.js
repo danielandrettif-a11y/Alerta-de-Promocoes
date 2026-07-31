@@ -171,6 +171,7 @@ function enqueueOffer(queue, input, now = new Date()) {
     productLink: normalizeProductLink(input.productLink, platform),
     storyFile: String(input.storyFile || ''),
     affiliateLink: null,
+    coupon: null,
     affiliateProcessing: emptyAffiliateProcessing(),
     reviewReason: null,
     reviewUpdatedStory: false,
@@ -469,6 +470,7 @@ function validateQueueItems(queue, catalog) {
     item.currentPrice = String(current.currentPrice || item.currentPrice);
     item.discount = Number(current.discount) || 0;
     item.image = String(current.image || item.image);
+    item.coupon = null;
     item.updatedAt = new Date().toISOString();
     if (item.affiliateLink) {
       item.status = STATUSES.NEEDS_REVIEW;

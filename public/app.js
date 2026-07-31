@@ -1356,6 +1356,19 @@ function renderPublicationQueue() {
       `
       : '';
 
+    const couponDetails = item.coupon
+      ? `
+        <div class="queue-coupon">
+          <span>Cupom confirmado: <strong>${escapeQueueHtml(
+            item.coupon.code
+          )}</strong></span>
+          <span>Com cupom: <strong>${escapeQueueHtml(
+            item.coupon.priceWithCoupon
+          )}</strong></span>
+        </div>
+      `
+      : '';
+
     const secondaryAction = [
       'awaiting_affiliate',
       'ready',
@@ -1416,6 +1429,7 @@ function renderPublicationQueue() {
           <span>De ${escapeQueueHtml(item.originalPrice)}</span>
           <strong>Por ${escapeQueueHtml(item.currentPrice)}</strong>
         </div>
+        ${couponDetails}
         <a
           class="queue-product-link"
           href="${escapeQueueHtml(item.productLink)}"
@@ -1722,14 +1736,22 @@ async function updateQueueItemStatus(itemId, status) {
 }
 
 function buildQueueCaption(item) {
-  return [
+  const lines = [
     '🔥 OFERTA ENCONTRADA!',
     '',
     item.title,
     '',
     `❌ De: ${item.originalPrice}`,
     `✅ Por: ${item.currentPrice}`,
-    `💸 ${Number(item.discount) || 0}% OFF`,
+    `💸 ${Number(item.discount) || 0}% OFF`
+  ];
+  if (item.coupon) {
+    lines.push(
+      `🎟️ Com o cupom ${item.coupon.code}: ${item.coupon.priceWithCoupon}`
+    );
+  }
+  return [
+    ...lines,
     '',
     '🛒 Comprar:',
     item.affiliateLink,
@@ -1968,19 +1990,16 @@ function renderMLDeals(deals) {
     const displayTitle = deal.title;
     const ratingText = deal.rating ? `⭐ ${deal.rating.toFixed(1)}` : 'Sem avaliação';
 
-    // Cupons compatíveis
-    const compatibleCoupons = allCoupons.filter(coupon => {
-      if (coupon.verificationStatus !== 'manually_confirmed') return false;
-      const comp = findCompatibleDealsForCoupon(coupon, [deal]);
-      return comp.length > 0;
-    });
-    
     let couponBadgeHtml = '';
-    if (compatibleCoupons.length > 0) {
-      const bestCoupon = compatibleCoupons[0];
+    const bestCoupon = deal.couponCandidates?.[0];
+    if (bestCoupon) {
       couponBadgeHtml = `
-        <div class="deal-coupon-badge" title="${bestCoupon.rules}">
-          <span class="coupon-icon">🎟️</span> Cupom: <strong>${bestCoupon.code}</strong>
+        <div class="deal-coupon-badge" title="${escapeQueueHtml(
+          bestCoupon.rules
+        )}">
+          <span class="coupon-icon">🎟️</span>
+          Candidato: <strong>${escapeQueueHtml(bestCoupon.code)}</strong>
+          <small>A extensão verificará no produto</small>
         </div>
       `;
     }

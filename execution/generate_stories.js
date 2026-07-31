@@ -29,6 +29,16 @@ function getStoryVariant(value) {
     : 'd';
 }
 
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]);
+}
+
 // Encontra o executável do navegador Chrome ou Edge no Windows
 function findBrowserPath() {
   const possiblePaths = [
@@ -127,8 +137,18 @@ async function main() {
       // Informações do cupom selecionado
       const hasCoupon = !!data.selectedCoupon;
       const couponClass = hasCoupon ? 'show-coupon' : 'hide-coupon';
-      const couponCode = hasCoupon ? data.selectedCoupon.code : '';
-      const couponRules = hasCoupon ? data.selectedCoupon.rules : '';
+      const couponCode = hasCoupon
+        ? escapeHtml(data.selectedCoupon.code)
+        : '';
+      const couponRules = hasCoupon
+        ? escapeHtml(data.selectedCoupon.rules)
+        : '';
+      const couponPrice = hasCoupon
+        ? escapeHtml(data.selectedCoupon.priceWithCoupon)
+        : '';
+      const couponSavings = hasCoupon
+        ? escapeHtml(data.selectedCoupon.savings)
+        : '';
 
       let shippingClass = 'hide-shipping';
       let shippingText = '';
@@ -167,6 +187,8 @@ async function main() {
         .replace(/\{\{COUPON_BANNER_CLASS\}\}/g, couponClass)
         .replace(/\{\{COUPON_CODE\}\}/g, couponCode)
         .replace(/\{\{COUPON_RULES\}\}/g, couponRules)
+        .replace(/\{\{COUPON_PRICE\}\}/g, couponPrice)
+        .replace(/\{\{COUPON_SAVINGS\}\}/g, couponSavings)
         .replace(/\{\{SHIPPING_CLASS\}\}/g, shippingClass)
         .replace(/\{\{SHIPPING_TEXT\}\}/g, shippingText)
         .replace(/\{\{DEAL_TYPE\}\}/g, deal.dealType || 'Ofertas de Campanha')

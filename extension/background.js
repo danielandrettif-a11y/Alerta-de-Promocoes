@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.3.1';
+const EXTENSION_VERSION = '1.4.0';
 const SHOPEE_CONVERTER_URL =
   'https://affiliate.shopee.com.br/offer/custom_link';
 const DEFAULTS = {
@@ -259,7 +259,19 @@ async function processJob(job, settings, tab) {
       timeoutMs: settings.actionTimeoutMs
     }, 'content/shopee.js');
   }
-  return runContentAction(tab.id, settings.actionTimeoutMs);
+  const couponResult = await sendContentMessage(tab.id, {
+    type: 'DETECT_PRODUCT_COUPON',
+    candidates: job.couponCandidates || [],
+    timeoutMs: Math.min(settings.actionTimeoutMs, 5000)
+  });
+  const affiliateResult = await runContentAction(
+    tab.id,
+    settings.actionTimeoutMs
+  );
+  if (affiliateResult?.success && couponResult?.coupon) {
+    affiliateResult.coupon = couponResult.coupon;
+  }
+  return affiliateResult;
 }
 
 async function processQueue() {
@@ -337,7 +349,8 @@ async function processQueue() {
             body: JSON.stringify({
               deviceId: settings.deviceId,
               affiliateLink: result.affiliateLink,
-              observedPrice: result.observedPrice
+              observedPrice: result.observedPrice,
+              coupon: result.coupon || null
             })
           }
         );

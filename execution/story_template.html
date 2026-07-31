@@ -473,6 +473,54 @@
       color: var(--accent-color);
     }
 
+    .coupon-offer {
+      display: none;
+    }
+
+    body.show-coupon .price-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px 30px;
+    }
+
+    body.show-coupon .current-price {
+      font-size: 58px;
+    }
+
+    body.show-coupon .coupon-offer {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 18px 24px;
+      background: var(--marketplace-color);
+      color: var(--marketplace-text);
+      border: 3px solid var(--accent-color);
+      font-family: 'Montserrat', sans-serif;
+    }
+
+    .coupon-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 19px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .coupon-code {
+      font-size: 27px;
+      font-weight: 900;
+      letter-spacing: 1px;
+    }
+
+    .coupon-final-price {
+      font-size: 64px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
     /* Faixa Transversal (Ribbon) no canto superior esquerdo do Card */
     .deal-ribbon {
       position: absolute;
@@ -600,7 +648,7 @@
     }
   </style>
 </head>
-<body class="{{THEME_CLASS}} platform-{{MARKETPLACE_CLASS}} story-{{STORY_VARIANT}}">
+<body class="{{THEME_CLASS}} platform-{{MARKETPLACE_CLASS}} story-{{STORY_VARIANT}} {{COUPON_BANNER_CLASS}}">
 
   <!-- Background decorative text outlines -->
   <svg class="watermark-layer" viewBox="0 0 1080 1920" aria-hidden="true">
@@ -664,6 +712,17 @@
         <span class="price-label">Por apenas:</span>
         <div class="current-price-container">
           <span class="current-price">{{CURRENT_PRICE}}</span>
+        </div>
+      </div>
+      <div class="coupon-offer">
+        <div class="coupon-copy">
+          <span>Use o cupom</span>
+          <span class="coupon-code">{{COUPON_CODE}}</span>
+          <span>Economize {{COUPON_SAVINGS}}</span>
+        </div>
+        <div>
+          <div class="price-label">Com cupom:</div>
+          <div class="coupon-final-price">{{COUPON_PRICE}}</div>
         </div>
       </div>
     </div>
