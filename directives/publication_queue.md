@@ -58,6 +58,8 @@ Both paths must live inside the persistent Coolify volume.
 - Absence from the rotating catalog snapshot does not prove unavailability
   and must not block the item.
 - A price change moves the item to `needs_review`.
+- Queue validation regenerates a changed Story and only returns it to `ready`
+  after the new image was written successfully.
 - A queue item can only be marked `published` from `ready`.
 - Active duplicates for the same product reuse the existing queue item.
 - File sharing requires a valid HTTPS origin and a browser that supports the

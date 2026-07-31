@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.3.0';
+const EXTENSION_VERSION = '1.3.1';
 const SHOPEE_CONVERTER_URL =
   'https://affiliate.shopee.com.br/offer/custom_link';
 const DEFAULTS = {
@@ -95,19 +95,24 @@ async function findOrCreateMercadoLivreTab() {
       'https://produto.mercadolivre.com.br/*'
     ]
   });
-  if (tabs[0]?.id) return tabs[0];
-  return chrome.tabs.create({
+  if (tabs[0]?.id) return { ...tabs[0], createdByWorker: false };
+  const tab = await chrome.tabs.create({
     url: 'https://www.mercadolivre.com.br/',
     active: false
   });
+  return { ...tab, createdByWorker: true };
 }
 
 async function findOrCreateShopeeTab() {
   const tabs = await chrome.tabs.query({
     url: 'https://affiliate.shopee.com.br/offer/custom_link*'
   });
-  if (tabs[0]?.id) return tabs[0];
-  return chrome.tabs.create({ url: SHOPEE_CONVERTER_URL, active: false });
+  if (tabs[0]?.id) return { ...tabs[0], createdByWorker: false };
+  const tab = await chrome.tabs.create({
+    url: SHOPEE_CONVERTER_URL,
+    active: false
+  });
+  return { ...tab, createdByWorker: true };
 }
 
 function samePageUrl(leftValue, rightValue) {
@@ -278,6 +283,7 @@ async function processQueue() {
     ));
     await persistState({ waitingCount: batchSize });
     const attemptedItemIds = [];
+    try {
     for (let index = 0; index < batchSize && !stopRequested; index += 1) {
       const claimed = await apiRequest('/api/local-affiliate-worker/claim', {
         method: 'POST',
@@ -362,6 +368,16 @@ async function processQueue() {
       await heartbeat('idle');
     }
     return workerState;
+    } finally {
+      if (!workerState.authRequired) {
+        const workerTabIds = Object.values(tabs)
+          .filter(tab => tab.createdByWorker && tab.id)
+          .map(tab => tab.id);
+        await Promise.allSettled(
+          workerTabIds.map(tabId => chrome.tabs.remove(tabId))
+        );
+      }
+    }
   })().finally(() => {
     processingPromise = null;
   });

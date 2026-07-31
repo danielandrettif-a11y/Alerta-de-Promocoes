@@ -44,6 +44,8 @@ test('clique nativo usa debugger somente para eventos de entrada', () => {
   assert.match(background, /Input\.dispatchMouseEvent/);
   assert.match(background, /chrome\.tabs\.update\(tab\.id, \{ active: true \}\)/);
   assert.match(background, /chrome\.debugger\.detach/);
+  assert.match(background, /createdByWorker/);
+  assert.match(background, /chrome\.tabs\.remove\(tabId\)/);
   assert.doesNotMatch(background, /Network\.|Storage\.|Cookies\./);
 });
 

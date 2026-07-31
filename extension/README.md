@@ -50,7 +50,8 @@ Faça o deploy e confirme que o painel abre normalmente por HTTPS.
 2. No popup, escolha 5, 10, 20 ou 30 itens.
 3. Clique em **Processar fila**.
 4. A extensão reutiliza uma única aba e processa uma oferta por vez.
-5. Use **Parar** para interromper; reservas não concluídas voltam à fila quando
+5. Ao concluir, ela fecha somente as abas que abriu automaticamente.
+6. Use **Parar** para interromper; reservas não concluídas voltam à fila quando
    expirarem.
 
 Se aparecer login, CAPTCHA ou segundo fator, a extensão pausa e ativa a aba.

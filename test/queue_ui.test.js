@@ -18,4 +18,6 @@ test('fila usa uma selecao e valida em segundo plano', () => {
   assert.match(server, /execFile\(/);
   assert.match(server, /await Promise\.all\(platforms\.map\(refreshCatalog\)\)/);
   assert.match(app, /job\.phase === 'updating_catalogs'/);
+  assert.match(server, /applyObservedQueuePrices\(queue, catalog\)/);
+  assert.match(server, /item\.status = PUBLICATION_QUEUE_STATUSES\.READY/);
 });

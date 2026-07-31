@@ -568,6 +568,26 @@ function getQueueValidationPlatforms(queue) {
   )];
 }
 
+function applyObservedQueuePrices(queue, catalog) {
+  for (const item of queue.items) {
+    if (
+      item.status !== PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW ||
+      !item.latestPrice
+    ) continue;
+    const current = catalog.get(item.dealId);
+    const latestPrice = parsePrice(item.latestPrice);
+    if (!current || !latestPrice) continue;
+    const originalPrice = parsePrice(current.originalPrice);
+    catalog.set(item.dealId, {
+      ...current,
+      currentPrice: formatPrice(latestPrice),
+      discount: originalPrice > latestPrice
+        ? Math.round((1 - latestPrice / originalPrice) * 100)
+        : Number(current.discount) || 0
+    });
+  }
+}
+
 function generateStoryBuffer(deal, coupons) {
   const runId = crypto.randomUUID();
   const storiesDir = path.join(
@@ -630,6 +650,7 @@ async function runPublicationQueueValidation(jobId) {
     await Promise.all(platforms.map(refreshCatalog));
     queueValidationJob.phase = 'validating';
     const catalog = loadQueueValidationCatalog(queue);
+    applyObservedQueuePrices(queue, catalog);
     const coupons = loadAvailableDeals().coupons;
     const preview = validateQueueItems(
       loadPublicationQueue(publicationQueuePath),
@@ -662,6 +683,27 @@ async function runPublicationQueueValidation(jobId) {
         path.join(publicationQueueAssetsPath, item.storyFile),
         story
       );
+      if (item.affiliateLink) {
+        item.status = PUBLICATION_QUEUE_STATUSES.READY;
+        item.reviewReason = null;
+        item.reviewUpdatedStory = false;
+        item.latestPrice = null;
+        item.readyAt = new Date().toISOString();
+      }
+    }
+    for (const item of result.queue.items) {
+      if (
+        item.status === PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW &&
+        item.reviewUpdatedStory === true &&
+        !item.latestPrice &&
+        item.storyFile &&
+        fs.existsSync(path.join(publicationQueueAssetsPath, item.storyFile))
+      ) {
+        item.status = PUBLICATION_QUEUE_STATUSES.READY;
+        item.reviewReason = null;
+        item.reviewUpdatedStory = false;
+        item.readyAt = new Date().toISOString();
+      }
     }
     savePublicationQueue(publicationQueuePath, result.queue);
     removePublicationQueueAssets(result.removed);
