@@ -39,7 +39,8 @@ Both paths must live inside the persistent Coolify volume.
 ## User flow
 
 1. Select one or more Mercado Livre offers in the dashboard.
-2. Add them to the publication queue.
+2. Add up to 40 offers to the publication queue. The server generates the
+   entire batch in one background process and reuses a single headless Chrome.
 3. Process the queue with the local extension, or generate and paste the
    `https://meli.la/...` link manually.
 5. The server validates the link and compares the price when the product is
@@ -60,6 +61,9 @@ Both paths must live inside the persistent Coolify volume.
 - A price change moves the item to `needs_review`.
 - Queue validation regenerates a changed Story and only returns it to `ready`
   after the new image was written successfully.
+- Initial batch generation accepts at most 40 offers, reports progress through
+  a job endpoint and stops after the current Story when cancelled.
+- Individual Story failures do not discard the other generated items.
 - A queue item can only be marked `published` from `ready`.
 - Active duplicates for the same product reuse the existing queue item.
 - File sharing requires a valid HTTPS origin and a browser that supports the

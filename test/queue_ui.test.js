@@ -28,12 +28,23 @@ test('fila usa uma selecao e valida em segundo plano', () => {
 test('prepara Mercado Livre e Shopee juntos com progresso cancelavel', () => {
   const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
   const page = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+  const generator = fs.readFileSync(
+    path.join(root, 'execution', 'generate_stories.js'),
+    'utf8'
+  );
 
   assert.match(app, /function getSelectedPublicationDeals\(\)/);
   assert.match(app, /selectedMLIndices\.size \+ selectedShopeeIndices\.size/);
   assert.match(app, /logEl\.scrollTop = logEl\.scrollHeight/);
   assert.match(app, /Todos os Stories foram gerados\./);
   assert.match(app, /stopQueueGenerationRequested/);
+  assert.match(app, /\/api\/publication-queue\/generation/);
+  assert.match(server, /spawn\(\s*process\.execPath/);
+  assert.match(server, /entries\.length > 40/);
+  assert.match(server, /STORY_CANCEL_FILE/);
+  assert.match(generator, /process\.env\.STORY_CANCEL_FILE/);
+  assert.match(generator, /temp_story_\$\{process\.pid\}_\$\{rank\}/);
   assert.match(page, /id="btn-stop-progress"/);
 });
 

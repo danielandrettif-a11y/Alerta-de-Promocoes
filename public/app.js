@@ -24,6 +24,7 @@ let whatsappReady = false;
 let activeDealPlatform = 'ml';
 let lastFocusedElement = null;
 let stopQueueGenerationRequested = false;
+let activeQueueGenerationJobId = null;
 const tabScrollPositions = new Map();
 const DEALS_PAGE_SIZE = 20;
 let visibleMLLimit = DEALS_PAGE_SIZE;
@@ -1547,7 +1548,7 @@ async function validateEntireQueue() {
     const response = await fetch('/api/publication-queue/validate', {
       method: 'POST'
     });
-    const data = await readQueueValidationResponse(response);
+    const data = await readApiJson(response, 'validar a fila');
     if (!response.ok) {
       throw new Error(data.error || 'Não foi possível validar a fila.');
     }
@@ -1575,7 +1576,7 @@ async function validateEntireQueue() {
       const statusResponse = await fetch(
         '/api/publication-queue/validation'
       );
-      job = await readQueueValidationResponse(statusResponse);
+      job = await readApiJson(statusResponse, 'consultar a validação');
       if (!statusResponse.ok) {
         throw new Error(job.error || 'Falha ao consultar a validação.');
       }
@@ -1600,15 +1601,17 @@ async function validateEntireQueue() {
   }
 }
 
-async function readQueueValidationResponse(response) {
+async function readApiJson(response, action) {
   const text = await response.text();
   try {
     return JSON.parse(text);
   } catch {
+    const detail = text.trim().slice(0, 120);
     throw new Error(
       response.ok
         ? 'O servidor retornou uma resposta inválida.'
-        : `O servidor não conseguiu validar a fila (HTTP ${response.status}).`
+        : `O servidor não conseguiu ${action} (HTTP ${response.status})` +
+          `${detail ? `: ${detail}` : '.'}`
     );
   }
 }
@@ -1658,50 +1661,107 @@ async function enqueueDealsForPublication(items = getSelectedPublicationDeals())
     });
   };
 
+  const itemsByClientId = new Map(items.map(item => [
+    `${item.platform}:${item.index}`,
+    item
+  ]));
+  const seenResults = new Set();
   let created = 0;
   let reused = 0;
   let failed = 0;
-  let completed = 0;
-  for (let index = 0; index < items.length; index++) {
-    if (stopQueueGenerationRequested) break;
-    const { deal, platform, index: sourceIndex } = items[index];
-    addLog(
-      `[${index + 1}/${items.length}] Gerando Story: ` +
-      `${deal.title.substring(0, 45)}...`
-    );
-    try {
-      const response = await fetch('/api/publication-queue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          platform,
-          deal
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Falha ao adicionar.');
-      if (data.created) {
-        created += 1;
-        addLog('Story adicionado à fila.', 'success');
-      } else {
-        reused += 1;
-        addLog('A oferta já estava na fila.', 'warning');
-      }
-      (platform === 'shopee'
-        ? selectedShopeeIndices
-        : selectedMLIndices).delete(sourceIndex);
-    } catch (err) {
-      failed += 1;
-      addLog(`Falha: ${err.message}`, 'error');
+  let lastCurrentPosition = 0;
+  let job;
+
+  const consumeJob = currentJob => {
+    if (
+      currentJob.current?.position &&
+      currentJob.current.position !== lastCurrentPosition
+    ) {
+      lastCurrentPosition = currentJob.current.position;
+      addLog(
+        `[${currentJob.current.position}/${currentJob.total}] Gerando Story: ` +
+        `${currentJob.current.title.substring(0, 45)}...`
+      );
     }
-    completed += 1;
+    for (const result of currentJob.results || []) {
+      if (seenResults.has(result.clientId)) continue;
+      seenResults.add(result.clientId);
+      const source = itemsByClientId.get(result.clientId);
+      if (result.success) {
+        if (result.created) {
+          created += 1;
+          addLog('Story adicionado à fila.', 'success');
+        } else {
+          reused += 1;
+          addLog('A oferta já estava na fila.', 'warning');
+        }
+        if (source) {
+          (source.platform === 'shopee'
+            ? selectedShopeeIndices
+            : selectedMLIndices).delete(source.index);
+        }
+      } else {
+        failed += 1;
+        addLog(
+          `Falha em ${result.title || 'oferta'}: ${result.error}`,
+          'error'
+        );
+      }
+    }
+  };
+
+  try {
+    const response = await fetch('/api/publication-queue/generation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: items.map(item => ({
+          clientId: `${item.platform}:${item.index}`,
+          platform: item.platform,
+          deal: item.deal
+        }))
+      })
+    });
+    job = await readApiJson(response, 'iniciar a geração');
+    if (!response.ok) {
+      throw new Error(job.error || 'Não foi possível iniciar a geração.');
+    }
+    activeQueueGenerationJobId = job.id;
+    if (stopQueueGenerationRequested) {
+      await fetch(
+        '/api/publication-queue/generation/' +
+        encodeURIComponent(job.id),
+        { method: 'DELETE' }
+      );
+    }
+
+    while (job.state === 'running') {
+      consumeJob(job);
+      await new Promise(resolve => setTimeout(resolve, 750));
+      const statusResponse = await fetch(
+        `/api/publication-queue/generation/${encodeURIComponent(job.id)}`
+      );
+      job = await readApiJson(statusResponse, 'acompanhar a geração');
+      if (!statusResponse.ok) {
+        throw new Error(job.error || 'Não foi possível acompanhar a geração.');
+      }
+    }
+    consumeJob(job);
+    if (job.state === 'failed') {
+      throw new Error(job.error || 'A geração do lote falhou.');
+    }
+  } catch (error) {
+    addLog(`Falha: ${error.message}`, 'error');
+    failed += items.length - seenResults.size;
+  } finally {
+    activeQueueGenerationJobId = null;
+    spinner.style.display = 'none';
+    stopButton.hidden = true;
+    closeButton.disabled = false;
+    updateMLSelectionUI();
+    updateShopeeSelectionUI();
   }
 
-  spinner.style.display = 'none';
-  stopButton.hidden = true;
-  closeButton.disabled = false;
-  updateMLSelectionUI();
-  updateShopeeSelectionUI();
   await fetchPublicationQueue({
     render: true,
     feedback:
@@ -1711,9 +1771,9 @@ async function enqueueDealsForPublication(items = getSelectedPublicationDeals())
   });
   switchTab(elTabQueue, elPanelQueue);
 
-  if (stopQueueGenerationRequested && completed < items.length) {
+  if (job?.state === 'cancelled' || stopQueueGenerationRequested) {
     addLog(
-      `Geração interrompida: ${completed} de ${items.length} processado(s).`,
+      `Geração interrompida: ${seenResults.size} de ${items.length} processado(s).`,
       'warning'
     );
   } else if (failed > 0) {
@@ -2827,6 +2887,13 @@ function init() {
     stopQueueGenerationRequested = true;
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = 'Parando após o Story atual...';
+    if (activeQueueGenerationJobId) {
+      fetch(
+        '/api/publication-queue/generation/' +
+        encodeURIComponent(activeQueueGenerationJobId),
+        { method: 'DELETE' }
+      ).catch(() => {});
+    }
   });
 
   // Tab Switchers

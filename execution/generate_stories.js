@@ -126,6 +126,13 @@ async function main() {
   try {
     let failureCount = 0;
     for (let i = 0; i < deals.length; i++) {
+      if (
+        process.env.STORY_CANCEL_FILE &&
+        fs.existsSync(process.env.STORY_CANCEL_FILE)
+      ) {
+        console.log('Geração interrompida após o Story atual.');
+        break;
+      }
       const deal = deals[i];
       const rank = i + 1;
       const cleanTitle = deal.title.replace(/"/g, '&quot;');
@@ -135,19 +142,20 @@ async function main() {
       console.log(`[${rank}/${deals.length}] Processando: "${deal.title.substring(0, 40)}..."`);
 
       // Informações do cupom selecionado
-      const hasCoupon = !!data.selectedCoupon;
+      const selectedCoupon = deal.coupon || data.selectedCoupon;
+      const hasCoupon = !!selectedCoupon;
       const couponClass = hasCoupon ? 'show-coupon' : 'hide-coupon';
       const couponCode = hasCoupon
-        ? escapeHtml(data.selectedCoupon.code)
+        ? escapeHtml(selectedCoupon.code)
         : '';
       const couponRules = hasCoupon
-        ? escapeHtml(data.selectedCoupon.rules)
+        ? escapeHtml(selectedCoupon.rules)
         : '';
       const couponPrice = hasCoupon
-        ? escapeHtml(data.selectedCoupon.priceWithCoupon)
+        ? escapeHtml(selectedCoupon.priceWithCoupon)
         : '';
       const couponSavings = hasCoupon
-        ? escapeHtml(data.selectedCoupon.savings)
+        ? escapeHtml(selectedCoupon.savings)
         : '';
 
       let shippingClass = 'hide-shipping';
@@ -202,7 +210,10 @@ async function main() {
         .replace(/\{\{THEME_CLASS\}\}/g, themeClass);
 
       // Cria um arquivo HTML temporário local
-      const tempHtmlPath = path.join(__dirname, `temp_story_${rank}.html`);
+      const tempHtmlPath = path.join(
+        __dirname,
+        `temp_story_${process.pid}_${rank}.html`
+      );
       fs.writeFileSync(tempHtmlPath, htmlContent, 'utf-8');
 
       // Abre a página no browser

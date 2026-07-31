@@ -4,7 +4,7 @@ const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
 const archiver = require('archiver');
-const { exec, execFile, execSync } = require('child_process');
+const { exec, execFile, execSync, spawn } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./execution/category_helper.js');
 const {
   printSessionStatus,
@@ -169,6 +169,15 @@ let queueValidationJob = {
   result: null,
   error: null
 };
+let queueGenerationJob = {
+  state: 'idle',
+  processed: 0,
+  total: 0,
+  current: null,
+  results: [],
+  error: null
+};
+let queueGenerationProcess = null;
 const catalogRefreshInProgress = new Map();
 const GROUP_NAME =
   readEnv().WHATSAPP_GROUP_ID ||
@@ -846,31 +855,243 @@ app.get('/api/publication-queue', (req, res) => {
   });
 });
 
+function normalizePublicationPlatform(value) {
+  const platform = String(value || '').toLowerCase();
+  return ['ml', 'mercado livre', 'mercado_livre'].includes(platform)
+    ? 'mercado_livre'
+    : platform;
+}
+
+function publicationQueueInput(deal, platform, id) {
+  return {
+    id,
+    dealId: generateDealId({ ...deal, platform }),
+    platform,
+    title: deal.title,
+    originalPrice: deal.originalPrice,
+    currentPrice: deal.currentPrice,
+    discount: deal.discount,
+    image: deal.image,
+    productLink: deal.link
+  };
+}
+
+function runPublicationQueueGeneration(jobId, entries) {
+  if (queueGenerationJob.id !== jobId) return;
+  let previewQueue = loadPublicationQueue(publicationQueuePath);
+  const pending = [];
+
+  entries.forEach((entry, position) => {
+    const platform = normalizePublicationPlatform(entry.platform);
+    const deal = entry.deal || {};
+    try {
+      const result = enqueueOffer(
+        previewQueue,
+        publicationQueueInput(deal, platform)
+      );
+      previewQueue = result.queue;
+      if (result.created) {
+        pending.push({
+          clientId: String(entry.clientId || position),
+          position: position + 1,
+          platform,
+          deal,
+          queueItemId: result.item.id,
+          settled: false
+        });
+      } else {
+        queueGenerationJob.results.push({
+          clientId: String(entry.clientId || position),
+          position: position + 1,
+          title: deal.title,
+          success: true,
+          created: false
+        });
+        queueGenerationJob.processed += 1;
+      }
+    } catch (error) {
+      queueGenerationJob.results.push({
+        clientId: String(entry.clientId || position),
+        position: position + 1,
+        title: deal.title,
+        success: false,
+        error: error.message
+      });
+      queueGenerationJob.processed += 1;
+    }
+  });
+
+  if (pending.length === 0) {
+    queueGenerationJob.state = 'completed';
+    queueGenerationJob.completedAt = new Date().toISOString();
+    return;
+  }
+
+  const workDir = fs.mkdtempSync(
+    path.join(APP_RUNTIME_DIR, 'queue-generation-')
+  );
+  const selectionPath = path.join(workDir, 'selection.json');
+  const storiesDir = path.join(workDir, 'stories');
+  const cancelPath = path.join(workDir, 'cancel');
+  fs.mkdirSync(storiesDir, { recursive: true });
+  fs.writeFileSync(selectionPath, JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    deals: pending.map(item => item.deal)
+  }), 'utf-8');
+
+  const settle = (item, result) => {
+    if (item.settled) return;
+    item.settled = true;
+    queueGenerationJob.results.push({
+      clientId: item.clientId,
+      position: item.position,
+      title: item.deal.title,
+      ...result
+    });
+    queueGenerationJob.processed += 1;
+  };
+
+  const generatedFile = rank => fs.readdirSync(storiesDir)
+    .find(file => file.startsWith(`story_${rank}_`) && file.endsWith('.jpg'));
+
+  const saveGenerated = rank => {
+    const item = pending[rank - 1];
+    if (!item || item.settled) return;
+    const fileName = generatedFile(rank);
+    if (!fileName) return;
+    try {
+      const currentQueue = loadPublicationQueue(publicationQueuePath);
+      const result = enqueueOffer(
+        currentQueue,
+        publicationQueueInput(
+          item.deal,
+          item.platform,
+          item.queueItemId
+        )
+      );
+      if (result.created) {
+        fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
+        result.item.storyFile = `${result.item.id}.jpg`;
+        fs.copyFileSync(
+          path.join(storiesDir, fileName),
+          path.join(publicationQueueAssetsPath, result.item.storyFile)
+        );
+        savePublicationQueue(publicationQueuePath, result.queue);
+      }
+      settle(item, {
+        success: true,
+        created: result.created
+      });
+    } catch (error) {
+      settle(item, { success: false, error: error.message });
+    }
+  };
+
+  const failGenerated = (rank, message) => {
+    const item = pending[rank - 1];
+    if (item) settle(item, { success: false, error: message });
+  };
+
+  const outputBuffers = { stdout: '', stderr: '' };
+  const consumeOutput = (chunk, stream) => {
+    outputBuffers[stream] += chunk;
+    const lines = outputBuffers[stream].split(/\r?\n/);
+    outputBuffers[stream] = lines.pop() || '';
+    for (const line of lines) {
+      const started = line.match(/^\[(\d+)\/\d+\] Processando:/);
+      if (started) {
+        const item = pending[Number(started[1]) - 1];
+        if (item) {
+          queueGenerationJob.current = {
+            position: item.position,
+            title: item.deal.title
+          };
+        }
+      }
+      const saved = line.match(/story_(\d+)_discount_.*\.jpg/);
+      if (saved) saveGenerated(Number(saved[1]));
+      const failed = line.match(/item (\d+):\s*(.+)$/i);
+      if (failed) failGenerated(Number(failed[1]), failed[2]);
+    }
+  };
+
+  let finalized = false;
+  const finalize = processError => {
+    if (finalized) return;
+    finalized = true;
+    for (const stream of ['stdout', 'stderr']) {
+      if (outputBuffers[stream]) consumeOutput('\n', stream);
+    }
+    pending.forEach((item, index) => {
+      if (!item.settled && generatedFile(index + 1)) {
+        saveGenerated(index + 1);
+      }
+      if (!item.settled) {
+        settle(item, {
+          success: false,
+          error: queueGenerationJob.cancelRequested
+            ? 'Geração interrompida.'
+            : processError || 'O Story não foi gerado.'
+        });
+      }
+    });
+    queueGenerationJob.state = queueGenerationJob.cancelRequested
+      ? 'cancelled'
+      : 'completed';
+    queueGenerationJob.current = null;
+    queueGenerationJob.completedAt = new Date().toISOString();
+    queueGenerationJob.error = processError || null;
+    queueGenerationProcess = null;
+    fs.rmSync(workDir, { recursive: true, force: true });
+  };
+
+  queueGenerationProcess = spawn(
+    process.execPath,
+    [path.join(__dirname, 'execution', 'generate_stories.js'), selectionPath],
+    {
+      cwd: __dirname,
+      env: {
+        ...process.env,
+        STORIES_OUTPUT_DIR: storiesDir,
+        STORY_CANCEL_FILE: cancelPath
+      },
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    }
+  );
+  queueGenerationProcess.stdout.on('data', chunk =>
+    consumeOutput(chunk.toString(), 'stdout')
+  );
+  queueGenerationProcess.stderr.on('data', chunk =>
+    consumeOutput(chunk.toString(), 'stderr')
+  );
+  queueGenerationProcess.on('error', error => finalize(error.message));
+  queueGenerationProcess.on('close', code =>
+    finalize(code && !queueGenerationJob.cancelRequested
+      ? `O gerador terminou com código ${code}.`
+      : null)
+  );
+  queueGenerationJob.cancel = () => {
+    queueGenerationJob.cancelRequested = true;
+    fs.writeFileSync(cancelPath, 'stop', 'utf-8');
+  };
+  if (queueGenerationJob.cancelRequested) queueGenerationJob.cancel();
+}
+
 app.post(
   '/api/publication-queue',
   requirePublicationQueue,
   (req, res) => {
     try {
       const deal = req.body?.deal || {};
-      const platform = String(req.body?.platform || '').toLowerCase();
-      const normalizedPlatform = ['ml', 'mercado livre', 'mercado_livre']
-        .includes(platform)
-        ? 'mercado_livre'
-        : platform;
+      const normalizedPlatform = normalizePublicationPlatform(
+        req.body?.platform
+      );
       const queue = loadPublicationQueue(publicationQueuePath);
-      const result = enqueueOffer(queue, {
-        dealId: generateDealId({
-          ...deal,
-          platform: normalizedPlatform
-        }),
-        platform: normalizedPlatform,
-        title: deal.title,
-        originalPrice: deal.originalPrice,
-        currentPrice: deal.currentPrice,
-        discount: deal.discount,
-        image: deal.image,
-        productLink: deal.link
-      });
+      const result = enqueueOffer(
+        queue,
+        publicationQueueInput(deal, normalizedPlatform)
+      );
 
       if (result.created) {
         const { coupons } = loadAvailableDeals();
@@ -964,6 +1185,79 @@ app.patch(
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
+  }
+);
+
+app.post(
+  '/api/publication-queue/generation',
+  requirePublicationQueue,
+  (req, res) => {
+    const entries = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (entries.length < 1 || entries.length > 40) {
+      return res.status(400).json({
+        error: 'Selecione entre 1 e 40 ofertas.'
+      });
+    }
+    if (queueGenerationJob.state === 'running') {
+      return res.status(409).json({
+        error: 'Já existe um lote de Stories em geração.'
+      });
+    }
+    queueGenerationJob = {
+      id: crypto.randomUUID(),
+      state: 'running',
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+      processed: 0,
+      total: entries.length,
+      current: null,
+      results: [],
+      cancelRequested: false,
+      cancel: null,
+      error: null
+    };
+    setImmediate(() => {
+      try {
+        runPublicationQueueGeneration(queueGenerationJob.id, entries);
+      } catch (error) {
+        queueGenerationJob = {
+          ...queueGenerationJob,
+          state: 'failed',
+          current: null,
+          completedAt: new Date().toISOString(),
+          error: error.message
+        };
+      }
+    });
+    res.status(202).json(queueGenerationJob);
+  }
+);
+
+app.get(
+  '/api/publication-queue/generation/:jobId',
+  requirePublicationQueue,
+  (req, res) => {
+    if (queueGenerationJob.id !== req.params.jobId) {
+      return res.status(404).json({ error: 'Lote não encontrado.' });
+    }
+    const { cancel, ...job } = queueGenerationJob;
+    res.json(job);
+  }
+);
+
+app.delete(
+  '/api/publication-queue/generation/:jobId',
+  requirePublicationQueue,
+  (req, res) => {
+    if (queueGenerationJob.id !== req.params.jobId) {
+      return res.status(404).json({ error: 'Lote não encontrado.' });
+    }
+    if (queueGenerationJob.state === 'running') {
+      queueGenerationJob.cancelRequested = true;
+      queueGenerationJob.cancel?.();
+    }
+    const { cancel, ...job } = queueGenerationJob;
+    res.json(job);
   }
 );
 
