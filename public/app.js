@@ -1261,147 +1261,129 @@ function updateQueueSelection(visibleItems = null) {
   updateBatchSelection();
 }
 
-function renderPublicationQueue() {
-  updateQueueSummary();
-  const visibleItems = publicationQueueItems.filter(queueItemMatchesFilter);
-  elGridQueue.replaceChildren();
-
-  if (visibleItems.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-state';
-    empty.innerHTML = '<p>Nenhuma oferta corresponde a este filtro.</p>';
-    elGridQueue.appendChild(empty);
-    updateQueueSelection(visibleItems);
-    return;
-  }
-
-  for (const item of visibleItems) {
-    const processingState = item.affiliateProcessing?.state;
-    const status = getQueueStatusMeta(
-      processingState === 'claimed' ? 'processing' : item.status
-    );
-    const card = document.createElement('article');
-    card.className =
-      `queue-card ${status.className} platform-${item.platform} ${
-        selectedQueueItemIds.has(item.id) ? 'selected' : ''
-      }`;
-    card.dataset.itemId = item.id;
-
-    const marketplace = item.platform === 'shopee'
-      ? { name: 'Shopee', affiliateHost: 's.shopee.com.br' }
-      : { name: 'Mercado Livre', affiliateHost: 'meli.la' };
-    const affiliateForm = ['awaiting_affiliate', 'needs_review']
-      .includes(item.status)
-      ? `
-        <div class="queue-affiliate-form">
-          <label for="affiliate-${escapeQueueHtml(item.id)}">
-            Link gerado manualmente na ${marketplace.name}
-          </label>
-          <div class="queue-affiliate-row">
-            <input
-              id="affiliate-${escapeQueueHtml(item.id)}"
-              class="queue-affiliate-input"
-              type="url"
-              inputmode="url"
-              autocomplete="off"
-              placeholder="https://${marketplace.affiliateHost}/..."
-              value="${escapeQueueHtml(item.affiliateLink || '')}"
-            >
-            <button type="button" data-queue-action="save-link">
-              Validar link
-            </button>
-          </div>
-        </div>
-      `
-      : '';
-
-    const reviewMessage = item.reviewReason
-      ? `
-        <div class="queue-review-message">
-          <strong>Revisão necessária:</strong>
-          ${escapeQueueHtml(item.reviewReason)}
-          ${item.reviewUpdatedStory
-            ? `<button type="button" data-queue-action="approve-review">
-              Aprovar Story atualizado
-            </button>`
-            : ''}
-        </div>
-      `
-      : '';
-
-    const readyActions = item.status === 'ready'
-      ? `
-        <div class="queue-ready-actions">
-          <button type="button" data-queue-action="copy-title">
-            Copiar título
-          </button>
-          <button type="button" data-queue-action="copy-caption">
-            Copiar legenda
-          </button>
-          <button type="button" data-queue-action="copy-link">
-            2. Copiar link afiliado
-          </button>
-          <button type="button" class="is-primary" data-queue-action="share-story">
-            3. Enviar Story ao Instagram
-          </button>
-          <button type="button" data-queue-action="published">
-            4. Marcar publicada
+function buildQueueCardHTML(item) {
+  const processingState = item.affiliateProcessing?.state;
+  const status = getQueueStatusMeta(
+    processingState === 'claimed' ? 'processing' : item.status
+  );
+  const marketplace = item.platform === 'shopee'
+    ? { name: 'Shopee', affiliateHost: 's.shopee.com.br' }
+    : { name: 'Mercado Livre', affiliateHost: 'meli.la' };
+  const affiliateForm = ['awaiting_affiliate', 'needs_review']
+    .includes(item.status)
+    ? `
+      <div class="queue-affiliate-form">
+        <label for="affiliate-${escapeQueueHtml(item.id)}">
+          Link gerado manualmente na ${marketplace.name}
+        </label>
+        <div class="queue-affiliate-row">
+          <input
+            id="affiliate-${escapeQueueHtml(item.id)}"
+            class="queue-affiliate-input"
+            type="url"
+            inputmode="url"
+            autocomplete="off"
+            placeholder="https://${marketplace.affiliateHost}/..."
+            value="${escapeQueueHtml(item.affiliateLink || '')}"
+          >
+          <button type="button" data-queue-action="save-link">
+            Validar link
           </button>
         </div>
-      `
-      : '';
+      </div>
+    `
+    : '';
 
-    const processingMessage = item.affiliateProcessing?.lastError
-      ? `
-        <div class="queue-processing-message">
-          <strong>${escapeQueueHtml(
-            item.affiliateProcessing.lastError.code || 'Erro'
-          )}:</strong>
-          ${escapeQueueHtml(item.affiliateProcessing.lastError.message || '')}
-        </div>
-      `
-      : '';
+  const reviewMessage = item.reviewReason
+    ? `
+      <div class="queue-review-message">
+        <strong>Revisão necessária:</strong>
+        ${escapeQueueHtml(item.reviewReason)}
+        ${item.reviewUpdatedStory
+          ? `<button type="button" data-queue-action="approve-review">
+            Aprovar Story atualizado
+          </button>`
+          : ''}
+      </div>
+    `
+    : '';
 
-    const couponDetails = item.coupon
-      ? `
-        <div class="queue-coupon">
-          <span>Cupom confirmado: <strong>${escapeQueueHtml(
-            item.coupon.code
-          )}</strong></span>
-          <span>Com cupom: <strong>${escapeQueueHtml(
-            item.coupon.priceWithCoupon
-          )}</strong></span>
-        </div>
-      `
-      : '';
+  const readyActions = item.status === 'ready'
+    ? `
+      <div class="queue-ready-actions">
+        <button type="button" data-queue-action="copy-title">
+          Copiar título
+        </button>
+        <button type="button" data-queue-action="copy-caption">
+          Copiar legenda
+        </button>
+        <button type="button" data-queue-action="copy-link">
+          2. Copiar link afiliado
+        </button>
+        <button type="button" class="is-primary" data-queue-action="share-story">
+          3. Enviar Story ao Instagram
+        </button>
+        <button type="button" data-queue-action="published">
+          4. Marcar publicada
+        </button>
+      </div>
+    `
+    : '';
 
-    const secondaryAction = [
-      'awaiting_affiliate',
-      'ready',
-      'needs_review'
-    ].includes(item.status)
+  const processingMessage = item.affiliateProcessing?.lastError
+    ? `
+      <div class="queue-processing-message">
+        <strong>${escapeQueueHtml(
+          item.affiliateProcessing.lastError.code || 'Erro'
+        )}:</strong>
+        ${escapeQueueHtml(item.affiliateProcessing.lastError.message || '')}
+      </div>
+    `
+    : '';
+
+  const couponDetails = item.coupon
+    ? `
+      <div class="queue-coupon">
+        <span>Cupom confirmado: <strong>${escapeQueueHtml(
+          item.coupon.code
+        )}</strong></span>
+        <span>Com cupom: <strong>${escapeQueueHtml(
+          item.coupon.priceWithCoupon
+        )}</strong></span>
+      </div>
+    `
+    : '';
+
+  const secondaryAction = [
+    'awaiting_affiliate',
+    'ready',
+    'needs_review'
+  ].includes(item.status)
+    ? `
+      <button type="button" class="queue-text-action" data-queue-action="discarded">
+        Descartar oferta
+      </button>
+    `
+    : item.status === 'discarded'
       ? `
-        <button type="button" class="queue-text-action" data-queue-action="discarded">
-          Descartar oferta
+        <button type="button" class="queue-text-action" data-queue-action="restore">
+          Restaurar oferta
         </button>
       `
-      : item.status === 'discarded'
-        ? `
-          <button type="button" class="queue-text-action" data-queue-action="restore">
-            Restaurar oferta
-          </button>
-        `
-        : '';
-
-    const completedDetails = item.status === 'published'
-      ? `
-        <p class="queue-completed-at">
-          Publicada em ${new Date(item.publishedAt).toLocaleString('pt-BR')}
-        </p>
-      `
       : '';
 
-    card.innerHTML = `
+  const completedDetails = item.status === 'published'
+    ? `
+      <p class="queue-completed-at">
+        Publicada em ${new Date(item.publishedAt).toLocaleString('pt-BR')}
+      </p>
+    `
+    : '';
+
+  return {
+    status,
+    marketplace,
+    innerHTML: `
       <div class="card-checkbox queue-card-checkbox">
         <label class="checkbox-container"
           aria-label="Selecionar ${escapeQueueHtml(item.title)}">
@@ -1418,6 +1400,8 @@ function renderPublicationQueue() {
           loading="lazy"
           decoding="async"
           fetchpriority="low"
+          width="220"
+          height="391"
         >
       </div>
       <div class="queue-content">
@@ -1451,15 +1435,96 @@ function renderPublicationQueue() {
         ${completedDetails}
         <div class="queue-secondary-actions">${secondaryAction}</div>
       </div>
-    `;
-    const queueCheckbox = card.querySelector('[data-queue-select]');
-    queueCheckbox.addEventListener('change', () => {
-      if (queueCheckbox.checked) selectedQueueItemIds.add(item.id);
-      else selectedQueueItemIds.delete(item.id);
-      updateQueueSelection(visibleItems);
-    });
-    elGridQueue.appendChild(card);
+    `
+  };
+}
+
+function renderPublicationQueue() {
+  updateQueueSummary();
+  const visibleItems = publicationQueueItems.filter(queueItemMatchesFilter);
+
+  if (visibleItems.length === 0) {
+    elGridQueue.replaceChildren();
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.innerHTML = '<p>Nenhuma oferta corresponde a este filtro.</p>';
+    elGridQueue.appendChild(empty);
+    updateQueueSelection(visibleItems);
+    return;
   }
+
+  // --- Diff incremental: reutiliza cards existentes no DOM ---
+  const existingCards = new Map();
+  for (const card of elGridQueue.querySelectorAll('.queue-card[data-item-id]')) {
+    existingCards.set(card.dataset.itemId, card);
+  }
+
+  // Limpa empty-state se presente
+  const emptyState = elGridQueue.querySelector('.empty-state');
+  if (emptyState) emptyState.remove();
+
+  const newIds = new Set(visibleItems.map(i => i.id));
+
+  // Remover cards que não existem mais nos dados
+  for (const [id, card] of existingCards) {
+    if (!newIds.has(id)) {
+      card.remove();
+      existingCards.delete(id);
+    }
+  }
+
+  // Adicionar novos / atualizar existentes (preservando imagens carregadas)
+  let prevNode = null;
+  for (const item of visibleItems) {
+    let card = existingCards.get(item.id);
+    const built = buildQueueCardHTML(item);
+
+    if (card) {
+      // Atualizar className (status / seleção podem mudar)
+      const newClass =
+        `queue-card ${built.status.className} platform-${item.platform} ${
+          selectedQueueItemIds.has(item.id) ? 'selected' : ''
+        }`;
+      if (card.className !== newClass) card.className = newClass;
+
+      // Atualizar texto/status sem destruir o <img> (evita piscar)
+      const statusEl = card.querySelector('.queue-status');
+      if (statusEl) {
+        statusEl.className = `queue-status ${built.status.className}`;
+        statusEl.textContent = built.status.label;
+      }
+
+      // Atualizar story URL só se mudou (evita re-download)
+      const img = card.querySelector('.queue-story-preview');
+      const newSrc = item.storyUrl || '';
+      if (img && img.getAttribute('src') !== newSrc) {
+        img.src = newSrc;
+      }
+    } else {
+      // Criar card novo
+      card = document.createElement('article');
+      card.className =
+        `queue-card ${built.status.className} platform-${item.platform} ${
+          selectedQueueItemIds.has(item.id) ? 'selected' : ''
+        }`;
+      card.dataset.itemId = item.id;
+      card.innerHTML = built.innerHTML;
+      const queueCheckbox = card.querySelector('[data-queue-select]');
+      queueCheckbox.addEventListener('change', () => {
+        if (queueCheckbox.checked) selectedQueueItemIds.add(item.id);
+        else selectedQueueItemIds.delete(item.id);
+        updateQueueSelection(visibleItems);
+      });
+    }
+
+    // Garantir ordem correta no DOM
+    const expectedNext = prevNode ? prevNode.nextSibling : elGridQueue.firstChild;
+    if (card !== expectedNext) {
+      elGridQueue.insertBefore(card, expectedNext);
+    }
+    prevNode = card;
+  }
+
   updateQueueSelection(visibleItems);
 }
 
@@ -2151,7 +2216,7 @@ function renderMLDeals(deals) {
     card.innerHTML = `
       ${checkboxHtml}
       <div class="card-image-box">
-        <img class="card-image" src="${getDealImageUrl(deal.image)}" alt="${displayTitle}" loading="lazy" decoding="async">
+        <img class="card-image" src="${getDealImageUrl(deal.image)}" alt="${displayTitle}" loading="lazy" decoding="async" width="240" height="240">
         <span class="card-discount-badge">${deal.discount}% OFF</span>
       </div>
       <div class="card-details">
@@ -2288,7 +2353,7 @@ function renderAmazonDeals(deals) {
     card.innerHTML = `
       ${checkboxHtml}
       <div class="card-image-box">
-        <img class="card-image" src="${getDealImageUrl(deal.image)}" alt="${displayTitle}" loading="lazy" decoding="async">
+        <img class="card-image" src="${getDealImageUrl(deal.image)}" alt="${displayTitle}" loading="lazy" decoding="async" width="240" height="240">
         <span class="card-discount-badge">${deal.discount}% OFF</span>
       </div>
       <div class="card-details">
@@ -2381,7 +2446,7 @@ function renderShopeeDeals(deals) {
       </div>
       <div class="card-image-box">
         <img class="card-image" src="${getDealImageUrl(deal.image)}"
-          alt="${title}" loading="lazy" decoding="async">
+          alt="${title}" loading="lazy" decoding="async" width="240" height="240">
         <span class="card-discount-badge">${Number(deal.discount) || 0}% OFF</span>
       </div>
       <div class="card-details">

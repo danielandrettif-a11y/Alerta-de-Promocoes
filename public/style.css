@@ -925,7 +925,7 @@ select:focus-visible {
 
 .deal-card {
   content-visibility: auto;
-  contain-intrinsic-size: 520px;
+  contain-intrinsic-size: auto 520px;
   background: #171120;
   border: 1px solid var(--border-color);
   border-radius: 25px;
@@ -1813,9 +1813,12 @@ select:focus-visible {
   background: transparent !important;
 }
 
-/* Transições na filtragem de cards de ofertas */
-.deal-card {
-  transition: opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+/* Transições na filtragem de cards de ofertas — apenas desktop,
+   para não sobrescrever o transition:none do mobile (max-width:768px) */
+@media (min-width: 769px) {
+  .deal-card {
+    transition: opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+  }
 }
 
 .deal-card.hidden-filter {
@@ -3107,7 +3110,7 @@ select:focus-visible {
 
 .queue-card {
   content-visibility: auto;
-  contain-intrinsic-size: 520px;
+  contain-intrinsic-size: auto 520px;
   display: grid;
   grid-template-columns: minmax(170px, 240px) minmax(0, 1fr);
   gap: 24px;
@@ -3885,10 +3888,17 @@ select:focus-visible {
   .deal-card,
   .deal-card.amazon-theme,
   .deal-card.shopee-theme {
+    content-visibility: visible;
+    contain-intrinsic-size: auto;
     display: grid;
     grid-template-columns: 112px minmax(0, 1fr);
     min-height: 176px;
     border-radius: 16px;
+  }
+
+  .queue-card {
+    content-visibility: visible;
+    contain-intrinsic-size: auto;
   }
 
   .card-image-box {
