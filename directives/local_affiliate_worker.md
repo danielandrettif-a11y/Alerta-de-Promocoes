@@ -18,16 +18,18 @@ servidor.
 
 1. O painel adiciona ofertas à fila e gera os Stories existentes.
 2. A extensão envia heartbeat e reserva até o tamanho de lote escolhido.
-3. Para Mercado Livre, uma aba local abre o produto, usa o controle
+3. A extensão abre uma janela de trabalho separada e minimizada, reutilizada
+   durante todo o lote.
+4. Para Mercado Livre, uma aba nessa janela abre o produto, usa o controle
    `Compartilhar`, extrai o link `meli.la`, lê o preço exibido e procura um
    cupom candidato confirmado na própria página.
-4. Para Shopee, uma aba abre `Oferta > Link personalizado`, preenche o produto
+5. Para Shopee, outra aba abre `Oferta > Link personalizado`, preenche o produto
    e extrai o link `s.shopee.com.br`.
-5. O servidor valida o link e compara o preço observado com o Story.
-6. O item fica `ready` ou `needs_review`.
-7. Quando houver cupom comprovado para o produto, o servidor recria o Story
+6. O servidor valida o link e compara o preço observado com o Story.
+7. O item fica `ready` ou `needs_review`.
+8. Quando houver cupom comprovado para o produto, o servidor recria o Story
    com o preço normal, o preço com cupom e o código.
-8. Itens prontos podem formar um lote e um ZIP persistente.
+9. Itens prontos podem formar um lote e um ZIP persistente.
 
 ## Segurança e falhas
 
@@ -35,7 +37,8 @@ servidor.
 - Reservas pertencem ao `deviceId`, expiram e voltam à fila.
 - Dois dispositivos não recebem o mesmo item.
 - `AUTH_REQUIRED` não consome tentativa: o lote pausa e o usuário conclui
-  login, CAPTCHA ou segundo fator manualmente.
+  login, CAPTCHA ou segundo fator manualmente. Nesse caso, a janela de trabalho
+  é restaurada e trazida para frente.
 - Outros erros respeitam `LOCAL_AFFILIATE_MAX_ATTEMPTS`.
 - O worker não contorna bloqueios nem usa endpoints internos dos marketplaces.
 - Se a página não expuser um preço confiável, o link continua válido sem gerar

@@ -1,6 +1,7 @@
-const EXTENSION_VERSION = '1.4.1';
+const EXTENSION_VERSION = '1.5.0';
 const SHOPEE_CONVERTER_URL =
   'https://affiliate.shopee.com.br/offer/custom_link';
+const WORKER_WINDOW_KEY = 'affiliateWorkerWindowId';
 const DEFAULTS = {
   serverUrl: '',
   token: '',
@@ -113,6 +114,66 @@ async function findOrCreateShopeeTab() {
     active: false
   });
   return { ...tab, createdByWorker: true };
+}
+
+function tabMatchesPlatform(tab, platform) {
+  try {
+    const hostname = new URL(tab.url || '').hostname;
+    return platform === 'shopee'
+      ? hostname === 'affiliate.shopee.com.br'
+      : hostname === 'www.mercadolivre.com.br' ||
+          hostname === 'produto.mercadolivre.com.br';
+  } catch {
+    return false;
+  }
+}
+
+async function getWorkerWindow() {
+  const stored = await chrome.storage.session.get(WORKER_WINDOW_KEY);
+  const windowId = stored[WORKER_WINDOW_KEY];
+  if (!Number.isInteger(windowId)) return null;
+  try {
+    return await chrome.windows.get(windowId, { populate: true });
+  } catch {
+    await chrome.storage.session.remove(WORKER_WINDOW_KEY);
+    return null;
+  }
+}
+
+async function getOrCreateWorkerTab(platform) {
+  const url = platform === 'shopee'
+    ? SHOPEE_CONVERTER_URL
+    : 'https://www.mercadolivre.com.br/';
+  let workerWindow = await getWorkerWindow();
+  if (!workerWindow) {
+    workerWindow = await chrome.windows.create({
+      url,
+      type: 'normal',
+      focused: false,
+      state: 'minimized'
+    });
+    await chrome.storage.session.set({
+      [WORKER_WINDOW_KEY]: workerWindow.id
+    });
+  }
+  const tabs = workerWindow.tabs ||
+    await chrome.tabs.query({ windowId: workerWindow.id });
+  const existing = tabs.find(tab => tabMatchesPlatform(tab, platform));
+  const tab = existing || await chrome.tabs.create({
+    windowId: workerWindow.id,
+    url,
+    active: false
+  });
+  await chrome.windows.update(workerWindow.id, { state: 'minimized' });
+  return tab;
+}
+
+async function closeWorkerWindow() {
+  const workerWindow = await getWorkerWindow();
+  if (workerWindow?.id) {
+    await chrome.windows.remove(workerWindow.id).catch(() => {});
+  }
+  await chrome.storage.session.remove(WORKER_WINDOW_KEY);
 }
 
 function samePageUrl(leftValue, rightValue) {
@@ -246,11 +307,11 @@ async function processJob(job, settings, tab) {
     return {
       success: false,
       code: 'AUTH_REQUIRED',
-      message: 'O Mercado Livre solicitou autenticação.'
+      message: `${shopee ? 'A Shopee' : 'O Mercado Livre'} solicitou autenticação.`
     };
   }
-  await chrome.windows.update(loadedTab.windowId, { focused: true });
   await chrome.tabs.update(tab.id, { active: true });
+  await chrome.windows.update(loadedTab.windowId, { state: 'minimized' });
   await new Promise(resolve => setTimeout(resolve, 750));
   if (shopee) {
     return sendContentMessage(tab.id, {
@@ -316,8 +377,8 @@ async function processQueue() {
           ? 'shopee'
           : 'mercado_livre';
         tabs[platform] ||= platform === 'shopee'
-          ? await findOrCreateShopeeTab()
-          : await findOrCreateMercadoLivreTab();
+          ? await getOrCreateWorkerTab('shopee')
+          : await getOrCreateWorkerTab('mercado_livre');
         const tab = tabs[platform];
         const result = await processJob(job, settings, tab);
         if (!result?.success) {
@@ -326,6 +387,10 @@ async function processQueue() {
           await reportFailure(job, code, message);
           if (code === 'AUTH_REQUIRED') {
             stopRequested = true;
+            await chrome.windows.update(tab.windowId, {
+              state: 'normal',
+              focused: true
+            });
             await chrome.tabs.update(tab.id, { active: true });
             await persistState({
               status: 'auth_required',
@@ -383,12 +448,7 @@ async function processQueue() {
     return workerState;
     } finally {
       if (!workerState.authRequired) {
-        const workerTabIds = Object.values(tabs)
-          .filter(tab => tab.createdByWorker && tab.id)
-          .map(tab => tab.id);
-        await Promise.allSettled(
-          workerTabIds.map(tabId => chrome.tabs.remove(tabId))
-        );
+        await closeWorkerWindow();
       }
     }
   })().finally(() => {
@@ -431,11 +491,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.type === 'OPEN_MERCADO_LIVRE') {
       const tab = await findOrCreateMercadoLivreTab();
+      await chrome.windows.update(tab.windowId, {
+        state: 'normal',
+        focused: true
+      });
       await chrome.tabs.update(tab.id, { active: true });
       return { success: true };
     }
     if (message.type === 'OPEN_SHOPEE') {
       const tab = await findOrCreateShopeeTab();
+      await chrome.windows.update(tab.windowId, {
+        state: 'normal',
+        focused: true
+      });
       await chrome.tabs.update(tab.id, { active: true });
       return { success: true };
     }
