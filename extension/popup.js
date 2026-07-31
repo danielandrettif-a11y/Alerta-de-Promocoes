@@ -13,6 +13,7 @@ const elements = {
   stop: document.getElementById('stop'),
   test: document.getElementById('test'),
   openMl: document.getElementById('open-ml'),
+  openShopee: document.getElementById('open-shopee'),
   options: document.getElementById('options')
 };
 
@@ -79,6 +80,9 @@ elements.test.addEventListener('click', () =>
 );
 elements.openMl.addEventListener('click', () =>
   runAction(elements.openMl, 'OPEN_MERCADO_LIVRE')
+);
+elements.openShopee.addEventListener('click', () =>
+  runAction(elements.openShopee, 'OPEN_SHOPEE')
 );
 elements.options.addEventListener('click', () =>
   chrome.runtime.openOptionsPage()

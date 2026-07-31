@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Promo Automator - Links Mercado Livre",
-  "version": "1.2.0",
-  "description": "Gera links meli.la usando a sessão local do Mercado Livre.",
+  "name": "Alerta de Descontos - Links Afiliados",
+  "version": "1.3.0",
+  "description": "Gera links afiliados usando suas sessões locais.",
   "permissions": [
     "storage",
     "tabs",
@@ -12,7 +12,8 @@
   ],
   "host_permissions": [
     "https://www.mercadolivre.com.br/*",
-    "https://produto.mercadolivre.com.br/*"
+    "https://produto.mercadolivre.com.br/*",
+    "https://affiliate.shopee.com.br/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -33,6 +34,15 @@
       ],
       "js": [
         "content/mercado_livre.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://affiliate.shopee.com.br/*"
+      ],
+      "js": [
+        "content/shopee.js"
       ],
       "run_at": "document_idle"
     }

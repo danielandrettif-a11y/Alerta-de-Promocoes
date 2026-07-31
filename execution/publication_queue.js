@@ -100,10 +100,11 @@ function normalizeHttpsUrl(rawValue, fieldName) {
   return parsed;
 }
 
-function validateAffiliateLink(rawValue) {
+function validateAffiliateLink(rawValue, platform = 'mercado_livre') {
   const parsed = normalizeHttpsUrl(rawValue, 'Link afiliado');
-  if (parsed.hostname.toLowerCase() !== 'meli.la') {
-    throw new Error('Use um link afiliado oficial no dominio meli.la.');
+  const hostname = platform === 'shopee' ? 's.shopee.com.br' : 'meli.la';
+  if (parsed.hostname.toLowerCase() !== hostname) {
+    throw new Error(`Use um link afiliado oficial no dominio ${hostname}.`);
   }
   if (!parsed.pathname || parsed.pathname === '/') {
     throw new Error('O link afiliado precisa conter o codigo do produto.');
@@ -114,14 +115,19 @@ function validateAffiliateLink(rawValue) {
   return parsed.toString();
 }
 
-function normalizeProductLink(rawValue) {
+function normalizeProductLink(rawValue, platform) {
   const parsed = normalizeHttpsUrl(rawValue, 'Link do produto');
   const hostname = parsed.hostname.toLowerCase();
-  if (
-    hostname !== 'mercadolivre.com.br' &&
-    !hostname.endsWith('.mercadolivre.com.br')
-  ) {
-    throw new Error('O produto precisa apontar para o Mercado Livre Brasil.');
+  const valid = platform === 'shopee'
+    ? ['shopee.com.br', 'www.shopee.com.br'].includes(hostname)
+    : hostname === 'mercadolivre.com.br' ||
+      hostname.endsWith('.mercadolivre.com.br');
+  if (!valid) {
+    throw new Error(
+      `O produto precisa apontar para ${
+        platform === 'shopee' ? 'a Shopee Brasil' : 'o Mercado Livre Brasil'
+      }.`
+    );
   }
   return parsed.toString();
 }
@@ -147,8 +153,8 @@ function enqueueOffer(queue, input, now = new Date()) {
   }
 
   const platform = String(input.platform || '').toLowerCase();
-  if (platform !== 'mercado_livre') {
-    throw new Error('A fila afiliada aceita somente ofertas do Mercado Livre.');
+  if (!['mercado_livre', 'shopee'].includes(platform)) {
+    throw new Error('A fila afiliada aceita Mercado Livre ou Shopee.');
   }
 
   const timestamp = now.toISOString();
@@ -162,7 +168,7 @@ function enqueueOffer(queue, input, now = new Date()) {
     currentPrice: String(input.currentPrice || ''),
     discount: Number(input.discount) || 0,
     image: String(input.image || ''),
-    productLink: normalizeProductLink(input.productLink),
+    productLink: normalizeProductLink(input.productLink, platform),
     storyFile: String(input.storyFile || ''),
     affiliateLink: null,
     affiliateProcessing: emptyAffiliateProcessing(),
@@ -190,7 +196,7 @@ function setAffiliateLink(
     throw new Error('Este item nao aceita mais alteracoes no link.');
   }
 
-  item.affiliateLink = validateAffiliateLink(rawLink);
+  item.affiliateLink = validateAffiliateLink(rawLink, item.platform);
   item.updatedAt = now.toISOString();
   item.reviewReason = options.reviewReason || null;
   item.latestPrice = options.latestPrice || null;

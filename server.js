@@ -118,6 +118,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 const mlDealsReportPath = path.join(__dirname, 'mercado_livre_deals_report.json');
 const amazonDealsReportPath = path.join(__dirname, 'amazon_deals_report.json');
+const shopeeDealsReportPath = path.join(__dirname, 'shopee_deals_report.json');
 const couponsPath = path.join(__dirname, 'coupons.json');
 ensureSessionDirectories();
 const historyPath = path.join(APP_RUNTIME_DIR, 'published_history.json');
@@ -213,6 +214,10 @@ app.get('/api/data-status', (req, res) => {
       readGeneratedAt(amazonDealsReportPath),
       staleAfterMinutes
     ),
+    shopee: getFreshness(
+      readGeneratedAt(shopeeDealsReportPath),
+      Number(readEnv().SHOPEE_STALE_AFTER_MINUTES) || 1560
+    ),
     publishing: {
       enabled: process.env.AUTO_RUN_ENABLED === 'true',
       targetPerHour,
@@ -273,6 +278,12 @@ if (whatsappEnabled) {
 function inferCategory(title) {
   const info = inferCategoryAndSub(title);
   return `${info.icon} ${info.category} > ${info.subcategory}`;
+}
+
+function getPlatformTag(platform) {
+  if (platform === 'amazon') return '🟡 *AMAZON*';
+  if (platform === 'shopee') return '🟠 *SHOPEE*';
+  return '🛍️ *MERCADO LIVRE*';
 }
 
 // GET /api/deals - Retorna a lista de promoções do Mercado Livre e cupons do dia
@@ -429,16 +440,47 @@ app.use('/api/local-affiliate-worker', (req, res, next) => {
   next();
 });
 
+// GET /api/shopee-deals - Retorna o ultimo feed importado da Shopee
+app.get('/api/shopee-deals', (req, res) => {
+  let deals = [];
+  let generatedAt = null;
+
+  if (fs.existsSync(shopeeDealsReportPath)) {
+    try {
+      const parsedData = JSON.parse(
+        fs.readFileSync(shopeeDealsReportPath, 'utf-8')
+      );
+      deals = parsedData.deals || [];
+      generatedAt = parsedData.generatedAt || null;
+    } catch (err) {
+      console.error('Erro ao ler ofertas da Shopee:', err);
+    }
+  }
+
+  res.json({
+    deals,
+    generatedAt,
+    freshness: getFreshness(
+      generatedAt,
+      Number(readEnv().SHOPEE_STALE_AFTER_MINUTES) || 1560
+    )
+  });
+});
+
 function applyAffiliateLinkToQueue(
   queue,
   item,
   affiliateLink,
   observedPrice
 ) {
-  const { deals } = loadAvailableDeals();
+  let deals = loadAvailableDeals().deals;
+  if (item.platform === 'shopee' && fs.existsSync(shopeeDealsReportPath)) {
+    deals = JSON.parse(
+      fs.readFileSync(shopeeDealsReportPath, 'utf-8')
+    ).deals || [];
+  }
   const currentDeal = deals.find(deal =>
-    deal.platform === 'mercado_livre' &&
-    generateDealId(deal) === item.dealId
+    generateDealId({ ...deal, platform: item.platform }) === item.dealId
   );
   let reviewReason = null;
   let latestPrice = null;
@@ -766,6 +808,7 @@ app.post(
         success: true,
         jobs: result.jobs.map(item => ({
           id: item.id,
+          platform: item.platform,
           title: item.title,
           productLink: item.productLink,
           claimExpiresAt: item.affiliateProcessing.claimExpiresAt,
@@ -1025,6 +1068,32 @@ app.post('/api/scrape-amazon', (req, res) => {
   });
 });
 
+// POST /api/refresh-shopee - Verifica o ETag e importa somente se mudou
+app.post('/api/refresh-shopee', async (req, res) => {
+  try {
+    await runExecutionScript('shopee_refresh.js');
+    const parsedData = JSON.parse(
+      fs.readFileSync(shopeeDealsReportPath, 'utf-8')
+    );
+    res.json({
+      success: true,
+      data: {
+        deals: parsedData.deals || [],
+        generatedAt: parsedData.generatedAt || null,
+        freshness: getFreshness(
+          parsedData.generatedAt,
+          Number(readEnv().SHOPEE_STALE_AFTER_MINUTES) || 1560
+        )
+      }
+    });
+  } catch (error) {
+    console.error(`Erro ao atualizar ofertas da Shopee: ${error.message}`);
+    res.status(500).json({
+      error: `Falha ao atualizar ofertas da Shopee: ${error.message}`
+    });
+  }
+});
+
 // GET /api/proxy-image - Proxy para baixar imagens de domínios externos e evitar problemas de CORS no Canvas
 app.get('/api/proxy-image', (req, res) => {
   const imageUrl = req.query.url;
@@ -1035,7 +1104,8 @@ app.get('/api/proxy-image', (req, res) => {
   const allowedHosts = [
     'mlstatic.com',
     'media-amazon.com',
-    'ssl-images-amazon.com'
+    'ssl-images-amazon.com',
+    'cf.shopee.com.br'
   ];
   const parseAllowedUrl = value => {
     try {
@@ -1484,7 +1554,7 @@ app.post('/api/generate', async (req, res) => {
       }
 
       // Prepara mensagem de legenda formatada
-      const platformTag = deal.platform === 'amazon' ? '🟡 *AMAZON*' : '🛍️ *MERCADO LIVRE*';
+      const platformTag = getPlatformTag(deal.platform);
       const category = inferCategory(deal.title);
       
       let comparison = deal.comparison || null;
@@ -1703,7 +1773,8 @@ async function refreshDealsData() {
   try {
     const results = await Promise.allSettled([
       runExecutionScript('mercado_livre_deals.js'),
-      runExecutionScript('amazon_deals.js')
+      runExecutionScript('amazon_deals.js'),
+      runExecutionScript('shopee_refresh.js')
     ]);
     const failed = results.filter(result => result.status === 'rejected');
     if (failed.length > 0) {
@@ -1832,9 +1903,7 @@ async function publishNextAutomaticOffer() {
     }
 
     const storyImagePath = generateStory(deal, coupons);
-    const platformTag = deal.platform === 'amazon'
-      ? '🟡 *AMAZON*'
-      : '🛍️ *MERCADO LIVRE*';
+    const platformTag = getPlatformTag(deal.platform);
     const category = inferCategory(deal.title);
     const wppMessage = `🔥 *OFERTA ENCONTRADA!*\n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;
     const msgId = await whatsapp.sendOffer(

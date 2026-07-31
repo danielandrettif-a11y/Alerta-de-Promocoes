@@ -159,6 +159,33 @@ test('persiste a fila e resume os estados', () => {
   );
 });
 
+test('aceita produto e link afiliado oficiais da Shopee', () => {
+  const created = enqueueOffer(emptyQueue(), sampleOffer({
+    platform: 'shopee',
+    productLink: 'https://shopee.com.br/produto-i.123.456'
+  }));
+  const ready = setAffiliateLink(
+    created.queue,
+    created.item.id,
+    'https://s.shopee.com.br/AUso2xdRXP'
+  );
+  assert.equal(ready.item.status, STATUSES.READY);
+  assert.throws(
+    () => validateAffiliateLink(
+      'https://s.shopee.com.br.example.com/AUso2xdRXP',
+      'shopee'
+    ),
+    /s\.shopee\.com\.br/
+  );
+  assert.throws(
+    () => enqueueOffer(emptyQueue(), sampleOffer({
+      platform: 'shopee',
+      productLink: 'https://example.com/produto'
+    })),
+    /Shopee Brasil/
+  );
+});
+
 test('limpa somente ofertas descartadas', () => {
   const first = enqueueOffer(emptyQueue(), sampleOffer());
   const second = enqueueOffer(

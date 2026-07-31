@@ -1,10 +1,8 @@
-# Promo Automator — extensão de links Mercado Livre
+# Alerta de Descontos — extensão de links afiliados
 
-Extensão Manifest V3 para Chrome e Edge. Ela usa a sessão local já autenticada
-no Mercado Livre e envia ao servidor somente identificação do dispositivo,
-estado do trabalho, erros operacionais, o link público `meli.la` gerado e o
-preço à vista exibido na página. O servidor solicita revisão quando esse preço
-difere do Story.
+Extensão Manifest V3 para Chrome e Edge. Ela usa as sessões locais do Mercado
+Livre e da Shopee e envia ao servidor somente identificação do dispositivo,
+estado do trabalho, erros operacionais e o link afiliado público gerado.
 
 A permissão `debugger` é usada por alguns milissegundos somente para enviar um
 clique nativo ao botão **Compartilhar**, exigido pelo Mercado Livre. A extensão
@@ -44,6 +42,7 @@ Faça o deploy e confirme que o painel abre normalmente por HTTPS.
 4. Abra o popup e clique em **Testar conexão**.
 5. Clique em **Abrir Mercado Livre**, entre na conta e confirme que a barra de
    afiliados aparece em uma página de produto.
+6. Clique em **Abrir Shopee** e entre no portal de afiliados.
 
 ## Processar a fila
 
@@ -67,5 +66,5 @@ mudança de servidor.
 ## Dados que não saem do navegador
 
 Cookies, login, senha, token de sessão, localStorage e códigos de segundo fator
-do Mercado Livre não são lidos, exportados ou enviados. O token do worker fica
+dos marketplaces não são lidos, exportados ou enviados. O token do worker fica
 em `chrome.storage.local` e autentica somente os endpoints próprios do worker.

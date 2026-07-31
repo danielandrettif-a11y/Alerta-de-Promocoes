@@ -10,6 +10,7 @@ const {
   isUsableLabelOption,
   parsePriceText
 } = require('../extension/content/mercado_livre.js');
+const shopee = require('../extension/content/shopee.js');
 
 test('content script normaliza texto e aceita somente link meli.la esperado', () => {
   assert.equal(normalizedText('  Compartilhar  ').trim(), 'compartilhar');
@@ -44,4 +45,29 @@ test('clique nativo usa debugger somente para eventos de entrada', () => {
   assert.match(background, /chrome\.tabs\.update\(tab\.id, \{ active: true \}\)/);
   assert.match(background, /chrome\.debugger\.detach/);
   assert.doesNotMatch(background, /Network\.|Storage\.|Cookies\./);
+});
+
+test('content script aceita somente link curto oficial da Shopee', () => {
+  assert.equal(
+    'https://s.shopee.com.br/AUso2xdRXP'.match(shopee.LINK_PATTERN)?.[0],
+    'https://s.shopee.com.br/AUso2xdRXP'
+  );
+  assert.equal(
+    'https://s.shopee.com.br.example.com/AUso'.match(shopee.LINK_PATTERN),
+    null
+  );
+  const root = path.join(__dirname, '..', 'extension');
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, 'manifest.json'), 'utf8')
+  );
+  const background = fs.readFileSync(
+    path.join(root, 'background.js'),
+    'utf8'
+  );
+  assert.equal(
+    manifest.host_permissions.includes('https://affiliate.shopee.com.br/*'),
+    true
+  );
+  assert.match(background, /GENERATE_SHOPEE_AFFILIATE_LINK/);
+  assert.match(background, /job\.platform === 'shopee'/);
 });

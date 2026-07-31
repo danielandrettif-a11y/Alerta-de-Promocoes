@@ -2400,6 +2400,25 @@ select:focus-visible {
   background: rgba(255, 153, 0, 0.03);
 }
 
+.deal-card.shopee-theme {
+  border-color: rgba(238, 77, 45, 0.18);
+}
+
+.deal-card.shopee-theme:hover {
+  border-color: #ee4d2d;
+  box-shadow: 0 10px 25px rgba(238, 77, 45, 0.16);
+}
+
+.deal-card.shopee-theme .card-discount-badge {
+  color: #fff;
+  background: linear-gradient(135deg, #ee4d2d, #ff7337);
+  box-shadow: 0 2px 8px rgba(238, 77, 45, 0.3);
+}
+
+.deal-card.shopee-theme .card-link-product {
+  color: #ff765a;
+}
+
 /* ==========================================
    Price Comparison Styles (Buscape)
    ========================================== */
@@ -3616,7 +3635,7 @@ select:focus-visible {
   .product-source-tabs {
     display: grid;
     width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     margin-bottom: 12px;
   }
 
@@ -3700,7 +3719,8 @@ select:focus-visible {
   }
 
   .deal-card,
-  .deal-card.amazon-theme {
+  .deal-card.amazon-theme,
+  .deal-card.shopee-theme {
     display: grid;
     grid-template-columns: 112px minmax(0, 1fr);
     min-height: 176px;

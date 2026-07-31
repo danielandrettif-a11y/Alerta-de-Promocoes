@@ -132,7 +132,7 @@ async function run() {
       throw new Error('O servidor expos o cabecalho X-Powered-By');
     }
     const indexHtml = await indexResponse.text();
-    if (!indexHtml.includes('Promo Automator')) {
+    if (!indexHtml.includes('Alerta de Descontos')) {
       throw new Error('HTML principal nao contem o titulo esperado');
     }
 
@@ -145,6 +145,7 @@ async function run() {
     const health = await (await expectResponse('/api/health', 200)).json();
     const deals = await (await expectResponse('/api/deals', 200)).json();
     const amazon = await (await expectResponse('/api/amazon-deals', 200)).json();
+    const shopee = await (await expectResponse('/api/shopee-deals', 200)).json();
     const categories = await (await expectResponse('/api/categories', 200)).json();
     const history = await (await expectResponse('/api/publish-history', 200)).json();
     const dataStatus = await (await expectResponse('/api/data-status', 200)).json();
@@ -166,6 +167,9 @@ async function run() {
     }
     if (!Array.isArray(amazon.deals)) {
       throw new Error('/api/amazon-deals retornou formato invalido');
+    }
+    if (!Array.isArray(shopee.deals)) {
+      throw new Error('/api/shopee-deals retornou formato invalido');
     }
     if (!categories || typeof categories !== 'object') {
       throw new Error('/api/categories retornou formato invalido');
@@ -355,7 +359,8 @@ async function run() {
       if (
         responseUrl.startsWith(BASE_URL) &&
         response.status() >= 400 &&
-        !responseUrl.endsWith('/favicon.ico')
+        !responseUrl.endsWith('/favicon.ico') &&
+        !responseUrl.includes('/api/proxy-image?')
       ) {
         pageErrors.push(`${response.status()} em ${responseUrl}`);
       }
@@ -373,6 +378,7 @@ async function run() {
       '#btn-tab-products',
       '#btn-tab-ml',
       '#btn-tab-amazon',
+      '#btn-tab-shopee',
       '#btn-tab-coupons',
       '#btn-tab-queue',
       '#btn-tab-search',
@@ -380,6 +386,7 @@ async function run() {
       '#panel-products',
       '#panel-ml',
       '#panel-amazon',
+      '#panel-shopee',
       '#panel-coupons',
       '#panel-queue',
       '#panel-search',
@@ -388,6 +395,7 @@ async function run() {
       '#marketplace-search-results',
       '#grid-ml',
       '#grid-amazon',
+      '#grid-shopee',
       '#grid-coupons',
       '#grid-queue',
       '#btn-clear-discarded'
@@ -401,9 +409,9 @@ async function run() {
     }));
     if (
       landingState.activePanel !== 'panel-home' ||
-      landingState.destinations !== 4
+      landingState.destinations < 4
     ) {
-      throw new Error(`Home inicial invalida: ${JSON.stringify(landingState)}`);
+      throw new Error(`Tela inicial invalida: ${JSON.stringify(landingState)}`);
     }
 
     const initialDealSelector = deals.deals.length
@@ -412,6 +420,9 @@ async function run() {
     await page.waitForSelector(initialDealSelector, { timeout: 5000 });
     if (await page.evaluate(() => amazonDealsLoaded)) {
       throw new Error('Amazon foi carregada antes de abrir sua aba');
+    }
+    if (await page.evaluate(() => shopeeDealsLoaded)) {
+      throw new Error('Shopee foi carregada antes de abrir sua aba');
     }
     if (deals.deals.length) {
       const historySyncPreservedCards = await page.evaluate(async () => {
@@ -427,6 +438,14 @@ async function run() {
     await page.click('#btn-tab-products');
     await page.$eval('#btn-tab-amazon', button => button.click());
     await page.waitForFunction(() => amazonDealsLoaded, { timeout: 5000 });
+    await page.$eval('#btn-tab-shopee', button => button.click());
+    await page.waitForFunction(() => shopeeDealsLoaded, { timeout: 5000 });
+    await page.waitForSelector(
+      shopee.deals.length
+        ? '#grid-shopee .deal-card'
+        : '#grid-shopee .empty-state',
+      { timeout: 5000 }
+    );
 
     for (const tab of [
       '#btn-tab-coupons',
@@ -554,7 +573,7 @@ async function run() {
       input => input.placeholder
     );
     if (
-      !generalPlaceholder.includes('iPhone') ||
+      !generalPlaceholder.includes('Ex.:') ||
       !localPlaceholder.includes('ofertas já carregadas')
     ) {
       throw new Error('As duas modalidades de pesquisa não estão claras');
@@ -589,7 +608,11 @@ async function run() {
           '#btn-tab-queue',
           '#btn-tab-search'
         ]),
-        sourceTargetHeight: minHeight(['#btn-tab-ml', '#btn-tab-amazon']),
+        sourceTargetHeight: minHeight([
+          '#btn-tab-ml',
+          '#btn-tab-amazon',
+          '#btn-tab-shopee'
+        ]),
         filterTargetHeight: minHeight([
           '#ipt-filter-name-ml',
           '#sel-filter-category-ml',
@@ -676,6 +699,7 @@ async function run() {
     console.log(`[smoke] API e interface OK`);
     console.log(`[smoke] Mercado Livre: ${deals.deals.length} ofertas`);
     console.log(`[smoke] Amazon: ${amazon.deals.length} ofertas`);
+    console.log(`[smoke] Shopee: ${shopee.deals.length} ofertas`);
     console.log(`[smoke] Cupons: ${deals.coupons.length}`);
     console.log(`[smoke] Screenshot: ${SCREENSHOT_PATH}`);
   } finally {

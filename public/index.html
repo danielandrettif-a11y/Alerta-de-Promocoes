@@ -6,17 +6,15 @@
   <meta name="theme-color" content="#0b0713">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="description" content="Painel de controle simplificado para buscar ofertas do Mercado Livre/Shopee, cupons diários e gerar Stories diretamente no navegador para enviar ao WhatsApp.">
-  <title>Promo Automator | Painel de Controle de Ofertas e Stories</title>
-  
-  <!-- Google Fonts: Outfit & Montserrat -->
+  <meta name="description" content="Painel de controle para buscar ofertas, organizar a fila e gerar Stories para WhatsApp e Instagram.">
+  <title>Alerta de Descontos | Painel de Ofertas e Stories</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-  
   <!-- CSS Link -->
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 
@@ -38,20 +36,16 @@
 
   <header class="main-header">
     <div class="logo-area">
-      <h1 class="logo-title">PROMO AUTOMATOR <span class="badge-neon">⚡</span></h1>
+      <h1 class="logo-title">ALERTA DE DESCONTOS <span class="badge-neon">⚡</span></h1>
       <p class="logo-subtitle">Painel de Automação de Ofertas & Geração de Stories Locais</p>
     </div>
-    
+
     <div class="status-area">
       <span class="status-indicator"></span>
       <div>
         <p id="txt-last-update" class="status-text">Última atualização: --/--/---- --:--</p>
-        <p id="txt-automation-status" class="automation-status">
-          Publicação automática: carregando...
-        </p>
-        <p id="txt-whatsapp-status" class="whatsapp-status" role="status">
-          WhatsApp: verificando...
-        </p>
+        <p id="txt-automation-status" class="automation-status">Publicação automática: carregando...</p>
+        <p id="txt-whatsapp-status" class="whatsapp-status" role="status">WhatsApp: verificando...</p>
       </div>
     </div>
   </header>
@@ -161,6 +155,7 @@
           Pesquisar na internet
         </button>
       </form>
+
       <p id="marketplace-search-status" class="marketplace-search-status" aria-live="polite"></p>
       <div id="marketplace-search-results" class="marketplace-search-results"></div>
     </div>
@@ -192,6 +187,10 @@
         <button id="btn-tab-amazon" class="source-tab" type="button" role="tab"
           aria-selected="false" aria-controls="panel-amazon">
           <span aria-hidden="true">🟡</span> Amazon
+        </button>
+        <button id="btn-tab-shopee" class="source-tab" type="button" role="tab"
+          aria-selected="false" aria-controls="panel-shopee">
+          <span aria-hidden="true">🟠</span> Shopee
         </button>
       </div>
 
@@ -339,6 +338,71 @@
           Carregar mais 20
         </button>
       </div>
+      </div>
+
+      <!-- Shopee source panel -->
+      <div id="panel-shopee" class="source-panel" role="tabpanel"
+        aria-labelledby="btn-tab-shopee">
+        <p class="source-note">
+          Catálogo atualizado pelo feed oficial da Shopee.
+          A geração automática do link afiliado será conectada à fila na próxima etapa.
+        </p>
+        <div class="control-bar">
+          <div class="primary-actions">
+            <button id="btn-update-shopee" class="btn-refresh" type="button">
+              <span class="icon-sync">🔄</span> Verificar atualização
+            </button>
+          </div>
+        </div>
+
+        <button id="btn-toggle-filters-shopee" class="mobile-filter-toggle"
+          type="button" aria-expanded="false" aria-controls="filters-shopee">
+          🔎 Busca e filtros
+        </button>
+        <div id="filters-shopee" class="filter-bar">
+          <div class="filter-group search-filter">
+            <span class="filter-icon">🔍</span>
+            <input type="text" id="ipt-filter-name-shopee"
+              placeholder="Filtrar somente as ofertas já carregadas..."
+              aria-label="Filtrar ofertas da Shopee por nome">
+          </div>
+          <div class="filter-group category-filter">
+            <span class="filter-icon">🏷️</span>
+            <select id="sel-filter-category-shopee" class="select-premium"
+              aria-label="Filtrar ofertas da Shopee por categoria">
+              <option value="">Todas as Categorias</option>
+            </select>
+          </div>
+          <div class="filter-group subcategory-filter">
+            <span class="filter-icon">📂</span>
+            <select id="sel-filter-subcategory-shopee" class="select-premium"
+              aria-label="Filtrar ofertas da Shopee por subcategoria" disabled>
+              <option value="">Todas as Subcategorias</option>
+            </select>
+          </div>
+          <div class="filter-group discount-filter">
+            <span class="filter-icon">📉</span>
+            <select id="sel-filter-discount-shopee" class="select-premium"
+              aria-label="Filtrar ofertas da Shopee por desconto">
+              <option value="">Qualquer desconto</option>
+              <option value="30">30% OFF ou mais</option>
+              <option value="50">50% OFF ou mais</option>
+              <option value="70">70% OFF ou mais</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="grid-shopee" class="grid-layout">
+          <div class="empty-state">
+            <p>Nenhuma oferta Shopee carregada.</p>
+          </div>
+        </div>
+        <div id="pagination-shopee" class="deal-pagination" hidden>
+          <span id="pagination-count-shopee"></span>
+          <button id="btn-load-more-shopee" class="btn-secondary" type="button">
+            Carregar mais 20
+          </button>
+        </div>
       </div>
     </section>
 
@@ -502,10 +566,10 @@
   </div>
 
   <footer class="main-footer">
-    <p>&copy; 2026 Promo Automator. Geração de Stories & Envio Direto ao WhatsApp.</p>
+    <p>&copy; 2026 Alerta de Descontos. Geração de Stories & Envio Direto ao WhatsApp.</p>
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=21"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>

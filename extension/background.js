@@ -1,4 +1,6 @@
-const EXTENSION_VERSION = '1.2.0';
+const EXTENSION_VERSION = '1.3.0';
+const SHOPEE_CONVERTER_URL =
+  'https://affiliate.shopee.com.br/offer/custom_link';
 const DEFAULTS = {
   serverUrl: '',
   token: '',
@@ -100,6 +102,14 @@ async function findOrCreateMercadoLivreTab() {
   });
 }
 
+async function findOrCreateShopeeTab() {
+  const tabs = await chrome.tabs.query({
+    url: 'https://affiliate.shopee.com.br/offer/custom_link*'
+  });
+  if (tabs[0]?.id) return tabs[0];
+  return chrome.tabs.create({ url: SHOPEE_CONVERTER_URL, active: false });
+}
+
 function samePageUrl(leftValue, rightValue) {
   try {
     const left = new URL(leftValue);
@@ -139,13 +149,17 @@ async function navigateTab(tabId, url, timeoutMs) {
   });
 }
 
-async function sendContentMessage(tabId, message) {
+async function sendContentMessage(
+  tabId,
+  message,
+  scriptFile = 'content/mercado_livre.js'
+) {
   try {
     return await chrome.tabs.sendMessage(tabId, message);
   } catch {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ['content/mercado_livre.js']
+      files: [scriptFile]
     });
     return chrome.tabs.sendMessage(tabId, message);
   }
@@ -217,9 +231,10 @@ async function processJob(job, settings, tab) {
     lastError: null
   });
   await heartbeat('processing');
+  const shopee = job.platform === 'shopee';
   const loadedTab = await navigateTab(
     tab.id,
-    job.productLink,
+    shopee ? SHOPEE_CONVERTER_URL : job.productLink,
     settings.pageTimeoutMs
   );
   if (/login|captcha|verification|challenge/i.test(loadedTab.url || '')) {
@@ -232,6 +247,13 @@ async function processJob(job, settings, tab) {
   await chrome.windows.update(loadedTab.windowId, { focused: true });
   await chrome.tabs.update(tab.id, { active: true });
   await new Promise(resolve => setTimeout(resolve, 750));
+  if (shopee) {
+    return sendContentMessage(tab.id, {
+      type: 'GENERATE_SHOPEE_AFFILIATE_LINK',
+      productLink: job.productLink,
+      timeoutMs: settings.actionTimeoutMs
+    }, 'content/shopee.js');
+  }
   return runContentAction(tab.id, settings.actionTimeoutMs);
 }
 
@@ -249,7 +271,7 @@ async function processQueue() {
       authRequired: false
     });
     await heartbeat('processing');
-    const tab = await findOrCreateMercadoLivreTab();
+    const tabs = {};
     const batchSize = Math.min(30, Math.max(
       1,
       Number(settings.batchSize) || 10
@@ -272,6 +294,13 @@ async function processQueue() {
       if (!job) break;
       attemptedItemIds.push(job.id);
       try {
+        const platform = job.platform === 'shopee'
+          ? 'shopee'
+          : 'mercado_livre';
+        tabs[platform] ||= platform === 'shopee'
+          ? await findOrCreateShopeeTab()
+          : await findOrCreateMercadoLivreTab();
+        const tab = tabs[platform];
         const result = await processJob(job, settings, tab);
         if (!result?.success) {
           const code = result?.code || 'UNKNOWN_ERROR';
@@ -373,6 +402,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.type === 'OPEN_MERCADO_LIVRE') {
       const tab = await findOrCreateMercadoLivreTab();
+      await chrome.tabs.update(tab.id, { active: true });
+      return { success: true };
+    }
+    if (message.type === 'OPEN_SHOPEE') {
+      const tab = await findOrCreateShopeeTab();
       await chrome.tabs.update(tab.id, { active: true });
       return { success: true };
     }
