@@ -14,7 +14,7 @@
   <!-- CSS Link -->
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 
@@ -350,9 +350,25 @@
           Ofertas prontas para entrar na fila de publicação.
         </p>
         <div class="control-bar">
+          <div class="selection-actions">
+            <label class="checkbox-container">
+              <input type="checkbox" id="chk-select-all-shopee">
+              <span class="checkmark"></span>
+              Selecionar todos
+            </label>
+            <button id="btn-clear-selection-shopee" class="btn-secondary"
+              type="button" disabled>
+              Limpar seleção
+            </button>
+          </div>
           <div class="primary-actions">
             <button id="btn-update-shopee" class="btn-refresh" type="button">
               <span class="icon-sync">🔄</span> Verificar atualização
+            </button>
+            <button id="btn-queue-shopee" class="btn-queue" type="button"
+              disabled hidden>
+              Preparar na fila
+              (<span id="txt-queue-count-shopee">0</span>)
             </button>
           </div>
         </div>
@@ -572,6 +588,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=26"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>

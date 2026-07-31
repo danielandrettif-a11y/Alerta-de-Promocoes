@@ -1,9 +1,9 @@
-const CACHE = 'promo-automator-v28';
+const CACHE = 'promo-automator-v29';
 const SHELL = [
   '/',
   '/index.html',
-  '/style.css?v=26',
-  '/app.js?v=26',
+  '/style.css?v=27',
+  '/app.js?v=27',
   '/manifest.webmanifest',
   '/icon.svg'
 ];

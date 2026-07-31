@@ -436,8 +436,6 @@ async function run() {
     }
 
     await page.click('#btn-tab-products');
-    await page.$eval('#btn-tab-amazon', button => button.click());
-    await page.waitForFunction(() => amazonDealsLoaded, { timeout: 5000 });
     await page.$eval('#btn-tab-shopee', button => button.click());
     await page.waitForFunction(() => shopeeDealsLoaded, { timeout: 5000 });
     await page.waitForSelector(
@@ -446,6 +444,20 @@ async function run() {
         : '#grid-shopee .empty-state',
       { timeout: 5000 }
     );
+    if (shopee.deals.length) {
+      await page.$eval('#grid-shopee .deal-chk', checkbox =>
+        checkbox.click()
+      );
+      const selection = await page.evaluate(() => ({
+        count: document.querySelector('#txt-queue-count-shopee').textContent,
+        disabled: document.querySelector('#btn-queue-shopee').disabled
+      }));
+      if (selection.count !== '1' || selection.disabled) {
+        throw new Error(
+          `Selecao Shopee invalida: ${JSON.stringify(selection)}`
+        );
+      }
+    }
 
     for (const tab of [
       '#btn-tab-coupons',
@@ -610,7 +622,6 @@ async function run() {
         ]),
         sourceTargetHeight: minHeight([
           '#btn-tab-ml',
-          '#btn-tab-amazon',
           '#btn-tab-shopee'
         ]),
         filterTargetHeight: minHeight([

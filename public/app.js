@@ -5,6 +5,7 @@ let allShopeeDeals = [];
 let allCoupons = [];
 const selectedMLIndices = new Set();
 const selectedAmazonIndices = new Set();
+const selectedShopeeIndices = new Set();
 let lastUpdateML = '';
 let lastUpdateAmazon = '';
 let lastUpdateShopee = '';
@@ -100,6 +101,13 @@ const elTxtSelectedCountAmazon = document.getElementById('txt-selected-count-ama
 
 // DOM elements - Shopee Actions
 const elBtnUpdateShopee = document.getElementById('btn-update-shopee');
+const elChkSelectAllShopee =
+  document.getElementById('chk-select-all-shopee');
+const elBtnClearSelectionShopee =
+  document.getElementById('btn-clear-selection-shopee');
+const elBtnQueueShopee = document.getElementById('btn-queue-shopee');
+const elTxtQueueCountShopee =
+  document.getElementById('txt-queue-count-shopee');
 const elTxtShopeeCatalogUpdate =
   document.getElementById('txt-shopee-catalog-update');
 
@@ -750,6 +758,7 @@ async function fetchShopeeDeals() {
     const data = await response.json();
 
     allShopeeDeals = data.deals || [];
+    selectedShopeeIndices.clear();
     shopeeDealsLoaded = true;
     freshnessShopee = data.freshness || null;
     visibleShopeeLimit = DEALS_PAGE_SIZE;
@@ -1400,8 +1409,10 @@ async function fetchPublicationQueue(options = {}) {
     publicationQueueEnabled = data.enabled === true;
     elTabQueue.hidden = !publicationQueueEnabled;
     elBtnQueueML.hidden = !publicationQueueEnabled;
+    elBtnQueueShopee.hidden = !publicationQueueEnabled;
     elBtnMobileQueue.hidden =
-      !publicationQueueEnabled || activeDealPlatform !== 'ml';
+      !publicationQueueEnabled ||
+      !['ml', 'shopee'].includes(activeDealPlatform);
 
     if (!publicationQueueEnabled) {
       publicationQueueItems = [];
@@ -1418,6 +1429,9 @@ async function fetchPublicationQueue(options = {}) {
     }
     if (wasEnabled !== publicationQueueEnabled && allMLDeals.length) {
       renderMLDeals(allMLDeals);
+    }
+    if (wasEnabled !== publicationQueueEnabled && allShopeeDeals.length) {
+      renderShopeeDeals(allShopeeDeals);
     }
     if (options.feedback) {
       setQueueFeedback(options.feedback, options.type || 'success');
@@ -1480,8 +1494,13 @@ async function enqueueDealsForPublication(deals, platform = 'mercado_livre') {
   }
 
   spinner.style.display = 'none';
-  selectedMLIndices.clear();
-  updateMLSelectionUI();
+  if (platform === 'shopee') {
+    selectedShopeeIndices.clear();
+    updateShopeeSelectionUI();
+  } else {
+    selectedMLIndices.clear();
+    updateMLSelectionUI();
+  }
   await fetchPublicationQueue({
     render: true,
     feedback:
@@ -2053,13 +2072,23 @@ function renderShopeeDeals(deals) {
 
   const visibleEntries = filteredEntries.slice(0, visibleShopeeLimit);
   for (const { deal, index } of visibleEntries) {
+    const isSelected = selectedShopeeIndices.has(index);
     const title = escapeQueueHtml(deal.title);
     const rating = Number(deal.rating);
     const card = document.createElement('article');
-    card.className = 'deal-card shopee-theme';
+    card.className = `deal-card shopee-theme ${
+      isSelected ? 'selected' : ''
+    }`;
     card.dataset.index = index;
     card.dataset.platform = 'shopee';
     card.innerHTML = `
+      <div class="card-checkbox">
+        <label class="checkbox-container">
+          <input type="checkbox" class="deal-chk" data-index="${index}"
+            ${isSelected ? 'checked' : ''}>
+          <span class="checkmark"></span>
+        </label>
+      </div>
       <div class="card-image-box">
         <img class="card-image" src="${getDealImageUrl(deal.image)}"
           alt="${title}" loading="lazy" decoding="async">
@@ -2100,6 +2129,17 @@ function renderShopeeDeals(deals) {
         </button>
       </div>
     `;
+    card.addEventListener('click', event => {
+      if (
+        event.target.closest('.checkbox-container') ||
+        event.target.closest('a') ||
+        event.target.closest('button')
+      ) return;
+      toggleShopeeSelectIndex(index);
+    });
+    card.querySelector('.deal-chk').addEventListener('change', () =>
+      toggleShopeeSelectIndex(index)
+    );
     elGridShopee.appendChild(card);
   }
 
@@ -2108,6 +2148,7 @@ function renderShopeeDeals(deals) {
     visibleEntries.length,
     filteredEntries.length
   );
+  updateShopeeSelectionUI();
 }
 
 function renderCoupons(coupons) {
@@ -2367,22 +2408,33 @@ function toggleAmazonSelectIndex(index) {
   updateAmazonSelectionUI();
 }
 
+function toggleShopeeSelectIndex(index) {
+  if (selectedShopeeIndices.has(index)) {
+    selectedShopeeIndices.delete(index);
+  } else {
+    selectedShopeeIndices.add(index);
+  }
+  updateShopeeSelectionUI();
+}
+
 function updateMobileSelectionBar() {
   const onDealTab = elTabProducts.classList.contains('active');
   const count = activeDealPlatform === 'amazon'
     ? selectedAmazonIndices.size
     : activeDealPlatform === 'shopee'
-      ? 0
+      ? selectedShopeeIndices.size
       : selectedMLIndices.size;
 
   elMobileSelectionCount.textContent = count;
   elMobileSelectionBar.classList.toggle(
     'hidden',
-    !onDealTab || activeDealPlatform === 'shopee' || count === 0
+    !onDealTab || count === 0
   );
   elBtnMobileQueue.hidden =
-    !publicationQueueEnabled || activeDealPlatform !== 'ml';
+    !publicationQueueEnabled ||
+    !['ml', 'shopee'].includes(activeDealPlatform);
   elBtnMobileQueue.disabled = count === 0;
+  elBtnMobileSend.hidden = activeDealPlatform === 'shopee';
   elBtnMobileSend.disabled = !whatsappReady || count === 0;
   elBtnMobileSend.textContent = whatsappReady
     ? 'Enviar ao WhatsApp'
@@ -2452,6 +2504,30 @@ function updateAmazonSelectionUI() {
   } else {
     elChkSelectAllAmazon.checked = false;
   }
+  updateMobileSelectionBar();
+}
+
+function updateShopeeSelectionUI() {
+  const cards = elGridShopee.querySelectorAll('.deal-card');
+  cards.forEach(card => {
+    const index = Number(card.dataset.index);
+    const selected = selectedShopeeIndices.has(index);
+    card.classList.toggle('selected', selected);
+    const checkbox = card.querySelector('.deal-chk');
+    if (checkbox) checkbox.checked = selected;
+  });
+
+  const count = selectedShopeeIndices.size;
+  elTxtQueueCountShopee.textContent = count;
+  elBtnQueueShopee.disabled = count === 0;
+  elBtnClearSelectionShopee.disabled = count === 0;
+  const visibleCards = elGridShopee.querySelectorAll(
+    '.deal-card:not(.hidden-filter)'
+  );
+  elChkSelectAllShopee.checked = visibleCards.length > 0 &&
+    [...visibleCards].every(card =>
+      selectedShopeeIndices.has(Number(card.dataset.index))
+    );
   updateMobileSelectionBar();
 }
 
@@ -2572,16 +2648,26 @@ function init() {
     postSelectedDeals(activeDealPlatform)
   );
   elBtnMobileQueue.addEventListener('click', () => {
-    const deals = allMLDeals.filter((_, index) =>
-      selectedMLIndices.has(index)
+    const shopee = activeDealPlatform === 'shopee';
+    const deals = (shopee ? allShopeeDeals : allMLDeals).filter((_, index) =>
+      (shopee ? selectedShopeeIndices : selectedMLIndices).has(index)
     );
-    enqueueDealsForPublication(deals);
+    enqueueDealsForPublication(
+      deals,
+      shopee ? 'shopee' : 'mercado_livre'
+    );
   });
   elBtnQueueML.addEventListener('click', () => {
     const deals = allMLDeals.filter((_, index) =>
       selectedMLIndices.has(index)
     );
     enqueueDealsForPublication(deals);
+  });
+  elBtnQueueShopee.addEventListener('click', () => {
+    const deals = allShopeeDeals.filter((_, index) =>
+      selectedShopeeIndices.has(index)
+    );
+    enqueueDealsForPublication(deals, 'shopee');
   });
   elBtnRefreshQueue.addEventListener('click', async () => {
     await Promise.all([
@@ -2665,6 +2751,17 @@ function init() {
     });
     updateAmazonSelectionUI();
   });
+  elChkSelectAllShopee.addEventListener('change', () => {
+    const visible = elGridShopee.querySelectorAll(
+      '.deal-card:not(.hidden-filter)'
+    );
+    visible.forEach(card => {
+      const index = Number(card.dataset.index);
+      if (elChkSelectAllShopee.checked) selectedShopeeIndices.add(index);
+      else selectedShopeeIndices.delete(index);
+    });
+    updateShopeeSelectionUI();
+  });
 
   // Clear Selections
   elBtnClearSelectionML.addEventListener('click', () => {
@@ -2674,6 +2771,10 @@ function init() {
   elBtnClearSelectionAmazon.addEventListener('click', () => {
     selectedAmazonIndices.clear();
     updateAmazonSelectionUI();
+  });
+  elBtnClearSelectionShopee.addEventListener('click', () => {
+    selectedShopeeIndices.clear();
+    updateShopeeSelectionUI();
   });
 
   // Filters ML listeners
