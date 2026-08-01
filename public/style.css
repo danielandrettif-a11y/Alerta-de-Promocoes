@@ -2838,10 +2838,7 @@ select:focus-visible {
   display: none !important;
 }
 
-#btn-tab-amazon,
-#panel-amazon {
-  display: none !important;
-}
+/* Amazon tab enabled */
 
 .queue-tab-count {
   display: inline-grid;
