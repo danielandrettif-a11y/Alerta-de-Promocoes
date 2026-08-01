@@ -657,11 +657,11 @@ function generateStoryBuffer(deal, coupons) {
     APP_RUNTIME_DIR,
     `queue-validation-${runId}.json`
   );
-  const confirmedCoupon = deal.coupon || null;
+  const confirmedCoupon = deal.coupon || deal.couponCandidates?.[0] || null;
   fs.mkdirSync(storiesDir, { recursive: true });
   fs.writeFileSync(selectionPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
-    deals: [deal],
+    deals: [{ ...deal, coupon: confirmedCoupon }],
     selectedCoupon: confirmedCoupon
   }, null, 2), 'utf-8');
 
@@ -2508,11 +2508,11 @@ function generateStory(deal, coupons) {
     APP_RUNTIME_DIR,
     `automatic_story_${process.pid}.json`
   );
-  const confirmedCoupon = deal.coupon || null;
+  const confirmedCoupon = deal.coupon || deal.couponCandidates?.[0] || null;
 
   fs.writeFileSync(selectionPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
-    deals: [deal],
+    deals: [{ ...deal, coupon: confirmedCoupon }],
     selectedCoupon: confirmedCoupon
   }, null, 2), 'utf-8');
 
