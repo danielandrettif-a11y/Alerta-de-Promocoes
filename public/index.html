@@ -185,7 +185,7 @@
           <span aria-hidden="true">🛍️</span> Mercado Livre
         </button>
         <button id="btn-tab-amazon" class="source-tab" type="button" role="tab"
-          aria-selected="false" aria-controls="panel-amazon" hidden>
+          aria-selected="false" aria-controls="panel-amazon">
           <span aria-hidden="true">🟡</span> Amazon
         </button>
         <button id="btn-tab-shopee" class="source-tab" type="button" role="tab"
@@ -224,41 +224,48 @@
         🔎 Busca e filtros
       </button>
       <!-- Filter Bar -->
-      <div id="filters-ml" class="filter-bar">
-        <div class="filter-group search-filter">
-          <span class="filter-icon">🔍</span>
-          <input type="text" id="ipt-filter-name-ml" placeholder="Filtrar somente as ofertas já carregadas..." aria-label="Filtrar ofertas do Mercado Livre por nome">
+      <div id="filters-ml" class="filter-bar filter-bar-2rows">
+        <div class="filter-row-quick">
+          <div class="filter-group search-filter">
+            <span class="filter-icon">🔍</span>
+            <input type="text" id="ipt-filter-name-ml" placeholder="Filtrar somente as ofertas já carregadas..." aria-label="Filtrar ofertas do Mercado Livre por nome">
+          </div>
+          <div class="filter-group discount-filter">
+            <span class="filter-icon">📉</span>
+            <select id="sel-filter-discount-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por desconto">
+              <option value="">Qualquer desconto</option>
+              <option value="30">30% OFF ou mais</option>
+              <option value="40">40% OFF ou mais</option>
+              <option value="50">50% OFF ou mais</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-icon">🔁</span>
+            <select id="sel-filter-recurring-ml" class="select-premium"
+              aria-label="Filtrar produtos de compra recorrente">
+              <option value="">Todos os tipos</option>
+              <option value="recurring">Compra recorrente</option>
+            </select>
+          </div>
         </div>
-        <div class="filter-group category-filter">
-          <span class="filter-icon">🏷️</span>
-          <select id="sel-filter-category-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por categoria">
-            <option value="">Todas as Categorias</option>
-          </select>
-        </div>
-        <div class="filter-group subcategory-filter">
-          <span class="filter-icon">📂</span>
-          <select id="sel-filter-subcategory-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por subcategoria" disabled>
-            <option value="">Todas as Subcategorias</option>
-          </select>
-        </div>
-        <div class="filter-group discount-filter">
-          <span class="filter-icon">📉</span>
-          <select id="sel-filter-discount-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por desconto">
-            <option value="">Qualquer desconto</option>
-            <option value="30">30% OFF ou mais</option>
-            <option value="40">40% OFF ou mais</option>
-            <option value="50">50% OFF ou mais</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <span class="filter-icon">🔁</span>
-          <select id="sel-filter-recurring-ml" class="select-premium"
-            aria-label="Filtrar produtos de compra recorrente">
-            <option value="">Todos os tipos</option>
-            <option value="recurring">Compra recorrente</option>
-          </select>
+        <div class="filter-row-taxonomy">
+          <div class="filter-group category-filter">
+            <span class="filter-icon">🏷️</span>
+            <select id="sel-filter-category-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por categoria">
+              <option value="">Todas as Categorias</option>
+            </select>
+          </div>
+          <div class="filter-group subcategory-filter">
+            <span class="filter-icon">📂</span>
+            <select id="sel-filter-subcategory-ml" class="select-premium" aria-label="Filtrar ofertas do Mercado Livre por subcategoria" disabled>
+              <option value="">Selecione uma categoria primeiro</option>
+            </select>
+          </div>
         </div>
       </div>
+
+      <!-- Active Filter Chip -->
+      <div id="active-filter-chip-ml" class="active-filter-chip-container" hidden></div>
 
       <!-- Grid -->
       <div id="grid-ml" class="grid-layout">
@@ -276,10 +283,10 @@
 
       <!-- Amazon source panel -->
       <div id="panel-amazon" class="source-panel" role="tabpanel"
-        aria-labelledby="btn-tab-amazon" hidden>
+        aria-labelledby="btn-tab-amazon">
       <p class="source-note">
-        A fila com link afiliado é exclusiva do Mercado Livre.
-        Na Amazon, as ofertas selecionadas podem ser enviadas diretamente ao WhatsApp.
+        Ofertas selecionadas da Amazon Brasil com tag de afiliado configurada.
+        Podem ser enviadas diretamente ao WhatsApp ou preparadas para publicação.
       </p>
       <div class="control-bar">
         <div class="selection-actions">
@@ -307,33 +314,40 @@
         🔎 Busca e filtros
       </button>
       <!-- Filter Bar -->
-      <div id="filters-amazon" class="filter-bar">
-        <div class="filter-group search-filter">
-          <span class="filter-icon">🔍</span>
-          <input type="text" id="ipt-filter-name-amazon" placeholder="Filtrar somente as ofertas já carregadas..." aria-label="Filtrar ofertas da Amazon por nome">
+      <div id="filters-amazon" class="filter-bar filter-bar-2rows">
+        <div class="filter-row-quick">
+          <div class="filter-group search-filter">
+            <span class="filter-icon">🔍</span>
+            <input type="text" id="ipt-filter-name-amazon" placeholder="Filtrar somente as ofertas já carregadas..." aria-label="Filtrar ofertas da Amazon por nome">
+          </div>
+          <div class="filter-group discount-filter">
+            <span class="filter-icon">📉</span>
+            <select id="sel-filter-discount-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por desconto">
+              <option value="">Qualquer desconto</option>
+              <option value="15">15% OFF ou mais</option>
+              <option value="30">30% OFF ou mais</option>
+              <option value="45">45% OFF ou mais</option>
+            </select>
+          </div>
         </div>
-        <div class="filter-group category-filter">
-          <span class="filter-icon">🏷️</span>
-          <select id="sel-filter-category-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por categoria">
-            <option value="">Todas as Categorias</option>
-          </select>
-        </div>
-        <div class="filter-group subcategory-filter">
-          <span class="filter-icon">📂</span>
-          <select id="sel-filter-subcategory-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por subcategoria" disabled>
-            <option value="">Todas as Subcategorias</option>
-          </select>
-        </div>
-        <div class="filter-group discount-filter">
-          <span class="filter-icon">📉</span>
-          <select id="sel-filter-discount-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por desconto">
-            <option value="">Qualquer desconto</option>
-            <option value="15">15% OFF ou mais</option>
-            <option value="30">30% OFF ou mais</option>
-            <option value="45">45% OFF ou mais</option>
-          </select>
+        <div class="filter-row-taxonomy">
+          <div class="filter-group category-filter">
+            <span class="filter-icon">🏷️</span>
+            <select id="sel-filter-category-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por categoria">
+              <option value="">Todas as Categorias</option>
+            </select>
+          </div>
+          <div class="filter-group subcategory-filter">
+            <span class="filter-icon">📂</span>
+            <select id="sel-filter-subcategory-amazon" class="select-premium" aria-label="Filtrar ofertas da Amazon por subcategoria" disabled>
+              <option value="">Selecione uma categoria primeiro</option>
+            </select>
+          </div>
         </div>
       </div>
+
+      <!-- Active Filter Chip -->
+      <div id="active-filter-chip-amazon" class="active-filter-chip-container" hidden></div>
 
       <!-- Grid -->
       <div id="grid-amazon" class="grid-layout">
@@ -385,46 +399,53 @@
           type="button" aria-expanded="false" aria-controls="filters-shopee">
           🔎 Busca e filtros
         </button>
-        <div id="filters-shopee" class="filter-bar">
-          <div class="filter-group search-filter">
-            <span class="filter-icon">🔍</span>
-            <input type="text" id="ipt-filter-name-shopee"
-              placeholder="Filtrar somente as ofertas já carregadas..."
-              aria-label="Filtrar ofertas da Shopee por nome">
+        <div id="filters-shopee" class="filter-bar filter-bar-2rows">
+          <div class="filter-row-quick">
+            <div class="filter-group search-filter">
+              <span class="filter-icon">🔍</span>
+              <input type="text" id="ipt-filter-name-shopee"
+                placeholder="Filtrar somente as ofertas já carregadas..."
+                aria-label="Filtrar ofertas da Shopee por nome">
+            </div>
+            <div class="filter-group discount-filter">
+              <span class="filter-icon">📉</span>
+              <select id="sel-filter-discount-shopee" class="select-premium"
+                aria-label="Filtrar ofertas da Shopee por desconto">
+                <option value="">Qualquer desconto</option>
+                <option value="30">30% OFF ou mais</option>
+                <option value="50">50% OFF ou mais</option>
+                <option value="70">70% OFF ou mais</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <span class="filter-icon">🔁</span>
+              <select id="sel-filter-recurring-shopee" class="select-premium"
+                aria-label="Filtrar produtos de compra recorrente">
+                <option value="">Todos os tipos</option>
+                <option value="recurring">Compra recorrente</option>
+              </select>
+            </div>
           </div>
-          <div class="filter-group category-filter">
-            <span class="filter-icon">🏷️</span>
-            <select id="sel-filter-category-shopee" class="select-premium"
-              aria-label="Filtrar ofertas da Shopee por categoria">
-              <option value="">Todas as Categorias</option>
-            </select>
-          </div>
-          <div class="filter-group subcategory-filter">
-            <span class="filter-icon">📂</span>
-            <select id="sel-filter-subcategory-shopee" class="select-premium"
-              aria-label="Filtrar ofertas da Shopee por subcategoria" disabled>
-              <option value="">Todas as Subcategorias</option>
-            </select>
-          </div>
-          <div class="filter-group discount-filter">
-            <span class="filter-icon">📉</span>
-            <select id="sel-filter-discount-shopee" class="select-premium"
-              aria-label="Filtrar ofertas da Shopee por desconto">
-              <option value="">Qualquer desconto</option>
-              <option value="30">30% OFF ou mais</option>
-              <option value="50">50% OFF ou mais</option>
-              <option value="70">70% OFF ou mais</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <span class="filter-icon">🔁</span>
-            <select id="sel-filter-recurring-shopee" class="select-premium"
-              aria-label="Filtrar produtos de compra recorrente">
-              <option value="">Todos os tipos</option>
-              <option value="recurring">Compra recorrente</option>
-            </select>
+          <div class="filter-row-taxonomy">
+            <div class="filter-group category-filter">
+              <span class="filter-icon">🏷️</span>
+              <select id="sel-filter-category-shopee" class="select-premium"
+                aria-label="Filtrar ofertas da Shopee por categoria">
+                <option value="">Todas as Categorias</option>
+              </select>
+            </div>
+            <div class="filter-group subcategory-filter">
+              <span class="filter-icon">📂</span>
+              <select id="sel-filter-subcategory-shopee" class="select-premium"
+                aria-label="Filtrar ofertas da Shopee por subcategoria" disabled>
+                <option value="">Selecione uma categoria primeiro</option>
+              </select>
+            </div>
           </div>
         </div>
+
+        <!-- Active Filter Chip -->
+        <div id="active-filter-chip-shopee" class="active-filter-chip-container" hidden></div>
 
         <div id="grid-shopee" class="grid-layout">
           <div class="empty-state">
@@ -444,8 +465,42 @@
     <section id="panel-coupons" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-coupons">
       <div class="control-bar-coupons">
         <div class="control-bar-header">
-          <h2 class="section-title">🎟️ Cupons encontrados</h2>
-          <p class="section-desc">Cupons externos são marcados como não verificados até você confirmar o funcionamento no checkout.</p>
+          <h2 class="section-title">🎟️ Cupons por Marketplace</h2>
+          <p class="section-desc">Consulte cupons por loja, veja produtos compatíveis e gere Stories com preço promocional para Instagram.</p>
+        </div>
+      </div>
+
+      <!-- Coupon Filter Toolbar -->
+      <div class="coupon-toolbar filter-bar-2rows">
+        <div class="filter-row-quick">
+          <div class="coupon-market-tabs" role="tablist" aria-label="Loja dos cupons">
+            <button id="btn-coupon-tab-all" class="coupon-source-tab active" type="button">Todas as lojas</button>
+            <button id="btn-coupon-tab-ml" class="coupon-source-tab" type="button">🛍️ Mercado Livre</button>
+            <button id="btn-coupon-tab-amazon" class="coupon-source-tab" type="button">🟡 Amazon</button>
+          </div>
+          <div class="filter-group search-filter">
+            <span class="filter-icon">🔍</span>
+            <input type="text" id="ipt-filter-coupons" placeholder="Buscar cupom por código ou regra..." aria-label="Filtrar cupons por texto">
+          </div>
+        </div>
+        <div class="filter-row-taxonomy">
+          <div class="filter-group">
+            <span class="filter-icon">✅</span>
+            <select id="sel-filter-coupon-status" class="select-premium">
+              <option value="">Todos os status</option>
+              <option value="confirmed">Apenas verificados</option>
+              <option value="unverified">Não verificados</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-icon">📉</span>
+            <select id="sel-filter-coupon-discount" class="select-premium">
+              <option value="">Qualquer % de desconto</option>
+              <option value="15">15% OFF ou mais</option>
+              <option value="20">20% OFF ou mais</option>
+              <option value="25">25% OFF ou mais</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -456,6 +511,19 @@
         </div>
       </div>
     </section>
+
+    <!-- Modal: Coupon Story Preview -->
+    <div id="coupon-story-modal" class="progress-modal hidden" role="dialog" aria-modal="true" aria-labelledby="coupon-story-modal-title">
+      <div class="progress-modal-content coupon-story-modal-content" tabindex="-1">
+        <div class="progress-header">
+          <h3 id="coupon-story-modal-title">📸 Story com Cupom para Instagram</h3>
+          <button id="btn-close-coupon-modal" class="btn-secondary" type="button">✕ Fechar</button>
+        </div>
+        <div id="coupon-story-preview-body" class="coupon-story-preview-body">
+          <!-- Dynamic Preview Content -->
+        </div>
+      </div>
+    </div>
 
     <!-- Tab 4: Assisted Instagram publication queue -->
     <section id="panel-queue" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-queue">
@@ -549,6 +617,7 @@
           <select id="queue-platform-filter" class="select-premium">
             <option value="all">Todas</option>
             <option value="mercado_livre">Mercado Livre</option>
+            <option value="amazon">Amazon</option>
             <option value="shopee">Shopee</option>
           </select>
         </div>

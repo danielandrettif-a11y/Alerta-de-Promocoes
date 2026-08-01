@@ -164,6 +164,10 @@ async function main() {
         const originalPriceEl = container.querySelector('[class*="Price-module__strikeThrough"], .a-text-strike');
         let originalPrice = originalPriceEl ? originalPriceEl.textContent.trim() : '';
 
+        // Verificação de Cupom de Clipe Amazon no Card
+        const couponEl = container.querySelector('[class*="coupon"], [class*="Coupon"], .a-badge-coupon');
+        let couponText = couponEl ? couponEl.textContent.trim() : '';
+
         // Filtros e validações mínimas
         if (!currentPrice) return;
 
@@ -176,7 +180,8 @@ async function main() {
           currentPrice: currentPrice,
           isFreeShipping: true, // Amazon Prime oferece frete grátis na maioria das ofertas
           dealType: discount >= 30 ? "Oferta Relâmpago" : "Oferta do Dia",
-          timeLeft: ""
+          timeLeft: "",
+          couponBadge: couponText || null
         });
       });
       
@@ -184,6 +189,8 @@ async function main() {
     });
 
     await browser.close();
+
+    const tag = process.env.AMAZON_ASSOCIATE_TAG || 'alertadesc0dd-20';
 
     // Filtra e formata os preços no Node.js
     const formattedDeals = extractedDeals.map(d => {
@@ -199,8 +206,23 @@ async function main() {
         }
       }
 
+      // Adiciona a tag de afiliado da Amazon ao link
+      let affiliateLink = d.link;
+      try {
+        const urlObj = new URL(d.link);
+        urlObj.searchParams.set('tag', tag);
+        affiliateLink = urlObj.toString();
+      } catch (e) {
+        if (affiliateLink.includes('?')) {
+          affiliateLink += `&tag=${tag}`;
+        } else {
+          affiliateLink += `?tag=${tag}`;
+        }
+      }
+
       return {
         ...d,
+        link: affiliateLink,
         currentPrice: cur,
         originalPrice: orig || cur // fallback se der erro
       };

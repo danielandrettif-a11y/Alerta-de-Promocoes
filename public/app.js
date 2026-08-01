@@ -661,7 +661,7 @@ function populateCategorySelect(selectEl) {
   }
 }
 
-function handleCategoryChange(categorySelectEl, subcategorySelectEl) {
+function handleCategoryChange(categorySelectEl, subcategorySelectEl, platform = 'ml') {
   if (!categorySelectEl || !subcategorySelectEl) return;
   
   const selectedCat = categorySelectEl.value;
@@ -673,15 +673,68 @@ function handleCategoryChange(categorySelectEl, subcategorySelectEl) {
     return;
   }
   
+  const deals = platform === 'amazon' ? allAmazonDeals : platform === 'shopee' ? allShopeeDeals : allMLDeals;
   const subcategories = Object.keys(globalTaxonomy[selectedCat].subcategories);
+  
   subcategories.forEach(sub => {
+    const count = deals.filter(deal => {
+      const catInfo = getProductCategoryAndSub(deal.title);
+      return catInfo.category === selectedCat && catInfo.subcategory === sub;
+    }).length;
+
     const opt = document.createElement('option');
     opt.value = sub;
-    opt.textContent = sub;
+    opt.textContent = `${sub} (${count})`;
     subcategorySelectEl.appendChild(opt);
   });
   
   subcategorySelectEl.disabled = false;
+}
+
+function updateActiveFilterChip(platform) {
+  const containerId = platform === 'amazon' ? 'active-filter-chip-amazon' : platform === 'shopee' ? 'active-filter-chip-shopee' : 'active-filter-chip-ml';
+  const categoryEl = platform === 'amazon' ? elFilterCategoryAmazon : platform === 'shopee' ? elFilterCategoryShopee : elFilterCategoryML;
+  const subcategoryEl = platform === 'amazon' ? elFilterSubcategoryAmazon : platform === 'shopee' ? elFilterSubcategoryShopee : elFilterSubcategoryML;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const catVal = categoryEl.value;
+  const subVal = subcategoryEl.value;
+
+  if (!catVal && !subVal) {
+    container.hidden = true;
+    container.innerHTML = '';
+    return;
+  }
+
+  let labelText = `🏷️ ${catVal}`;
+  if (subVal) {
+    labelText += ` > ${subVal}`;
+  }
+
+  container.hidden = false;
+  container.innerHTML = `
+    <div class="active-filter-chip">
+      <span>${escapeQueueHtml(labelText)}</span>
+      <button type="button" title="Remover filtro" onclick="clearCategoryFilter('${platform}')">✕</button>
+    </div>
+  `;
+}
+
+function clearCategoryFilter(platform) {
+  if (platform === 'amazon') {
+    elFilterCategoryAmazon.value = '';
+    handleCategoryChange(elFilterCategoryAmazon, elFilterSubcategoryAmazon, 'amazon');
+    applyAmazonFilters();
+  } else if (platform === 'shopee') {
+    elFilterCategoryShopee.value = '';
+    handleCategoryChange(elFilterCategoryShopee, elFilterSubcategoryShopee, 'shopee');
+    applyShopeeFilters();
+  } else {
+    elFilterCategoryML.value = '';
+    handleCategoryChange(elFilterCategoryML, elFilterSubcategoryML, 'ml');
+    applyMLFilters();
+  }
 }
 
 // ==========================================
@@ -2067,6 +2120,21 @@ async function preparePublicationBatch() {
 // ==========================================
 // Rendering Methods (Cards & UI)
 // ==========================================
+function applyMLFilters() {
+  renderMLDeals(allMLDeals);
+  updateActiveFilterChip('ml');
+}
+
+function applyAmazonFilters() {
+  renderAmazonDeals(allAmazonDeals);
+  updateActiveFilterChip('amazon');
+}
+
+function applyShopeeFilters() {
+  renderShopeeDeals(allShopeeDeals);
+  updateActiveFilterChip('shopee');
+}
+
 function getFilteredDealEntries(deals, platform) {
   const filters = platform === 'amazon'
     ? [
@@ -2511,179 +2579,313 @@ function renderShopeeDeals(deals) {
   updateShopeeSelectionUI();
 }
 
+let activeCouponMarketplace = 'all';
+
 function renderCoupons(coupons) {
   elGridCoupons.innerHTML = '';
   
-  if (coupons.length === 0) {
+  const searchInput = document.getElementById('ipt-filter-coupons');
+  const statusSelect = document.getElementById('sel-filter-coupon-status');
+  const discountSelect = document.getElementById('sel-filter-coupon-discount');
+
+  const searchText = (searchInput?.value || '').toLowerCase().trim();
+  const selectedStatus = statusSelect?.value || '';
+  const selectedMinDiscount = Number(discountSelect?.value || 0);
+
+  // Filtra por busca, status e desconto
+  const filteredCoupons = coupons.filter(coupon => {
+    const rulesText = (coupon.rules || '').toLowerCase();
+    const codeText = (coupon.code || '').toLowerCase();
+    const matchesSearch = !searchText || codeText.includes(searchText) || rulesText.includes(searchText);
+
+    const isConfirmed = coupon.verificationStatus === 'manually_confirmed';
+    const matchesStatus = !selectedStatus || (selectedStatus === 'confirmed' ? isConfirmed : !isConfirmed);
+
+    // Extrai % de desconto das regras
+    const percentMatch = rulesText.match(/(\d+)\s*%/);
+    const percent = percentMatch ? Number(percentMatch[1]) : 0;
+    const matchesDiscount = !selectedMinDiscount || percent >= selectedMinDiscount;
+
+    return matchesSearch && matchesStatus && matchesDiscount;
+  });
+
+  if (filteredCoupons.length === 0) {
     elGridCoupons.innerHTML = `
       <div class="empty-state">
-        <p>Nenhum cupom ativo no momento.</p>
+        <p>Nenhum cupom encontrado para os filtros selecionados.</p>
       </div>
     `;
     return;
   }
-  
-  coupons.forEach((coupon) => {
-    const compatibleDeals = findCompatibleDealsForCoupon(coupon, allMLDeals);
-    const compCount = compatibleDeals.length;
-    const isConfirmed = coupon.verificationStatus === 'manually_confirmed';
-    const checkedAt = parseBackendDate(coupon.lastCheckedAt);
-    const confirmedAt = parseBackendDate(coupon.lastConfirmedAt);
-    const verificationLabel = isConfirmed
-      ? `Confirmado manualmente${confirmedAt ? ` em ${confirmedAt.toLocaleString('pt-BR')}` : ''}`
-      : 'Não verificado no checkout';
 
-    const item = document.createElement('div');
-    item.className = 'coupon-ticket';
+  // Agrupa em Verificados e Não Verificados
+  const verifiedCoupons = filteredCoupons.filter(c => c.verificationStatus === 'manually_confirmed');
+  const unverifiedCoupons = filteredCoupons.filter(c => c.verificationStatus !== 'manually_confirmed');
+
+  const renderCouponGroup = (title, items, isVerifiedGroup) => {
+    if (items.length === 0) return;
     
-    item.innerHTML = `
-      <div class="coupon-info">
-        <div class="coupon-code">${coupon.code}</div>
-        <div class="coupon-rule">${coupon.rules}</div>
-        <div class="coupon-limit">Limite: ${coupon.maxLimit || 'N/A'}</div>
-        <div class="coupon-verification ${isConfirmed ? 'is-confirmed' : 'is-unverified'}">
-          ${verificationLabel}
+    const groupHeader = document.createElement('div');
+    groupHeader.className = 'coupon-group-heading';
+    groupHeader.innerHTML = `<span>${title}</span> <small>(${items.length})</small>`;
+    elGridCoupons.appendChild(groupHeader);
+
+    items.forEach((coupon) => {
+      // Seleciona ofertas do marketplace escolhido
+      const dealsToCompare = activeCouponMarketplace === 'amazon' ? allAmazonDeals : allMLDeals;
+      const compatibleDeals = findCompatibleDealsForCoupon(coupon, dealsToCompare);
+      const compCount = compatibleDeals.length;
+      const isConfirmed = coupon.verificationStatus === 'manually_confirmed';
+      const checkedAt = parseBackendDate(coupon.lastCheckedAt);
+      const confirmedAt = parseBackendDate(coupon.lastConfirmedAt);
+      const verificationLabel = isConfirmed
+        ? `Confirmado manualmente${confirmedAt ? ` em ${confirmedAt.toLocaleString('pt-BR')}` : ''}`
+        : 'Não verificado no checkout';
+
+      const item = document.createElement('div');
+      item.className = 'coupon-ticket';
+      
+      item.innerHTML = `
+        <div class="coupon-info">
+          <div class="coupon-code">${coupon.code}</div>
+          <div class="coupon-rule">${coupon.rules}</div>
+          <div class="coupon-limit">Limite: ${coupon.maxLimit || 'N/A'}</div>
+          <div class="coupon-verification ${isConfirmed ? 'is-confirmed' : 'is-unverified'}">
+            ${verificationLabel}
+          </div>
+          <div class="coupon-verification-dates">
+            Consultado na fonte: ${checkedAt ? checkedAt.toLocaleString('pt-BR') : 'não informado'}<br>
+            Última confirmação: ${confirmedAt ? confirmedAt.toLocaleString('pt-BR') : 'nunca'}
+          </div>
+          <div class="coupon-compatible-status ${compCount > 0 ? 'status-active' : 'status-inactive'}">
+            🎯 Compatibilidade estimada com <strong>${compCount}</strong> ofertas
+          </div>
+          <div class="coupon-filter-row">
+            <input type="text" class="ipt-mini-filter" placeholder="Filtrar produtos compatíveis..." title="Filtrar produtos">
+            <button class="btn-toggle-products" title="Ver produtos">
+              <span class="arrow-icon">▼</span>
+            </button>
+          </div>
+          <div class="compatible-products-list hidden">
+            <div class="compatible-products-grid"></div>
+          </div>
         </div>
-        <div class="coupon-verification-dates">
-          Consultado na fonte: ${checkedAt ? checkedAt.toLocaleString('pt-BR') : 'não informado'}<br>
-          Última confirmação: ${confirmedAt ? confirmedAt.toLocaleString('pt-BR') : 'nunca'}
-        </div>
-        <div class="coupon-compatible-status ${compCount > 0 ? 'status-active' : 'status-inactive'}">
-          🎯 Compatibilidade estimada com <strong>${compCount}</strong> ofertas
-        </div>
-        <div class="coupon-filter-row">
-          <input type="text" class="ipt-mini-filter" placeholder="Filtrar produtos compatíveis..." title="Filtrar produtos">
-          <button class="btn-toggle-products" title="Ver produtos">
-            <span class="arrow-icon">▼</span>
+        <div class="coupon-actions">
+          <button class="btn-copy" data-code="${coupon.code}">Copiar Código</button>
+          <button class="btn-confirm-coupon" data-code="${coupon.code}">
+            ${isConfirmed ? 'Confirmado ✓' : 'Confirmar após testar'}
           </button>
         </div>
-        <div class="compatible-products-list hidden">
-          <div class="compatible-products-grid"></div>
+      `;
+      
+      const gridContainer = item.querySelector('.compatible-products-grid');
+      const listContainer = item.querySelector('.compatible-products-list');
+      const toggleBtn = item.querySelector('.btn-toggle-products');
+      const arrowIcon = item.querySelector('.arrow-icon');
+      const miniFilterInput = item.querySelector('.ipt-mini-filter');
+      
+      const updateFilteredGrid = (miniSearchTerm = '') => {
+        if (!gridContainer) return;
+        gridContainer.innerHTML = '';
+        
+        const filteredDeals = compatibleDeals.filter(d => 
+          d.title.toLowerCase().includes(miniSearchTerm.toLowerCase())
+        );
+        
+        if (filteredDeals.length === 0) {
+          gridContainer.innerHTML = '<div class="no-results-mini">Nenhum produto correspondente.</div>';
+          return;
+        }
+        
+        filteredDeals.forEach(d => {
+          const mini = document.createElement('div');
+          mini.className = 'compatible-product-mini';
+          mini.innerHTML = `
+            <img src="${d.image}" alt="" loading="lazy" decoding="async">
+            <div class="mini-details">
+              <span class="mini-title">${d.title}</span>
+              <span class="mini-price">${d.currentPrice} (${d.discount}% OFF)</span>
+              <button class="btn-coupon-story-action" type="button">📸 Vincular e gerar Story</button>
+            </div>
+          `;
+          
+          // Ação de vincular cupom e abrir modal de preview de Story
+          mini.querySelector('.btn-coupon-story-action').addEventListener('click', (e) => {
+            e.stopPropagation();
+            openCouponStoryModal(coupon, d);
+          });
+
+          gridContainer.appendChild(mini);
+        });
+      };
+
+      updateFilteredGrid();
+
+      if (miniFilterInput) {
+        miniFilterInput.addEventListener('input', (e) => {
+          updateFilteredGrid(e.target.value.trim());
+        });
+      }
+
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+          const isHidden = listContainer.classList.contains('hidden');
+          if (isHidden) {
+            listContainer.classList.remove('hidden');
+            arrowIcon.textContent = '▲';
+            toggleBtn.classList.add('expanded');
+          } else {
+            listContainer.classList.add('hidden');
+            arrowIcon.textContent = '▼';
+            toggleBtn.classList.remove('expanded');
+          }
+        });
+      }
+
+      const copyBtn = item.querySelector('.btn-copy');
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(coupon.code).then(() => {
+          copyBtn.textContent = 'Copiado! ✓';
+          copyBtn.classList.add('copied');
+          setTimeout(() => {
+            copyBtn.textContent = 'Copiar Código';
+            copyBtn.classList.remove('copied');
+          }, 2000);
+        });
+      });
+
+      const confirmBtn = item.querySelector('.btn-confirm-coupon');
+      confirmBtn.addEventListener('click', async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Salvando...';
+        try {
+          const response = await fetch(
+            `/api/coupons/${encodeURIComponent(coupon.code)}/confirm`,
+            { method: 'POST' }
+          );
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.error || 'Falha na confirmação');
+          }
+          Object.assign(coupon, result.coupon);
+          renderCoupons(coupons);
+          renderMLDeals(allMLDeals);
+        } catch (err) {
+          alert(`Não foi possível confirmar o cupom: ${err.message}`);
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Confirmar após testar';
+        }
+      });
+
+      elGridCoupons.appendChild(item);
+    });
+  };
+
+  renderCouponGroup('⭐ Cupons Verificados', verifiedCoupons, true);
+  renderCouponGroup('🔍 Outros Cupons Disponíveis', unverifiedCoupons, false);
+}
+
+// Modal e Geração de Story com Cupom para Instagram
+function openCouponStoryModal(coupon, deal) {
+  const modal = document.getElementById('coupon-story-modal');
+  const previewBody = document.getElementById('coupon-story-preview-body');
+  if (!modal || !previewBody) return;
+
+  // Cálculo de Preço estimado com cupom
+  const originalPriceStr = deal.originalPrice || deal.currentPrice;
+  const currentPriceNum = parseFloat(deal.currentPrice.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+  
+  // Extrai % de desconto das regras
+  const percentMatch = (coupon.rules || '').match(/(\d+)\s*%/);
+  const percent = percentMatch ? Number(percentMatch[1]) : 15;
+  
+  const priceWithCouponNum = currentPriceNum * (1 - (percent / 100));
+  const priceWithCouponStr = `R$ ${priceWithCouponNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const savingsStr = `R$ ${(currentPriceNum - priceWithCouponNum).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const couponData = {
+    code: coupon.code,
+    rules: coupon.rules,
+    priceWithoutCoupon: deal.currentPrice,
+    priceWithCoupon: priceWithCouponStr,
+    savings: savingsStr
+  };
+
+  previewBody.innerHTML = `
+    <div class="coupon-story-preview-card">
+      <div class="coupon-preview-product-row">
+        <img src="${deal.image}" alt="">
+        <div>
+          <h4>${escapeQueueHtml(deal.title)}</h4>
+          <span class="coupon-code-badge">CUPOM: ${escapeQueueHtml(coupon.code)}</span>
         </div>
       </div>
-      <div class="coupon-actions">
-        <button class="btn-copy" data-code="${coupon.code}">Copiar Código</button>
-        <button class="btn-confirm-coupon" data-code="${coupon.code}">
-          ${isConfirmed ? 'Confirmado ✓' : 'Confirmar após testar'}
-        </button>
+      <div class="coupon-preview-prices">
+        <div class="coupon-price-row">
+          <span>Preço original:</span>
+          <span><s>${deal.originalPrice || deal.currentPrice}</s></span>
+        </div>
+        <div class="coupon-price-row">
+          <span>Preço sem cupom:</span>
+          <span>${deal.currentPrice} (${deal.discount}% OFF)</span>
+        </div>
+        <div class="coupon-price-row">
+          <span><strong>Preço final com cupom:</strong></span>
+          <span class="coupon-price-highlight">${priceWithCouponStr}</span>
+        </div>
+        <div class="coupon-price-row">
+          <span>Economia extra do cupom:</span>
+          <strong style="color: #ffe600;">${savingsStr} (${percent}% OFF)</strong>
+        </div>
       </div>
-    `;
-    
-    const gridContainer = item.querySelector('.compatible-products-grid');
-    const listContainer = item.querySelector('.compatible-products-list');
-    const toggleBtn = item.querySelector('.btn-toggle-products');
-    const arrowIcon = item.querySelector('.arrow-icon');
-    const miniFilterInput = item.querySelector('.ipt-mini-filter');
-    
-    const updateFilteredGrid = (searchTerm = '') => {
-      if (!gridContainer) return;
-      gridContainer.innerHTML = '';
-      
-      const filteredDeals = compatibleDeals.filter(d => 
-        d.title.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      
-      if (filteredDeals.length === 0) {
-        gridContainer.innerHTML = '<div class="no-results-mini">Nenhum produto correspondente.</div>';
-        return;
+      <button id="btn-generate-coupon-story-action" class="btn-cta" type="button" style="margin-top: 10px;">
+        📸 Gerar e Baixar Story para Instagram (.JPG)
+      </button>
+      <div id="coupon-story-result-area"></div>
+    </div>
+  `;
+
+  document.getElementById('btn-close-coupon-modal').onclick = () => {
+    modal.classList.add('hidden');
+  };
+
+  document.getElementById('btn-generate-coupon-story-action').onclick = async () => {
+    const btn = document.getElementById('btn-generate-coupon-story-action');
+    const resultArea = document.getElementById('coupon-story-result-area');
+    btn.disabled = true;
+    btn.textContent = 'Gerando Story... Aguarde.';
+
+    try {
+      const response = await fetch('/api/generate-coupon-story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deal, coupon: couponData })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.imageBuffer) {
+        throw new Error(data.error || 'Falha ao gerar Story com cupom.');
       }
-      
-      filteredDeals.forEach(d => {
-        const mini = document.createElement('div');
-        mini.className = 'compatible-product-mini';
-        mini.innerHTML = `
-          <img src="${d.image}" alt="" loading="lazy" decoding="async">
-          <div class="mini-details">
-            <span class="mini-title">${d.title}</span>
-            <span class="mini-price">${d.currentPrice} (${d.discount}% OFF)</span>
-          </div>
-        `;
-        mini.addEventListener('click', () => {
-          // Troca para a aba do Mercado Livre e rola até o produto
-          elFilterNameML.value = d.title;
-          applyMLFilters();
-          elTabProducts.click();
-          elTabML.click();
-          setTimeout(() => {
-            const card = Array.from(elGridML.querySelectorAll('.deal-card')).find(c => {
-              const idx = parseInt(c.dataset.index, 10);
-              return allMLDeals[idx] && allMLDeals[idx].title === d.title;
-            });
-            if (card) {
-              card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              card.style.borderColor = '#ffe600';
-              card.style.boxShadow = '0 0 15px rgba(255, 230, 0, 0.4)';
-              setTimeout(() => {
-                card.style.borderColor = '';
-                card.style.boxShadow = '';
-              }, 2000);
-            }
-          }, 200);
-        });
-        gridContainer.appendChild(mini);
-      });
-    };
 
-    updateFilteredGrid();
-
-    if (miniFilterInput) {
-      miniFilterInput.addEventListener('input', (e) => {
-        updateFilteredGrid(e.target.value.trim());
-      });
+      resultArea.innerHTML = `
+        <div style="margin-top: 15px; text-align: center;">
+          <p style="color: #2ecc71; font-weight: 700; margin-bottom: 10px;">✓ Story gerado com sucesso!</p>
+          <img src="${data.imageBuffer}" alt="Story gerado" style="max-height: 400px; border-radius: 16px; margin-bottom: 10px; border: 2px solid #ffe600;">
+          <br>
+          <a href="${data.imageBuffer}" download="story_cupom_${coupon.code}_${Date.now()}.jpg" class="btn-cta" style="display: inline-block; text-decoration: none; padding: 10px 20px;">
+            ⬇️ Baixar Imagem do Story
+          </a>
+        </div>
+      `;
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '📸 Gerar e Baixar Story para Instagram (.JPG)';
     }
+  };
 
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
-        const isHidden = listContainer.classList.contains('hidden');
-        if (isHidden) {
-          listContainer.classList.remove('hidden');
-          arrowIcon.textContent = '▲';
-          toggleBtn.classList.add('expanded');
-        } else {
-          listContainer.classList.add('hidden');
-          arrowIcon.textContent = '▼';
-          toggleBtn.classList.remove('expanded');
-        }
-      });
-    }
-
-    const copyBtn = item.querySelector('.btn-copy');
-    copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(coupon.code).then(() => {
-        copyBtn.textContent = 'Copiado! ✓';
-        copyBtn.classList.add('copied');
-        setTimeout(() => {
-          copyBtn.textContent = 'Copiar Código';
-          copyBtn.classList.remove('copied');
-        }, 2000);
-      });
-    });
-
-    const confirmBtn = item.querySelector('.btn-confirm-coupon');
-    confirmBtn.addEventListener('click', async () => {
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = 'Salvando...';
-      try {
-        const response = await fetch(
-          `/api/coupons/${encodeURIComponent(coupon.code)}/confirm`,
-          { method: 'POST' }
-        );
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error || 'Falha na confirmação');
-        }
-        Object.assign(coupon, result.coupon);
-        renderCoupons(coupons);
-        renderMLDeals(allMLDeals);
-      } catch (err) {
-        alert(`Não foi possível confirmar o cupom: ${err.message}`);
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Confirmar após testar';
-      }
-    });
-
-    elGridCoupons.appendChild(item);
-  });
+  modal.classList.remove('hidden');
 }
 
 function findCompatibleDealsForCoupon(coupon, deals) {
@@ -3172,6 +3374,41 @@ function init() {
   elFilterNameShopee.addEventListener('input', applyShopeeFilters);
   elFilterDiscountShopee.addEventListener('change', applyShopeeFilters);
   elFilterRecurringShopee.addEventListener('change', applyShopeeFilters);
+
+  // Coupon Filters listeners
+  const btnCouponAll = document.getElementById('btn-coupon-tab-all');
+  const btnCouponML = document.getElementById('btn-coupon-tab-ml');
+  const btnCouponAmazon = document.getElementById('btn-coupon-tab-amazon');
+  const iptFilterCoupons = document.getElementById('ipt-filter-coupons');
+  const selFilterCouponStatus = document.getElementById('sel-filter-coupon-status');
+  const selFilterCouponDiscount = document.getElementById('sel-filter-coupon-discount');
+
+  if (btnCouponAll && btnCouponML && btnCouponAmazon) {
+    btnCouponAll.addEventListener('click', () => {
+      activeCouponMarketplace = 'all';
+      [btnCouponAll, btnCouponML, btnCouponAmazon].forEach(b => b.classList.remove('active'));
+      btnCouponAll.classList.add('active');
+      renderCoupons(allCoupons);
+    });
+    btnCouponML.addEventListener('click', () => {
+      activeCouponMarketplace = 'ml';
+      [btnCouponAll, btnCouponML, btnCouponAmazon].forEach(b => b.classList.remove('active'));
+      btnCouponML.classList.add('active');
+      renderCoupons(allCoupons);
+    });
+    btnCouponAmazon.addEventListener('click', () => {
+      activeCouponMarketplace = 'amazon';
+      [btnCouponAll, btnCouponML, btnCouponAmazon].forEach(b => b.classList.remove('active'));
+      btnCouponAmazon.classList.add('active');
+      if (!amazonDealsLoaded) fetchAmazonDeals().then(() => renderCoupons(allCoupons));
+      else renderCoupons(allCoupons);
+    });
+  }
+
+  if (iptFilterCoupons) iptFilterCoupons.addEventListener('input', () => renderCoupons(allCoupons));
+  if (selFilterCouponStatus) selFilterCouponStatus.addEventListener('change', () => renderCoupons(allCoupons));
+  if (selFilterCouponDiscount) selFilterCouponDiscount.addEventListener('change', () => renderCoupons(allCoupons));
+
   elBtnToggleFiltersML.addEventListener('click', () => {
     const open = elFiltersML.classList.toggle('is-open');
     elBtnToggleFiltersML.setAttribute('aria-expanded', String(open));

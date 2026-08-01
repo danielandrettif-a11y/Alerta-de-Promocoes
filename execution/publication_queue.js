@@ -102,6 +102,12 @@ function normalizeHttpsUrl(rawValue, fieldName) {
 
 function validateAffiliateLink(rawValue, platform = 'mercado_livre') {
   const parsed = normalizeHttpsUrl(rawValue, 'Link afiliado');
+  if (platform === 'amazon') {
+    if (!parsed.hostname.toLowerCase().includes('amazon.com.br')) {
+      throw new Error('Use um link valido da Amazon Brasil.');
+    }
+    return parsed.toString();
+  }
   const hostname = platform === 'shopee' ? 's.shopee.com.br' : 'meli.la';
   if (parsed.hostname.toLowerCase() !== hostname) {
     throw new Error(`Use um link afiliado oficial no dominio ${hostname}.`);
@@ -120,12 +126,14 @@ function normalizeProductLink(rawValue, platform) {
   const hostname = parsed.hostname.toLowerCase();
   const valid = platform === 'shopee'
     ? ['shopee.com.br', 'www.shopee.com.br'].includes(hostname)
-    : hostname === 'mercadolivre.com.br' ||
-      hostname.endsWith('.mercadolivre.com.br');
+    : platform === 'amazon'
+      ? ['amazon.com.br', 'www.amazon.com.br'].includes(hostname)
+      : hostname === 'mercadolivre.com.br' ||
+        hostname.endsWith('.mercadolivre.com.br');
   if (!valid) {
     throw new Error(
       `O produto precisa apontar para ${
-        platform === 'shopee' ? 'a Shopee Brasil' : 'o Mercado Livre Brasil'
+        platform === 'shopee' ? 'a Shopee Brasil' : platform === 'amazon' ? 'a Amazon Brasil' : 'o Mercado Livre Brasil'
       }.`
     );
   }
@@ -153,31 +161,42 @@ function enqueueOffer(queue, input, now = new Date()) {
   }
 
   const platform = String(input.platform || '').toLowerCase();
-  if (!['mercado_livre', 'shopee'].includes(platform)) {
-    throw new Error('A fila afiliada aceita Mercado Livre ou Shopee.');
+  if (!['mercado_livre', 'shopee', 'amazon'].includes(platform)) {
+    throw new Error('A fila afiliada aceita Mercado Livre, Shopee ou Amazon.');
   }
 
   const timestamp = now.toISOString();
+  const productLink = normalizeProductLink(input.productLink, platform);
+  
+  // Se for Amazon, já é afiliado automaticamente com a tag
+  const isAmazon = platform === 'amazon';
+  const status = isAmazon ? STATUSES.READY : STATUSES.AWAITING_AFFILIATE;
+  const affiliateLink = isAmazon ? productLink : null;
+
   const item = {
     id: String(input.id || crypto.randomUUID()),
     dealId,
     platform,
-    status: STATUSES.AWAITING_AFFILIATE,
+    status,
     title,
     originalPrice: String(input.originalPrice || ''),
     currentPrice: String(input.currentPrice || ''),
     discount: Number(input.discount) || 0,
     image: String(input.image || ''),
-    productLink: normalizeProductLink(input.productLink, platform),
+    productLink,
     storyFile: String(input.storyFile || ''),
-    affiliateLink: null,
-    coupon: null,
-    affiliateProcessing: emptyAffiliateProcessing(),
+    affiliateLink,
+    coupon: input.coupon || null,
+    affiliateProcessing: isAmazon ? {
+      ...emptyAffiliateProcessing(),
+      state: AFFILIATE_PROCESSING_STATES.COMPLETED,
+      completedAt: timestamp
+    } : emptyAffiliateProcessing(),
     reviewReason: null,
     reviewUpdatedStory: false,
     createdAt: timestamp,
     updatedAt: timestamp,
-    readyAt: null,
+    readyAt: isAmazon ? timestamp : null,
     publishedAt: null
   };
   normalized.items.unshift(item);

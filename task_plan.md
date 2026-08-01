@@ -45,3 +45,11 @@ Este documento registra as fases de desenvolvimento para a automação de oferta
 - [x] Corrigir erros de geração de Stories e envios de imagens no WhatsApp Web através de um proxy de imagem resiliente a redirecionamentos.
 - [x] Integrar a Amazon nos scripts de agendamento automático de Stories (`auto_publish_scheduler.js` e `wpp_scheduler.js`).
 - [x] Realizar testes E2E do dashboard, do bot do WhatsApp e da geração automatizada de Stories localmente.
+
+### Fase 7: 4 Melhorias do Painel & Cupons por Loja (Concluída)
+- [x] 1. Reorganizar Filtros em 2 linhas lógicas (Busca rápida + Taxonomia)
+- [x] 2. Dar Função Real às Subcategorias (Contagem de itens, texto contextual e chip de filtro ativo)
+- [x] 3. Ativar Amazon com Link Afiliado (`alertadesc0dd-20`), visibilidade no menu e suporte na fila
+- [x] 4. Cupons por Marketplace & Integração com Story (Cupons "Clipe" Amazon, Cupons ML por loja, Vincular cupom ao Story com preço COM/SEM cupom)
+- [x] 5. Teste E2E e Envio ao GitHub (`git push origin main`)
+

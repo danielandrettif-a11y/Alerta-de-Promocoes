@@ -4102,3 +4102,173 @@ select:focus-visible {
   }
 }
 
+/* ==========================================
+   2-Row Filter Bar & Active Filter Chips
+   ========================================== */
+.filter-bar-2rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filter-row-quick,
+.filter-row-taxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.filter-row-taxonomy {
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.active-filter-chip-container {
+  margin: 10px 0 20px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(255, 230, 0, 0.15) 0%, rgba(242, 113, 33, 0.15) 100%);
+  border: 1px solid rgba(255, 230, 0, 0.4);
+  color: #ffe600;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.active-filter-chip button {
+  background: none;
+  border: none;
+  color: #ffe600;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.active-filter-chip button:hover {
+  color: #ffffff;
+}
+
+/* ==========================================
+   Coupon Marketplace Tabs & Coupon Story Modal
+   ========================================== */
+.coupon-toolbar {
+  margin-bottom: 24px;
+}
+
+.coupon-market-tabs {
+  display: flex;
+  gap: 8px;
+  margin-right: 12px;
+}
+
+.coupon-source-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.coupon-source-tab:hover,
+.coupon-source-tab.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: var(--primary-color);
+}
+
+.coupon-group-heading {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 25px 0 15px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.coupon-story-modal-content {
+  max-width: 650px;
+  width: 90%;
+  background: #120b1f;
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  padding: 24px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.coupon-story-preview-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 15px;
+}
+
+.coupon-preview-product-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.coupon-preview-product-row img {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 6px;
+}
+
+.coupon-preview-prices {
+  background: rgba(46, 204, 113, 0.1);
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.coupon-price-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.coupon-price-highlight {
+  font-size: 22px;
+  font-weight: 800;
+  color: #2ecc71;
+}
+
+.coupon-code-badge {
+  background: #ffe600;
+  color: #1a1525;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  display: inline-block;
+}
+
+

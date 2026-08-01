@@ -166,3 +166,19 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - **Solução**: Contornamos completamente as APIs de busca de chat e mensagens da biblioteca. O evento `message_reaction` agora extrai o ID serializado da mensagem (`reaction.msgId._serialized`) e executa a exclusão de forma direta e nativa na página do browser (`client.pupPage.evaluate`) chamando a API do próprio WhatsApp Web (`window.Store.Cmd.sendDeleteMsgs`).
   - Adicionamos validação de segurança dentro do evaluate para certificar de que a mensagem reagida é de autoria do bot (`msg.id.fromMe === true`) antes de proceder com a deleção para todos.
 
+### 01/08/2026
+- **Conclusão da Fase 7 (4 Melhorias & Cupons por Loja)**:
+  - 1. **Reorganização de Filtros**: Reformulado `index.html` e `style.css` para dispor filtros em 2 linhas lógicas (`.filter-row-quick` e `.filter-row-taxonomy`) nos 3 painéis (ML, Amazon, Shopee).
+  - 2. **Subcategorias Funcionais**: Implementada a contagem dinâmica de produtos por subcategoria (`Subcategoria (N)`), aviso contextual quando nenhuma categoria está selecionada, e chips de filtro ativo (`🏷️ Categoria > Subcategoria ✕`) para remoção em 1 clique.
+  - 3. **Ativação Completa da Amazon**:
+    - Reexibidos os botões e painéis da Amazon no dashboard (`index.html`).
+    - Configurado `AMAZON_ASSOCIATE_TAG=alertadesc0dd-20` no `.env` e atualizado `server.js` e `amazon_deals.js` para adicionar `?tag=alertadesc0dd-20` aos links de produto.
+    - Atualizada a fila de publicação (`publication_queue.js`) para aceitar ofertas da Amazon (que entram automaticamente como `ready`).
+    - Criado o POP técnico `directives/amazon_deals.md`.
+  - 4. **Cupons por Loja & Geração de Story**:
+    - Atualizado o painel de cupons no frontend com abas por marketplace (Todas, Mercado Livre, Amazon), filtros por status (Verificados / Não verificados) e % de desconto.
+    - Criado botão "📸 Vincular e gerar Story" em cada produto compatível com cupom.
+    - Implementado modal de preview (`#coupon-story-modal`) que calcula preço sem cupom vs. preço com cupom, exibe badge do código, economia e gera imagem de Story vertical (1080x1920) via rota `POST /api/generate-coupon-story` para download em JPG.
+  - Testes de sintaxe JS executados sem erros (`node -c`).
+
+

@@ -389,21 +389,59 @@ app.post('/api/coupons/:code/confirm', (req, res) => {
   }
 });
 
+// POST /api/generate-coupon-story - Gera imagem de Story com cupom de produto para preview/download
+app.post('/api/generate-coupon-story', async (req, res) => {
+  const { deal, coupon } = req.body || {};
+  if (!deal || !deal.title) {
+    return res.status(400).json({ error: 'Oferta inválida para geração de Story.' });
+  }
+
+  try {
+    const dealWithCoupon = {
+      ...deal,
+      coupon: coupon || deal.coupon || null
+    };
+    const { buffer } = await generateStoryBuffer(dealWithCoupon, []);
+    const base64Image = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+    res.json({
+      success: true,
+      imageBuffer: base64Image,
+      deal: dealWithCoupon
+    });
+  } catch (err) {
+    console.error('Erro ao gerar Story com cupom:', err);
+    res.status(500).json({ error: `Falha ao gerar Story: ${err.message}` });
+  }
+});
+
 // GET /api/categories - Retorna a taxonomia de categorias e subcategorias
 app.get('/api/categories', (req, res) => {
   res.json(TAXONOMY);
 });
 
-// GET /api/amazon-deals - Retorna as ofertas da Amazon
+// GET /api/amazon-deals - Retorna as ofertas da Amazon com tag de afiliado
 app.get('/api/amazon-deals', (req, res) => {
   let deals = [];
   let generatedAt = null;
+  const tag = readEnv().AMAZON_ASSOCIATE_TAG || process.env.AMAZON_ASSOCIATE_TAG || 'alertadesc0dd-20';
 
   if (fs.existsSync(amazonDealsReportPath)) {
     try {
       const rawData = fs.readFileSync(amazonDealsReportPath, 'utf-8');
       const parsedData = JSON.parse(rawData);
-      deals = parsedData.deals || [];
+      deals = (parsedData.deals || []).map(d => {
+        let link = d.link || '';
+        if (link && !link.includes(`tag=${tag}`)) {
+          try {
+            const urlObj = new URL(link);
+            urlObj.searchParams.set('tag', tag);
+            link = urlObj.toString();
+          } catch {
+            link += link.includes('?') ? `&tag=${tag}` : `?tag=${tag}`;
+          }
+        }
+        return { ...d, link };
+      });
       generatedAt = parsedData.generatedAt || null;
     } catch (err) {
       console.error('Erro ao ler ofertas da Amazon:', err);

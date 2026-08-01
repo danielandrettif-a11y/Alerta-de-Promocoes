@@ -61,3 +61,10 @@ Este documento registra as descobertas de pesquisas, especificações técnicas 
 - **Falsos Positivos com Classes Genéricas de CSS**: O uso de seletores parciais excessivamente genéricos (ex: `[class*="Card"]`) captura divs estruturais de layout e gera resultados inconsistentes. O correto é segmentar termos específicos do domínio (ex: `ProductCard`, `HitCard`, `ProductCardArea`) e apenas recorrer a seletores gerais em estruturas de fallback controladas.
 - **Tolerância Dinâmica no Status**: Comparar preços diretamente por centavos gera status de erro `"Preço Semelhante"` quando a diferença de mercado é insignificante (ex: R$ 2,40 mais barato em um produto de R$ 1.460,00). Adotar uma margem de tolerância proporcional (**2%** do preço do produto) permite classificar variações mínimas como `"Preço Equivalente"`, isolando de fato descontos relevantes (`Desconto Comprovado`) ou ofertas infladas (`Preço Acima do Mercado`).
 
+## Reformulação de Filtros, Subcategorias e Cupons por Loja
+- **Filtros em Duas Linhas**: Separar busca rápida/desconto mínimo da navegação em cascata por categoria reduz drasticamente a sobrecarga visual e melhora a UX em telas móveis e desktop.
+- **Contagem por Subcategoria e Chips Ativos**: Exibir o total de produtos disponíveis ao lado do nome de cada subcategoria (`Subcategoria (N)`) e prover feedback instantâneo via chips (`🏷️ Categoria > Subcategoria ✕`) facilita o refinamento de buscas sem precisar resetar selects manualmente.
+- **Link Afiliado Amazon e Tag de Associado**: A Amazon Brasil permite atrelar a tag de associado (`AMAZON_ASSOCIATE_TAG`) diretamente aos links dos produtos via query parameter `?tag=alertadesc0dd-20`, dispensando extensões de navegador ou automações complexas de cliques.
+- **Integração de Cupons com Story de Instagram**: Vincular cupons específicos a produtos e calcular o preço final promocional (`Preço COM Cupom`) permite a renderização automática de imagens de Stories vertical (1080x1920) com banners destacados para publicação imediata.
+
+
