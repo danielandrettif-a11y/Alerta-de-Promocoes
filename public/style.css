@@ -721,6 +721,9 @@ body {
 
 /* Control/Action Bar */
 .control-bar {
+  position: sticky;
+  top: 0;
+  z-index: 120;
   display: flex;
   justify-content: space-between;
   align-items: center;
