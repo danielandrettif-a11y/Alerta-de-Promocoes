@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Alerta de Descontos - Links Afiliados",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Gera links afiliados usando suas sessões locais.",
   "permissions": [
     "storage",

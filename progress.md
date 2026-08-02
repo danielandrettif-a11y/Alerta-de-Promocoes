@@ -198,7 +198,7 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Adicionado suporte à geração dupla de Stories (`execution/generate_stories.js` e `server.js`): produtos com cupom geram 2 variações de Story automaticamente ("Com Cupom" e "Sem Cupom"), permitindo alternar visualmente o preview e enviar a versão desejada para o Instagram.
   - Atualizada a Extensão Chrome/Opera (`extension/manifest.json` v1.6.0 e `extension/background.js`):
     - Implementada a divisão automática de tela (Split Screen): ao iniciar a geração de links, a janela principal do usuário ajusta para a metade esquerda (50%) e a janela da extensão para a metade direita (50%) usando `chrome.system.display`.
-    - Implementado o fechamento gracioso aba por aba com delay de 150ms: ao concluir o lote, as abas são encerradas individualmente, eliminando a caixa de diálogo do Opera GX/Chrome ("Fechar esta janela com X guias?").
+    - Implementada a restauração automática da janela principal (`restoreMainWindowState`): assim que a extensão conclui a geração de links e fecha as guias, a janela do navegador do usuário retorna automaticamente para **tela cheia / maximizada** como estava antes.
 
 
 

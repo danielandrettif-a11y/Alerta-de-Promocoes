@@ -140,6 +140,36 @@ async function getWorkerWindow() {
   }
 }
 
+const MAIN_WINDOW_STATE_KEY = 'mainWindowOriginalState';
+
+async function restoreMainWindowState() {
+  try {
+    const stored = await chrome.storage.session.get(MAIN_WINDOW_STATE_KEY);
+    const original = stored[MAIN_WINDOW_STATE_KEY];
+    if (original?.windowId) {
+      const targetState = (original.state === 'maximized' || original.state === 'fullscreen')
+        ? original.state
+        : 'maximized';
+      await chrome.windows.update(original.windowId, {
+        state: targetState,
+        focused: true
+      }).catch(() => {});
+    } else {
+      const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+      if (windows[0]?.id) {
+        await chrome.windows.update(windows[0].id, {
+          state: 'maximized',
+          focused: true
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao restaurar janela principal:', err);
+  } finally {
+    await chrome.storage.session.remove(MAIN_WINDOW_STATE_KEY);
+  }
+}
+
 async function positionSplitWindows(workerWindowId) {
   try {
     let screenWidth = 1920;
@@ -172,6 +202,15 @@ async function positionSplitWindows(workerWindowId) {
     const mainWindow = windows.find(w => w.id !== workerWindowId);
 
     if (mainWindow?.id) {
+      const stored = await chrome.storage.session.get(MAIN_WINDOW_STATE_KEY);
+      if (!stored[MAIN_WINDOW_STATE_KEY]) {
+        await chrome.storage.session.set({
+          [MAIN_WINDOW_STATE_KEY]: {
+            windowId: mainWindow.id,
+            state: mainWindow.state || 'maximized'
+          }
+        });
+      }
       await chrome.windows.update(mainWindow.id, {
         left: screenLeft,
         top: screenTop,
@@ -246,6 +285,8 @@ async function closeWorkerWindow() {
     }
   }
   await chrome.storage.session.remove(WORKER_WINDOW_KEY);
+  // Restaura a janela principal do usuario para maximizada / tela cheia como estava antes
+  await restoreMainWindowState();
 }
 
 function samePageUrl(leftValue, rightValue) {
