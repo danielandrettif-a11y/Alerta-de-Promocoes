@@ -3049,100 +3049,120 @@ function updateMobileSelectionBar() {
 }
 
 function updateMLSelectionUI() {
-  const cards = elGridML.querySelectorAll('.deal-card');
-  cards.forEach(card => {
-    const idx = parseInt(card.dataset.index, 10);
-    const chk = card.querySelector('.deal-chk');
-    if (selectedMLIndices.has(idx)) {
-      card.classList.add('selected');
-      if (chk) chk.checked = true;
-    } else {
-      card.classList.remove('selected');
-      if (chk) chk.checked = false;
-    }
-  });
-
-  const count = selectedMLIndices.size;
-  elTxtSelectedCountML.textContent = count;
-  elBtnGenerateML.disabled = count === 0 || !whatsappReady;
-  elBtnClearSelectionML.disabled = count === 0;
-
-  const visibleCards = elGridML.querySelectorAll('.deal-card:not(.hidden-filter)');
-  if (visibleCards.length > 0) {
-    let allSelected = true;
-    visibleCards.forEach(card => {
-      if (!selectedMLIndices.has(parseInt(card.dataset.index, 10))) allSelected = false;
+  try {
+    const cards = elGridML ? elGridML.querySelectorAll('.deal-card') : [];
+    cards.forEach(card => {
+      const idx = parseInt(card.dataset.index, 10);
+      const chk = card.querySelector('.deal-chk');
+      if (selectedMLIndices.has(idx)) {
+        card.classList.add('selected');
+        if (chk) chk.checked = true;
+      } else {
+        card.classList.remove('selected');
+        if (chk) chk.checked = false;
+      }
     });
-    elChkSelectAllML.checked = allSelected;
-  } else {
-    elChkSelectAllML.checked = false;
+
+    const count = selectedMLIndices.size;
+    if (elTxtSelectedCountML) elTxtSelectedCountML.textContent = count;
+    if (elBtnGenerateML) elBtnGenerateML.disabled = count === 0 || !whatsappReady;
+    if (elBtnClearSelectionML) elBtnClearSelectionML.disabled = count === 0;
+
+    if (elChkSelectAllML && elGridML) {
+      const visibleCards = elGridML.querySelectorAll('.deal-card:not(.hidden-filter)');
+      if (visibleCards.length > 0) {
+        let allSelected = true;
+        visibleCards.forEach(card => {
+          if (!selectedMLIndices.has(parseInt(card.dataset.index, 10))) allSelected = false;
+        });
+        elChkSelectAllML.checked = allSelected;
+      } else {
+        elChkSelectAllML.checked = false;
+      }
+    }
+  } catch (err) {
+    console.error('Erro em updateMLSelectionUI:', err);
   }
   updatePublicationQueueSelectionUI();
 }
 
 function updateAmazonSelectionUI() {
-  const cards = elGridAmazon.querySelectorAll('.deal-card');
-  cards.forEach(card => {
-    const idx = parseInt(card.dataset.index, 10);
-    const chk = card.querySelector('.deal-chk');
-    if (selectedAmazonIndices.has(idx)) {
-      card.classList.add('selected');
-      if (chk) chk.checked = true;
-    } else {
-      card.classList.remove('selected');
-      if (chk) chk.checked = false;
-    }
-  });
-
-  const count = selectedAmazonIndices.size;
-  elTxtSelectedCountAmazon.textContent = count;
-  elBtnGenerateAmazon.disabled = count === 0 || !whatsappReady;
-  elBtnClearSelectionAmazon.disabled = count === 0;
-
-  const visibleCards = elGridAmazon.querySelectorAll('.deal-card:not(.hidden-filter)');
-  if (visibleCards.length > 0) {
-    let allSelected = true;
-    visibleCards.forEach(card => {
-      if (!selectedAmazonIndices.has(parseInt(card.dataset.index, 10))) allSelected = false;
+  try {
+    const cards = elGridAmazon ? elGridAmazon.querySelectorAll('.deal-card') : [];
+    cards.forEach(card => {
+      const idx = parseInt(card.dataset.index, 10);
+      const chk = card.querySelector('.deal-chk');
+      if (selectedAmazonIndices.has(idx)) {
+        card.classList.add('selected');
+        if (chk) chk.checked = true;
+      } else {
+        card.classList.remove('selected');
+        if (chk) chk.checked = false;
+      }
     });
-    elChkSelectAllAmazon.checked = allSelected;
-  } else {
-    elChkSelectAllAmazon.checked = false;
+
+    const count = selectedAmazonIndices.size;
+    if (elTxtSelectedCountAmazon) elTxtSelectedCountAmazon.textContent = count;
+    if (elBtnGenerateAmazon) elBtnGenerateAmazon.disabled = count === 0 || !whatsappReady;
+    if (elBtnClearSelectionAmazon) elBtnClearSelectionAmazon.disabled = count === 0;
+
+    if (elChkSelectAllAmazon && elGridAmazon) {
+      const visibleCards = elGridAmazon.querySelectorAll('.deal-card:not(.hidden-filter)');
+      if (visibleCards.length > 0) {
+        let allSelected = true;
+        visibleCards.forEach(card => {
+          if (!selectedAmazonIndices.has(parseInt(card.dataset.index, 10))) allSelected = false;
+        });
+        elChkSelectAllAmazon.checked = allSelected;
+      } else {
+        elChkSelectAllAmazon.checked = false;
+      }
+    }
+  } catch (err) {
+    console.error('Erro em updateAmazonSelectionUI:', err);
   }
   updatePublicationQueueSelectionUI();
 }
 
 function updateShopeeSelectionUI() {
-  const cards = elGridShopee.querySelectorAll('.deal-card');
-  cards.forEach(card => {
-    const index = Number(card.dataset.index);
-    const selected = selectedShopeeIndices.has(index);
-    card.classList.toggle('selected', selected);
-    const checkbox = card.querySelector('.deal-chk');
-    if (checkbox) checkbox.checked = selected;
-  });
+  try {
+    const cards = elGridShopee ? elGridShopee.querySelectorAll('.deal-card') : [];
+    cards.forEach(card => {
+      const index = Number(card.dataset.index);
+      const selected = selectedShopeeIndices.has(index);
+      card.classList.toggle('selected', selected);
+      const checkbox = card.querySelector('.deal-chk');
+      if (checkbox) checkbox.checked = selected;
+    });
 
-  const count = selectedShopeeIndices.size;
-  elBtnClearSelectionShopee.disabled = count === 0;
-  const visibleCards = elGridShopee.querySelectorAll(
-    '.deal-card:not(.hidden-filter)'
-  );
-  elChkSelectAllShopee.checked = visibleCards.length > 0 &&
-    [...visibleCards].every(card =>
-      selectedShopeeIndices.has(Number(card.dataset.index))
-    );
+    const count = selectedShopeeIndices.size;
+    if (elBtnClearSelectionShopee) elBtnClearSelectionShopee.disabled = count === 0;
+    if (elChkSelectAllShopee && elGridShopee) {
+      const visibleCards = elGridShopee.querySelectorAll('.deal-card:not(.hidden-filter)');
+      elChkSelectAllShopee.checked = visibleCards.length > 0 &&
+        [...visibleCards].every(card =>
+          selectedShopeeIndices.has(Number(card.dataset.index))
+        );
+    }
+  } catch (err) {
+    console.error('Erro em updateShopeeSelectionUI:', err);
+  }
   updatePublicationQueueSelectionUI();
 }
 
 function updatePublicationQueueSelectionUI() {
-  const count = selectedMLIndices.size + selectedAmazonIndices.size + selectedShopeeIndices.size;
-  elTxtQueueCountML.textContent = count;
-  if (elTxtQueueCountAmazon) elTxtQueueCountAmazon.textContent = count;
-  elTxtQueueCountShopee.textContent = count;
-  elBtnQueueML.disabled = count === 0;
-  if (elBtnQueueAmazon) elBtnQueueAmazon.disabled = count === 0;
-  elBtnQueueShopee.disabled = count === 0;
-  updateMobileSelectionBar();
+  try {
+    const count = selectedMLIndices.size + selectedAmazonIndices.size + selectedShopeeIndices.size;
+    if (elTxtQueueCountML) elTxtQueueCountML.textContent = count;
+    if (elTxtQueueCountAmazon) elTxtQueueCountAmazon.textContent = count;
+    if (elTxtQueueCountShopee) elTxtQueueCountShopee.textContent = count;
+    if (elBtnQueueML) elBtnQueueML.disabled = count === 0;
+    if (elBtnQueueAmazon) elBtnQueueAmazon.disabled = count === 0;
+    if (elBtnQueueShopee) elBtnQueueShopee.disabled = count === 0;
+    updateMobileSelectionBar();
+  } catch (err) {
+    console.error('Erro em updatePublicationQueueSelectionUI:', err);
+  }
 }
 
 // ==========================================

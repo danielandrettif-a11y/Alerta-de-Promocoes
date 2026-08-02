@@ -188,7 +188,9 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Adicionado o botão `#btn-queue-amazon` e o contador `#txt-queue-count-amazon` no `index.html` e integrado no `app.js`.
   - Reformulado o scraper Puppeteer (`execution/amazon_deals.js`) para raspagem em volume por categorias com taxonomia (`category_helper.js`), badges de cupons, frete Prime e geração automatizada de `amazon_deals_report.json`.
   - Igualada a performance e comportamento da aba da Amazon com Mercado Livre e Shopee (`public/app.js` e `execution/automation_state.js`): Inseridos botões "Preparar para Instagram" diretos em cada card da Amazon, preservada a propriedade `platform: 'amazon'` e unificada a seleção em tempo real sem latência.
-  - Habilitada a barra flutuante de ações com o contador da fila que acompanha o scroll da página no computador (PC) e no celular (`public/style.css` e `public/app.js`).
+  - Corrigida a sincronização dos contadores de seleção da fila ("Preparar na fila") nas abas Amazon, ML e Shopee (`public/app.js`), adicionando proteções nulas completas para evitar interrupções de execução e atualizar instantaneamente o total em tempo real (0ms).
+  - Corrigida a fixação da barra de controle no topo ao rolar a tela no desktop (`public/style.css`): alterado `overflow-x: hidden` para `overflow-x: clip` no `html, body` (revisão de especificação CSS sticky) e aplicado fundo escuro sólido `#171120` com elevação e sombra na `.control-bar`.
+  - Atualizados os seletores e a versão do cache buster (`v=32`) no `public/index.html`.
 
 
 
