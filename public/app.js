@@ -251,6 +251,7 @@ function addPublicationState(deal, platform, publishedEntries) {
   const publication = findTodayPublication(publishedEntries, dealId);
   return {
     ...deal,
+    platform: platform || deal.platform,
     publishedMsgId: publication?.msgId || null,
     removedFromWhatsAppAt: publication?.removedFromWhatsAppAt || null,
     removalReaction: publication?.reaction || null
@@ -2470,6 +2471,15 @@ function renderAmazonDeals(deals) {
           <span class="card-orig-price">De: ${deal.originalPrice}</span>
           <span class="card-promo-price">Por: ${deal.currentPrice}</span>
         </div>
+        <button
+          type="button"
+          class="btn-add-queue-card"
+          data-platform="amazon"
+          data-index="${index}"
+          ${publicationQueueEnabled ? '' : 'hidden'}
+        >
+          Preparar para Instagram
+        </button>
         <div class="price-comparison-area">
           <button type="button" class="btn-compare-buscape">
             ${deal.comparison ? '↻ Atualizar Comparação' : '🔍 Comparar Preços'}
@@ -3632,12 +3642,19 @@ document.addEventListener('click', async (event) => {
   if (addButton) {
     event.preventDefault();
     event.stopPropagation();
-    const platform = addButton.dataset.platform === 'shopee'
-      ? 'shopee'
-      : 'mercado_livre';
-    const deals = platform === 'shopee' ? allShopeeDeals : allMLDeals;
-    const deal = deals[Number(addButton.dataset.index)];
-    if (deal) await enqueueDealsForPublication([deal], platform);
+    const platform = addButton.dataset.platform === 'amazon'
+      ? 'amazon'
+      : addButton.dataset.platform === 'shopee'
+        ? 'shopee'
+        : 'mercado_livre';
+    const deals = platform === 'amazon'
+      ? allAmazonDeals
+      : platform === 'shopee'
+        ? allShopeeDeals
+        : allMLDeals;
+    const index = Number(addButton.dataset.index);
+    const deal = deals[index];
+    if (deal) await enqueueDealsForPublication([{ deal, index, platform }]);
     return;
   }
 

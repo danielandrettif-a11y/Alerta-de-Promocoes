@@ -43,7 +43,7 @@ function generateDealId(deal) {
     : ['amz', 'amazon'].includes(rawPlatform)
       ? 'amazon'
       : rawPlatform;
-  const normalizedLink = normalizeDealLink(deal.link);
+  const normalizedLink = normalizeDealLink(deal.link || deal.productLink);
   const itemId = normalizedLink.match(/\b(MLB\d+|B0[A-Z0-9]+)\b/i)?.[1];
   const identity = itemId || normalizedLink || String(deal.title || '').trim().toLowerCase();
   return `deal_${hashText(`${platform}:${identity}`)}`;

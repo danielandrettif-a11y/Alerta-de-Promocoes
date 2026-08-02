@@ -187,8 +187,9 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Formuladas as 5 Perguntas de Descoberta do Protocolo V.L.A.E.G. para alinhamento com o usuário.
   - Adicionado o botão `#btn-queue-amazon` e o contador `#txt-queue-count-amazon` no `index.html` e integrado no `app.js`.
   - Reformulado o scraper Puppeteer (`execution/amazon_deals.js`) para raspagem em volume por categorias com taxonomia (`category_helper.js`), badges de cupons, frete Prime e geração automatizada de `amazon_deals_report.json`.
-  - Corrigida a identificação de marcas no cabeçalho dos Stories (`execution/generate_stories.js` e `execution/story_template.html`). Produtos da Amazon exibem agora a tag oficial **"OFERTA AMAZON"** (com botão amarelo Amazon), Shopee exibe **"OFERTA SHOPEE"** e Mercado Livre **"OFERTA MERCADO LIVRE"**.
-  - Otimizada a inclusão de ofertas na fila de publicação (`server.js` e `public/app.js`): Os produtos entram no banco de dados da fila em **50 milissegundos**, liberando os contadores e atualizando a tela reativamente em tempo real, enquanto os Stories são preparados de forma assíncrona no background.
+  - Igualada a performance e comportamento da aba da Amazon com Mercado Livre e Shopee (`public/app.js` e `execution/automation_state.js`): Inseridos botões "Preparar para Instagram" diretos em cada card da Amazon, preservada a propriedade `platform: 'amazon'` e unificada a seleção em tempo real sem latência.
+  - Habilitada a barra flutuante de ações com o contador da fila que acompanha o scroll da página no computador (PC) e no celular (`public/style.css` e `public/app.js`).
+
 
 
 
