@@ -257,15 +257,17 @@ async function main() {
           timeout: 10000 
         });
 
-        // Timeout de segurança para fontes e imagens carregarem completamente
+        // Timeout de segurança rápido para carregar imagem sem travar a fila
         await page.waitForFunction(() => {
           const image = document.querySelector('.product-image');
           return image?.complete && image.naturalWidth > 0;
-        }, { timeout: 15000 });
+        }, { timeout: 3500 }).catch(() => {});
         await page.evaluate(async () => {
-          await document.querySelector('.product-image').decode();
-          await document.fonts.ready;
-          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          try {
+            const img = document.querySelector('.product-image');
+            if (img && img.decode) await img.decode().catch(() => {});
+            await document.fonts.ready;
+          } catch (e) {}
         });
 
         // Salva o screenshot na pasta stories

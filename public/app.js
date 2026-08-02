@@ -2994,25 +2994,25 @@ function toggleShopeeSelectIndex(index) {
 
 function updateMobileSelectionBar() {
   const onDealTab = elTabProducts.classList.contains('active');
-  const count = activeDealPlatform === 'amazon'
+  const totalQueueCount = selectedMLIndices.size + selectedAmazonIndices.size + selectedShopeeIndices.size;
+  const currentPlatformCount = activeDealPlatform === 'amazon'
     ? selectedAmazonIndices.size
     : activeDealPlatform === 'shopee'
       ? selectedShopeeIndices.size
       : selectedMLIndices.size;
 
-  elMobileSelectionCount.textContent = count;
+  elMobileSelectionCount.textContent = totalQueueCount;
   elMobileSelectionBar.classList.toggle(
     'hidden',
-    !onDealTab || count === 0
+    !onDealTab || totalQueueCount === 0
   );
-  elBtnMobileQueue.hidden =
-    !publicationQueueEnabled ||
-    !['ml', 'shopee'].includes(activeDealPlatform);
-  elBtnMobileQueue.disabled = count === 0;
+  elBtnMobileQueue.hidden = !publicationQueueEnabled;
+  elBtnMobileQueue.disabled = totalQueueCount === 0;
+  elBtnMobileQueue.textContent = `Preparar na fila (${totalQueueCount})`;
   elBtnMobileSend.hidden = activeDealPlatform === 'shopee';
-  elBtnMobileSend.disabled = !whatsappReady || count === 0;
+  elBtnMobileSend.disabled = !whatsappReady || currentPlatformCount === 0;
   elBtnMobileSend.textContent = whatsappReady
-    ? 'Enviar ao WhatsApp'
+    ? `Enviar ao WhatsApp (${currentPlatformCount})`
     : 'WhatsApp desconectado';
 }
 
@@ -3077,7 +3077,7 @@ function updateAmazonSelectionUI() {
   } else {
     elChkSelectAllAmazon.checked = false;
   }
-  updateMobileSelectionBar();
+  updatePublicationQueueSelectionUI();
 }
 
 function updateShopeeSelectionUI() {

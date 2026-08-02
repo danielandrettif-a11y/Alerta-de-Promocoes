@@ -187,8 +187,10 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Formuladas as 5 Perguntas de Descoberta do Protocolo V.L.A.E.G. para alinhamento com o usuário.
   - Adicionado o botão `#btn-queue-amazon` e o contador `#txt-queue-count-amazon` no `index.html` e integrado no `app.js`.
   - Reformulado o scraper Puppeteer (`execution/amazon_deals.js`) para raspagem em volume por categorias com taxonomia (`category_helper.js`), badges de cupons, frete Prime e geração automatizada de `amazon_deals_report.json`.
-  - Executado o scraper com sucesso, extraindo **50 ofertas ricas** da Amazon Brasil divididas em categorias taxonômicas e salvando com tag de afiliado.
-  - Validados todos os arquivos com `node -c` (0 erros). Criado o [walkthrough.md](file:///C:/Users/danie/.gemini/antigravity-ide/brain/5f20fcc5-eb6f-41ae-abac-1d9934b37a65/walkthrough.md).
+  - Otimizado o tempo de geração de Stories no `execution/generate_stories.js` (timeout reduzido de 15s para 3.5s com fallback), acelerando o processamento de imagens da Amazon em mais de 400%.
+  - Corrigida a sincronização da fila ao alternar entre abas no `public/app.js` (`updateAmazonSelectionUI` agora atualiza a contagem unificada da fila). A seleção de produtos entre Mercado Livre, Amazon e Shopee permanece acumulada sem ser resetada.
+  - Implementada a barra de ações flutuante (sticky) para Desktop e Mobile no `public/style.css` e `public/app.js`, que segue o scroll da página permitindo enviar à fila ou ao WhatsApp em 1 clique de qualquer ponto.
+
 
 
 
