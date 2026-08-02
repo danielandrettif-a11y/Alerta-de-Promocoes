@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Alerta de Descontos - Links Afiliados",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Gera links afiliados usando suas sessões locais.",
   "permissions": [
     "storage",
     "tabs",
     "scripting",
     "alarms",
-    "debugger"
+    "debugger",
+    "system.display"
   ],
   "host_permissions": [
     "https://www.mercadolivre.com.br/*",

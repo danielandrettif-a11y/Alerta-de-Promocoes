@@ -140,6 +140,62 @@ async function getWorkerWindow() {
   }
 }
 
+async function positionSplitWindows(workerWindowId) {
+  try {
+    let screenWidth = 1920;
+    let screenHeight = 1040;
+    let screenLeft = 0;
+    let screenTop = 0;
+
+    if (chrome.system?.display?.getInfo) {
+      const displays = await new Promise(resolve => {
+        try {
+          chrome.system.display.getInfo(info => resolve(info || []));
+        } catch {
+          resolve([]);
+        }
+      });
+      if (displays && displays.length > 0) {
+        const primary = displays.find(d => d.isPrimary) || displays[0];
+        const area = primary.workArea || primary.bounds;
+        if (area && area.width) {
+          screenWidth = area.width;
+          screenHeight = area.height;
+          screenLeft = area.left || 0;
+          screenTop = area.top || 0;
+        }
+      }
+    }
+
+    const halfWidth = Math.floor(screenWidth / 2);
+    const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+    const mainWindow = windows.find(w => w.id !== workerWindowId);
+
+    if (mainWindow?.id) {
+      await chrome.windows.update(mainWindow.id, {
+        left: screenLeft,
+        top: screenTop,
+        width: halfWidth,
+        height: screenHeight,
+        state: 'normal'
+      }).catch(() => {});
+    }
+
+    if (workerWindowId) {
+      await chrome.windows.update(workerWindowId, {
+        left: screenLeft + halfWidth,
+        top: screenTop,
+        width: halfWidth,
+        height: screenHeight,
+        state: 'normal',
+        focused: false
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.error('Erro ao posicionar janelas divididas:', err);
+  }
+}
+
 async function getOrCreateWorkerTab(platform) {
   const url = platform === 'shopee'
     ? SHOPEE_CONVERTER_URL
@@ -158,6 +214,9 @@ async function getOrCreateWorkerTab(platform) {
       [WORKER_WINDOW_KEY]: workerWindow.id
     });
   }
+  
+  await positionSplitWindows(workerWindow.id);
+
   const tabs = workerWindow.tabs ||
     await chrome.tabs.query({ windowId: workerWindow.id });
   const existing = tabs.find(tab => tabMatchesPlatform(tab, platform));
@@ -166,17 +225,25 @@ async function getOrCreateWorkerTab(platform) {
     url,
     active: false
   });
-  await chrome.windows.update(workerWindow.id, {
-    state: 'normal',
-    focused: false
-  });
   return tab;
 }
 
 async function closeWorkerWindow() {
   const workerWindow = await getWorkerWindow();
   if (workerWindow?.id) {
-    await chrome.windows.remove(workerWindow.id).catch(() => {});
+    try {
+      const tabs = await chrome.tabs.query({ windowId: workerWindow.id });
+      // Fecha aba por aba com uma pequena pausa (150ms) para fechar a janela suavemente
+      // sem acionar a caixa de diálogo "Fechar janela com X guias?" do Opera GX / Chrome
+      for (const tab of tabs) {
+        if (tab.id) {
+          await chrome.tabs.remove(tab.id).catch(() => {});
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+      }
+    } catch {
+      await chrome.windows.remove(workerWindow.id).catch(() => {});
+    }
   }
   await chrome.storage.session.remove(WORKER_WINDOW_KEY);
 }
