@@ -279,8 +279,23 @@ async function main() {
           type: 'jpeg',
           quality: 90
         });
+        console.log(`  ✓ Story com cupom salvo em: ${path.join('stories', filename)}`);
 
-        console.log(`  ✓ Story salvo em: ${path.join('stories', filename)}`);
+        // Se o produto tiver cupom, gera tambem o Story secundario sem cupom
+        if (hasCoupon) {
+          const noCouponFilename = `story_${rank}_nocoupon.jpg`;
+          const noCouponImagePath = path.join(storiesDir, noCouponFilename);
+          await page.evaluate(() => {
+            document.body.classList.remove('show-coupon');
+            document.body.classList.add('hide-coupon');
+          });
+          await page.screenshot({
+            path: noCouponImagePath,
+            type: 'jpeg',
+            quality: 90
+          });
+          console.log(`  ✓ Story sem cupom salvo em: ${path.join('stories', noCouponFilename)}`);
+        }
       } catch (pageErr) {
         failureCount++;
         console.error(`  ❌ Erro ao capturar imagem do Story para o item ${rank}: ${pageErr.message}`);

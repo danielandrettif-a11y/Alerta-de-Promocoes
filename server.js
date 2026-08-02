@@ -389,6 +389,58 @@ app.post('/api/coupons/:code/confirm', (req, res) => {
   }
 });
 
+// POST /api/coupons/validate - Valida se um cupom é aplicável a um produto e calcula os preços
+app.post('/api/coupons/validate', (req, res) => {
+  try {
+    const { deal, couponCode } = req.body || {};
+    if (!deal) {
+      return res.status(400).json({ error: 'Dados da oferta não informados.' });
+    }
+    const coupons = fs.existsSync(couponsPath)
+      ? JSON.parse(fs.readFileSync(couponsPath, 'utf-8'))
+      : [];
+
+    let targetCoupon = null;
+    if (couponCode) {
+      targetCoupon = coupons.find(c => String(c.code).trim().toUpperCase() === String(couponCode).trim().toUpperCase());
+    }
+    if (!targetCoupon) {
+      const candidates = findCouponCandidates(deal, coupons);
+      targetCoupon = candidates[0] || null;
+    }
+
+    if (!targetCoupon) {
+      return res.json({
+        valid: false,
+        message: 'Nenhum cupom válido aplicável a esta oferta no momento.'
+      });
+    }
+
+    const estimated = estimateCoupon(targetCoupon, deal);
+    if (!estimated || estimated.estimatedSavings <= 0) {
+      return res.json({
+        valid: false,
+        coupon: targetCoupon,
+        message: `Cupom ${targetCoupon.code} não atinge as regras mínimas para esta oferta.`
+      });
+    }
+
+    return res.json({
+      valid: true,
+      coupon: {
+        code: estimated.code,
+        rules: estimated.rules,
+        estimatedPrice: `R$ ${estimated.estimatedPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        estimatedSavings: `R$ ${estimated.estimatedSavings.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        verifiedAt: new Date().toISOString()
+      },
+      message: `✓ Cupom ${estimated.code} VÁLIDO! Preço com cupom: R$ ${estimated.estimatedPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Economia de R$ ${estimated.estimatedSavings.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Erro ao validar cupom: ${err.message}` });
+  }
+});
+
 // POST /api/generate-coupon-story - Gera imagem de Story com cupom de produto para preview/download
 app.post('/api/generate-coupon-story', async (req, res) => {
   const { deal, coupon } = req.body || {};
@@ -458,14 +510,21 @@ app.get('/api/amazon-deals', (req, res) => {
   });
 });
 
-function storyUrlForItem(item) {
-  if (!item.storyFile) return null;
-  return `/api/publication-queue/assets/${encodeURIComponent(item.storyFile)}` +
+function storyUrlForItem(item, variant = '') {
+  const fileName = variant === 'nocoupon' && item.storyFileNoCoupon
+    ? item.storyFileNoCoupon
+    : item.storyFile;
+  if (!fileName) return null;
+  return `/api/publication-queue/assets/${encodeURIComponent(fileName)}` +
     `?v=${encodeURIComponent(item.updatedAt || '')}`;
 }
 
 function queueItemForResponse(item) {
-  return { ...item, storyUrl: storyUrlForItem(item) };
+  return {
+    ...item,
+    storyUrl: storyUrlForItem(item),
+    storyUrlNoCoupon: item.storyFileNoCoupon ? storyUrlForItem(item, 'nocoupon') : null
+  };
 }
 
 function requirePublicationQueue(req, res, next) {
@@ -1029,6 +1088,17 @@ function runPublicationQueueGeneration(jobId, entries) {
         path.join(storiesDir, fileName),
         path.join(publicationQueueAssetsPath, queueItem.storyFile)
       );
+
+      const noCouponFileName = fs.readdirSync(storiesDir)
+        .find(file => file.startsWith(`story_${rank}_nocoupon`) && file.endsWith('.jpg'));
+      if (noCouponFileName) {
+        queueItem.storyFileNoCoupon = `${queueItem.id}_nocoupon.jpg`;
+        fs.copyFileSync(
+          path.join(storiesDir, noCouponFileName),
+          path.join(publicationQueueAssetsPath, queueItem.storyFileNoCoupon)
+        );
+      }
+
       savePublicationQueue(publicationQueuePath, currentQueue);
 
       settle(item, {

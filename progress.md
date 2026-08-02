@@ -193,7 +193,10 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Implementada a resiliência no acompanhamento do lote da fila (`public/app.js`): adicionado mecanismo de auto-retry (até 6 tentativas com pausa de 2s) para contornar instabilidades temporárias de Nginx/Proxy HTTP 502 Bad Gateway e aumentado o intervalo de polling para 1500ms, reduzindo a carga do servidor.
   - Ajustadas as mensagens do modal de geração para `Oferta já ativa na fila.` (`type: info`), diferenciando itens que já estavam prontos de eventuais erros de processamento.
   - Implementado o filtro dinamico `isDealInActiveQueue` (`public/app.js`): Produtos que já estejam ativos na Fila de Publicação somem automaticamente da tela de seleção de ofertas (Amazon, ML e Shopee), prevenindo duplicidades e mantendo a lista de catálogo limpa apenas com ofertas disponíveis para inclusão.
-  - Corrigido o fluxo de geração e atribuição de Stories na Fila de Publicação (`server.js`): garantida a inclusão de itens com imagem pendente no lote de renderização do Puppeteer e corrigida a vinculação do arquivo `.jpg` do Story ao objeto da fila mesmo para itens pré-existentes, eliminando a exibição de ícones de imagem quebrada (`storyFile`).
+  - Implementada a atualização automática e transparente do estado dos cards na Fila de Publicação (`public/app.js`): o painel atualiza em tempo real de `Aguardando link / Precisa de revisão` para `Pronto` assim que o link é preenchido/validado pelo worker ou usuário, sem necessidade de atualizar a página.
+  - Criado o endpoint `/api/coupons/validate` (`server.js`) e adicionado o botão `🔍 Validar Cupom` nos cards de oferta, permitindo checar em tempo real se o cupom está ativo e calculando o preço final e economia real.
+  - Adicionado suporte à geração dupla de Stories (`execution/generate_stories.js` e `server.js`): produtos com cupom geram 2 variações de Story automaticamente ("Com Cupom" e "Sem Cupom"), permitindo alternar visualmente o preview e enviar a versão desejada para o Instagram.
+  - Atualizada a versão do cache buster (`v=35`) no `index.html`.
 
 
 

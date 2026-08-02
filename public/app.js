@@ -1450,15 +1450,17 @@ function buildQueueCardHTML(item) {
     `
     : '';
 
-  const couponDetails = item.coupon
+  const hasCouponInfo = item.coupon || item.couponCandidates?.[0];
+  const couponDetails = hasCouponInfo
     ? `
       <div class="queue-coupon">
-        <span>Cupom confirmado: <strong>${escapeQueueHtml(
-          item.coupon.code
+        <span>Cupom: <strong>${escapeQueueHtml(
+          item.coupon?.code || item.couponCandidates?.[0]?.code || 'Ativo'
         )}</strong></span>
-        <span>Com cupom: <strong>${escapeQueueHtml(
-          item.coupon.priceWithCoupon
-        )}</strong></span>
+        ${item.coupon?.priceWithCoupon ? `<span>Com cupom: <strong>${escapeQueueHtml(item.coupon.priceWithCoupon)}</strong></span>` : ''}
+        <button type="button" class="btn-validate-coupon-inline" data-queue-action="validate-coupon">
+          🔍 Validar Cupom
+        </button>
       </div>
     `
     : '';
@@ -1489,6 +1491,11 @@ function buildQueueCardHTML(item) {
     `
     : '';
 
+  const currentVariant = item.currentVariant || 'coupon';
+  const displayStoryUrl = (currentVariant === 'nocoupon' && item.storyUrlNoCoupon)
+    ? item.storyUrlNoCoupon
+    : (item.storyUrl || '');
+
   return {
     status,
     marketplace,
@@ -1504,7 +1511,7 @@ function buildQueueCardHTML(item) {
       <div class="queue-story-column">
         <img
           class="queue-story-preview"
-          src="${escapeQueueHtml(item.storyUrl || '')}"
+          src="${escapeQueueHtml(displayStoryUrl)}"
           alt="Story preparado para ${escapeQueueHtml(item.title)}"
           loading="lazy"
           decoding="async"
@@ -1512,6 +1519,16 @@ function buildQueueCardHTML(item) {
           width="220"
           height="391"
         >
+        ${item.storyUrlNoCoupon ? `
+          <div class="queue-story-toggle">
+            <button type="button" class="btn-story-variant ${currentVariant === 'coupon' ? 'active' : ''}" data-queue-action="story-variant" data-variant="coupon">
+              Com Cupom
+            </button>
+            <button type="button" class="btn-story-variant ${currentVariant === 'nocoupon' ? 'active' : ''}" data-queue-action="story-variant" data-variant="nocoupon">
+              Sem Cupom
+            </button>
+          </div>
+        ` : ''}
       </div>
       <div class="queue-content">
         <div class="queue-card-heading">
@@ -1589,41 +1606,63 @@ function renderPublicationQueue() {
     const built = buildQueueCardHTML(item);
 
     if (card) {
-      // Atualizar className (status / seleção podem mudar)
-      const newClass =
-        `queue-card ${built.status.className} platform-${item.platform} ${
+      const prevStatus = card.dataset.status;
+      const prevAffiliateLink = card.dataset.affiliateLink;
+      const prevStoryFile = card.dataset.storyFile;
+
+      if (prevStatus !== item.status || prevAffiliateLink !== (item.affiliateLink || '') || prevStoryFile !== (item.storyFile || '')) {
+        card.className = `queue-card ${built.status.className} platform-${item.platform} ${
           selectedQueueItemIds.has(item.id) ? 'selected' : ''
         }`;
-      if (card.className !== newClass) card.className = newClass;
+        card.dataset.status = item.status;
+        card.dataset.affiliateLink = item.affiliateLink || '';
+        card.dataset.storyFile = item.storyFile || '';
+        card.innerHTML = built.innerHTML;
+        const queueCheckbox = card.querySelector('[data-queue-select]');
+        if (queueCheckbox) {
+          queueCheckbox.addEventListener('change', () => {
+            if (queueCheckbox.checked) selectedQueueItemIds.add(item.id);
+            else selectedQueueItemIds.delete(item.id);
+            updateQueueSelection(visibleItems);
+          });
+        }
+      } else {
+        const newClass = `queue-card ${built.status.className} platform-${item.platform} ${
+          selectedQueueItemIds.has(item.id) ? 'selected' : ''
+        }`;
+        if (card.className !== newClass) card.className = newClass;
 
-      // Atualizar texto/status sem destruir o <img> (evita piscar)
-      const statusEl = card.querySelector('.queue-status');
-      if (statusEl) {
-        statusEl.className = `queue-status ${built.status.className}`;
-        statusEl.textContent = built.status.label;
-      }
+        const statusEl = card.querySelector('.queue-status');
+        if (statusEl) {
+          statusEl.className = `queue-status ${built.status.className}`;
+          statusEl.textContent = built.status.label;
+        }
 
-      // Atualizar story URL só se mudou (evita re-download)
-      const img = card.querySelector('.queue-story-preview');
-      const newSrc = item.storyUrl || '';
-      if (img && img.getAttribute('src') !== newSrc) {
-        img.src = newSrc;
+        const img = card.querySelector('.queue-story-preview');
+        const newSrc = item.storyUrl || '';
+        if (img && img.getAttribute('src') !== newSrc) {
+          img.src = newSrc;
+        }
       }
     } else {
       // Criar card novo
       card = document.createElement('article');
-      card.className =
-        `queue-card ${built.status.className} platform-${item.platform} ${
-          selectedQueueItemIds.has(item.id) ? 'selected' : ''
-        }`;
+      card.className = `queue-card ${built.status.className} platform-${item.platform} ${
+        selectedQueueItemIds.has(item.id) ? 'selected' : ''
+      }`;
       card.dataset.itemId = item.id;
+      card.dataset.status = item.status;
+      card.dataset.affiliateLink = item.affiliateLink || '';
+      card.dataset.storyFile = item.storyFile || '';
       card.innerHTML = built.innerHTML;
       const queueCheckbox = card.querySelector('[data-queue-select]');
-      queueCheckbox.addEventListener('change', () => {
-        if (queueCheckbox.checked) selectedQueueItemIds.add(item.id);
-        else selectedQueueItemIds.delete(item.id);
-        updateQueueSelection(visibleItems);
-      });
+      if (queueCheckbox) {
+        queueCheckbox.addEventListener('change', () => {
+          if (queueCheckbox.checked) selectedQueueItemIds.add(item.id);
+          else selectedQueueItemIds.delete(item.id);
+          updateQueueSelection(visibleItems);
+        });
+      }
     }
 
     // Garantir ordem correta no DOM
@@ -3767,6 +3806,41 @@ document.addEventListener('click', async (event) => {
           ? 'Link validado. A oferta está pronta para publicar.'
           : data.item.reviewReason,
         type: data.ready ? 'success' : 'error'
+      });
+      return;
+    }
+
+    if (action === 'validate-coupon') {
+      const response = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deal: {
+            title: item.title,
+            currentPrice: item.currentPrice,
+            originalPrice: item.originalPrice
+          },
+          couponCode: item.coupon?.code || item.couponCandidates?.[0]?.code
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erro ao validar cupom.');
+      setQueueFeedback(data.message, data.valid ? 'success' : 'error');
+      alert(data.message);
+      return;
+    }
+
+    if (action === 'story-variant') {
+      const variant = actionButton.dataset.variant;
+      item.currentVariant = variant;
+      const img = card.querySelector('.queue-story-preview');
+      if (img) {
+        img.src = (variant === 'nocoupon' && item.storyUrlNoCoupon)
+          ? item.storyUrlNoCoupon
+          : (item.storyUrl || '');
+      }
+      card.querySelectorAll('.btn-story-variant').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.variant === variant);
       });
       return;
     }

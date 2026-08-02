@@ -2446,6 +2446,56 @@ select:focus-visible {
   margin-top: 1px;
 }
 
+.queue-story-toggle {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.btn-story-variant {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.btn-story-variant.active,
+.btn-story-variant:hover {
+  background: linear-gradient(135deg, var(--primary-color), #e94057);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(242, 113, 33, 0.3);
+}
+
+.btn-validate-coupon-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffd38f;
+  background: rgba(255, 190, 107, 0.12);
+  border: 1px solid rgba(255, 190, 107, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.btn-validate-coupon-inline:hover {
+  background: rgba(255, 190, 107, 0.25);
+  color: #fff;
+  border-color: #ffd38f;
+}
+
 /* ==========================================
    Estilos Temáticos da Shopee
    ========================================== */
