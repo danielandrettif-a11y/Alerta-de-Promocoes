@@ -212,19 +212,20 @@ function parseBackendDate(dateStr) {
 }
 
 function generateClientDealId(deal, platform) {
-  const rawPlatform = String(platform || deal.platform || 'unknown').toLowerCase();
+  const rawPlatform = String(platform || deal?.platform || 'unknown').toLowerCase();
   const normalizedPlatform = ['ml', 'mercado livre', 'mercado_livre'].includes(rawPlatform)
     ? 'mercado_livre'
     : ['amz', 'amazon'].includes(rawPlatform)
       ? 'amazon'
       : rawPlatform;
-  let normalizedLink = String(deal.link || '').split(/[?#]/)[0].replace(/\/+$/, '');
+  const rawLink = String(deal?.link || deal?.productLink || '');
+  let normalizedLink = rawLink.split(/[?#]/)[0].replace(/\/+$/, '');
   try {
-    const parsed = new URL(deal.link);
+    const parsed = new URL(rawLink);
     normalizedLink = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
   } catch {}
   const itemId = normalizedLink.match(/\b(MLB\d+|B0[A-Z0-9]+)\b/i)?.[1];
-  const identity = itemId || normalizedLink || String(deal.title || '').trim().toLowerCase();
+  const identity = itemId || normalizedLink || String(deal?.title || '').trim().toLowerCase();
   const value = `${normalizedPlatform}:${identity}`;
   let hash = 0;
   for (let index = 0; index < value.length; index++) {
@@ -232,6 +233,48 @@ function generateClientDealId(deal, platform) {
     hash |= 0;
   }
   return `deal_${Math.abs(hash)}`;
+}
+
+function isDealInActiveQueue(deal, platform) {
+  if (!publicationQueueEnabled || !publicationQueueItems || publicationQueueItems.length === 0) {
+    return false;
+  }
+  const normPlatform = ['ml', 'mercado livre', 'mercado_livre'].includes(String(platform || deal?.platform || '').toLowerCase())
+    ? 'mercado_livre'
+    : ['amz', 'amazon'].includes(String(platform || deal?.platform || '').toLowerCase())
+      ? 'amazon'
+      : String(platform || deal?.platform || '').toLowerCase();
+
+  const dealId = generateClientDealId(deal, normPlatform);
+  const dealLink = String(deal?.link || deal?.productLink || '').toLowerCase().trim();
+  const dealTitle = String(deal?.title || '').toLowerCase().trim();
+
+  return publicationQueueItems.some(item => {
+    if (!item || !['awaiting_affiliate', 'ready', 'needs_review'].includes(item.status)) {
+      return false;
+    }
+    const itemPlatform = ['ml', 'mercado livre', 'mercado_livre'].includes(String(item.platform).toLowerCase())
+      ? 'mercado_livre'
+      : String(item.platform).toLowerCase();
+
+    if (itemPlatform !== normPlatform) return false;
+
+    if (item.dealId && item.dealId === dealId) return true;
+
+    if (dealLink && item.productLink) {
+      const itemLink = String(item.productLink).toLowerCase().trim();
+      if (dealLink === itemLink) return true;
+      const cleanDealLink = dealLink.split(/[?#]/)[0].replace(/\/+$/, '');
+      const cleanItemLink = itemLink.split(/[?#]/)[0].replace(/\/+$/, '');
+      if (cleanDealLink && cleanItemLink && cleanDealLink === cleanItemLink) return true;
+    }
+
+    if (dealTitle && item.title && dealTitle === String(item.title).toLowerCase().trim()) {
+      return true;
+    }
+
+    return false;
+  });
 }
 
 function findTodayPublication(entries, dealId) {
@@ -1627,12 +1670,9 @@ async function fetchPublicationQueue(options = {}) {
     } else {
       updateQueueSummary();
     }
-    if (wasEnabled !== publicationQueueEnabled && allMLDeals.length) {
-      renderMLDeals(allMLDeals);
-    }
-    if (wasEnabled !== publicationQueueEnabled && allShopeeDeals.length) {
-      renderShopeeDeals(allShopeeDeals);
-    }
+    if (allMLDeals.length) renderMLDeals(allMLDeals);
+    if (allAmazonDeals.length) renderAmazonDeals(allAmazonDeals);
+    if (allShopeeDeals.length) renderShopeeDeals(allShopeeDeals);
     if (options.feedback) {
       setQueueFeedback(options.feedback, options.type || 'success');
     }
@@ -2219,6 +2259,8 @@ function getFilteredDealEntries(deals, platform) {
   return deals
     .map((deal, index) => ({ deal, index }))
     .filter(({ deal }) => {
+      if (isDealInActiveQueue(deal, platform)) return false;
+
       const category = getProductCategoryAndSub(deal.title);
       return (
         deal.title.toLowerCase().includes(searchTerm) &&
