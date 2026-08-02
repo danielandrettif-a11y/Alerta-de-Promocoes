@@ -1316,14 +1316,24 @@ function updateQueueSelection(visibleItems = null) {
   updateBatchSelection();
 }
 
+function getQueueMarketplaceBrand(platform, link = '') {
+  const norm = String(platform || '').toLowerCase();
+  const url = String(link || '').toLowerCase();
+  if (norm === 'amazon' || norm === 'amz' || url.includes('amazon.com')) {
+    return { name: 'Amazon', className: 'amazon', affiliateHost: 'amzn.to' };
+  }
+  if (norm === 'shopee' || norm === 'shp' || url.includes('shopee.com')) {
+    return { name: 'Shopee', className: 'shopee', affiliateHost: 's.shopee.com.br' };
+  }
+  return { name: 'Mercado Livre', className: 'mercado_livre', affiliateHost: 'meli.la' };
+}
+
 function buildQueueCardHTML(item) {
   const processingState = item.affiliateProcessing?.state;
   const status = getQueueStatusMeta(
     processingState === 'claimed' ? 'processing' : item.status
   );
-  const marketplace = item.platform === 'shopee'
-    ? { name: 'Shopee', affiliateHost: 's.shopee.com.br' }
-    : { name: 'Mercado Livre', affiliateHost: 'meli.la' };
+  const marketplace = getQueueMarketplaceBrand(item.platform, item.productLink);
   const affiliateForm = ['awaiting_affiliate', 'needs_review']
     .includes(item.status)
     ? `

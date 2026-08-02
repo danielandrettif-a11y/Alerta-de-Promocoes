@@ -187,9 +187,10 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Formuladas as 5 Perguntas de Descoberta do Protocolo V.L.A.E.G. para alinhamento com o usuário.
   - Adicionado o botão `#btn-queue-amazon` e o contador `#txt-queue-count-amazon` no `index.html` e integrado no `app.js`.
   - Reformulado o scraper Puppeteer (`execution/amazon_deals.js`) para raspagem em volume por categorias com taxonomia (`category_helper.js`), badges de cupons, frete Prime e geração automatizada de `amazon_deals_report.json`.
-  - Otimizado o tempo de geração de Stories no `execution/generate_stories.js` (timeout reduzido de 15s para 3.5s com fallback), acelerando o processamento de imagens da Amazon em mais de 400%.
-  - Corrigida a sincronização da fila ao alternar entre abas no `public/app.js` (`updateAmazonSelectionUI` agora atualiza a contagem unificada da fila). A seleção de produtos entre Mercado Livre, Amazon e Shopee permanece acumulada sem ser resetada.
-  - Implementada a barra de ações flutuante (sticky) para Desktop e Mobile no `public/style.css` e `public/app.js`, que segue o scroll da página permitindo enviar à fila ou ao WhatsApp em 1 clique de qualquer ponto.
+  - Corrigida a identificação de marcas no cabeçalho dos Stories (`execution/generate_stories.js` e `execution/story_template.html`). Produtos da Amazon exibem agora a tag oficial **"OFERTA AMAZON"** (com botão amarelo Amazon), Shopee exibe **"OFERTA SHOPEE"** e Mercado Livre **"OFERTA MERCADO LIVRE"**.
+  - Ajustada a paleta de cores dos Stories (`execution/story_template.html`): O tema base de promoção é agora **Azul vibrante** (`theme-day`/`theme-camp`/`:root`), reservando a cor Vermelha exclusivamente para Ofertas Relâmpago (`theme-lightning`).
+  - Corrigido o texto e link dos cards da Fila de Publicação no `public/app.js` e `server.js` ("1. Abrir produto na Amazon", "1. Abrir produto na Shopee", "1. Abrir produto no Mercado Livre").
+
 
 
 

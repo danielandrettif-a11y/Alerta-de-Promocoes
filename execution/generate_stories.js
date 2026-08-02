@@ -2,25 +2,28 @@ const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
 
-function getMarketplaceBrand(platform) {
-  const brands = {
-    mercado_livre: {
-      className: 'mercado-livre',
-      name: 'Mercado Livre',
-      cta: 'Compre no Mercado Livre'
-    },
-    shopee: {
-      className: 'shopee',
-      name: 'Shopee',
-      cta: 'Compre na Shopee'
-    },
-    amazon: {
+function getMarketplaceBrand(platform, link = '') {
+  const norm = String(platform || '').toLowerCase();
+  const url = String(link || '').toLowerCase();
+  if (norm === 'amazon' || norm === 'amz' || url.includes('amazon.com')) {
+    return {
       className: 'amazon',
       name: 'Amazon',
       cta: 'Compre na Amazon'
-    }
+    };
+  }
+  if (norm === 'shopee' || norm === 'shp' || url.includes('shopee.com')) {
+    return {
+      className: 'shopee',
+      name: 'Shopee',
+      cta: 'Compre na Shopee'
+    };
+  }
+  return {
+    className: 'mercado-livre',
+    name: 'Mercado Livre',
+    cta: 'Compre no Mercado Livre'
   };
-  return brands[platform] || brands.mercado_livre;
 }
 
 function getStoryVariant(value) {
@@ -136,7 +139,7 @@ async function main() {
       const deal = deals[i];
       const rank = i + 1;
       const cleanTitle = deal.title.replace(/"/g, '&quot;');
-      const marketplace = getMarketplaceBrand(deal.platform);
+      const marketplace = getMarketplaceBrand(deal.platform, deal.link || deal.productLink);
       const storyVariant = getStoryVariant(deal.storyVariant);
       
       console.log(`[${rank}/${deals.length}] Processando: "${deal.title.substring(0, 40)}..."`);

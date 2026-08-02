@@ -11,42 +11,26 @@
   
   <style>
     /* Definição de Variáveis por Tema de Oferta (Azul, Amarelo e Vermelho Fraco) */
-    :root {
-      /* Tema Padrão: Oferta do Dia (Amarelo de Atenção) */
-      --bg-color-start: #160e00;
-      --bg-color-center: #875500;
-      --bg-color-end: #0e0800;
-      --bg-glow: rgba(212, 134, 0, 0.56);
-      --card-glow: rgba(255, 171, 35, 0.68);
-      --watermark-stroke: rgba(255, 205, 92, 0.38);
-      --accent-color: #1e150a;       /* Marrom super escuro / Quase preto */
+    /* Definição de Variáveis por Tema de Oferta (Padrão: Azul vibrante para promoções normais) */
+    :root, body.theme-day, body.theme-camp {
+      --bg-color-start: #020c1d;
+      --bg-color-center: #082b63;
+      --bg-color-end: #020b1a;
+      --bg-glow: rgba(18, 82, 171, 0.55);
+      --card-glow: rgba(40, 125, 255, 0.75);
+      --watermark-stroke: rgba(145, 181, 244, 0.36);
+      --accent-color: #0b3475;       /* Azul marinho vibrante */
       --accent-text: #ffffff;
-      --shadow-color: rgba(30, 21, 10, 0.12);
-      --text-muted: #6e5f4f;
-      --badge-border: rgba(30, 21, 10, 0.12);
+      --shadow-color: rgba(2, 12, 29, 0.25);
+      --text-muted: #536985;
+      --badge-border: rgba(11, 52, 117, 0.2);
       --outer-text: #ffffff;
-      --outer-muted: #f1d497;
+      --outer-muted: #b9c9e5;
       --marketplace-color: #ffe600;
       --marketplace-text: #241f52;
     }
 
-    /* Tema: Ofertas de Campanha (Frio - Azul Suave) */
-    body.theme-camp {
-      --bg-color-start: #020c1d;
-      --bg-color-center: #082b63;
-      --bg-color-end: #020b1a;
-      --bg-glow: rgba(18, 82, 171, 0.48);
-      --card-glow: rgba(40, 125, 255, 0.72);
-      --watermark-stroke: rgba(145, 181, 244, 0.36);
-      --accent-color: #0c2340;       /* Azul marinho profundo */
-      --accent-text: #ffffff;
-      --shadow-color: rgba(12, 35, 64, 0.12);
-      --text-muted: #536985;
-      --badge-border: rgba(12, 35, 64, 0.12);
-      --outer-muted: #b9c9e5;
-    }
-
-    /* Tema: Oferta Relâmpago (Urgência - Vermelho Fraco / Rosa) */
+    /* Tema: Oferta Relâmpago (Urgência - Vermelho) */
     body.theme-lightning {
       --bg-color-start: #21060a;
       --bg-color-center: #821b29;
@@ -68,8 +52,14 @@
     }
 
     body.platform-amazon {
-      --marketplace-color: #146eb4;
-      --marketplace-text: #ffffff;
+      --marketplace-color: #ff9900;
+      --marketplace-text: #111111;
+    }
+
+    body.platform-mercado-livre,
+    body.platform-mercado_livre {
+      --marketplace-color: #ffe600;
+      --marketplace-text: #241f52;
     }
 
     * {

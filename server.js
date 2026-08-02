@@ -893,24 +893,26 @@ app.get('/api/publication-queue', (req, res) => {
   });
 });
 
-function normalizePublicationPlatform(value) {
+function normalizePublicationPlatform(value, link = '') {
   const platform = String(value || '').toLowerCase();
-  return ['ml', 'mercado livre', 'mercado_livre'].includes(platform)
-    ? 'mercado_livre'
-    : platform;
+  const url = String(link || '').toLowerCase();
+  if (['amazon', 'amz'].includes(platform) || url.includes('amazon.com')) return 'amazon';
+  if (['shopee', 'shp'].includes(platform) || url.includes('shopee.com')) return 'shopee';
+  return 'mercado_livre';
 }
 
 function publicationQueueInput(deal, platform, id) {
+  const normPlatform = normalizePublicationPlatform(platform || deal.platform, deal.link || deal.productLink);
   return {
     id,
-    dealId: generateDealId({ ...deal, platform }),
-    platform,
+    dealId: generateDealId({ ...deal, platform: normPlatform }),
+    platform: normPlatform,
     title: deal.title,
     originalPrice: deal.originalPrice,
     currentPrice: deal.currentPrice,
     discount: deal.discount,
     image: deal.image,
-    productLink: deal.link
+    productLink: deal.link || deal.productLink
   };
 }
 
@@ -920,8 +922,8 @@ function runPublicationQueueGeneration(jobId, entries) {
   const pending = [];
 
   entries.forEach((entry, position) => {
-    const platform = normalizePublicationPlatform(entry.platform);
     const deal = entry.deal || {};
+    const platform = normalizePublicationPlatform(entry.platform, deal.link || deal.productLink);
     try {
       const result = enqueueOffer(
         previewQueue,
@@ -974,7 +976,10 @@ function runPublicationQueueGeneration(jobId, entries) {
   fs.mkdirSync(storiesDir, { recursive: true });
   fs.writeFileSync(selectionPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
-    deals: pending.map(item => item.deal)
+    deals: pending.map(item => ({
+      ...item.deal,
+      platform: item.platform || item.deal.platform
+    }))
   }), 'utf-8');
 
   const settle = (item, result) => {
