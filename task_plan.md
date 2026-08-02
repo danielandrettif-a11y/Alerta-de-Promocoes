@@ -53,3 +53,11 @@ Este documento registra as fases de desenvolvimento para a automação de oferta
 - [x] 4. Cupons por Marketplace & Integração com Story (Cupons "Clipe" Amazon, Cupons ML por loja, Vincular cupom ao Story com preço COM/SEM cupom)
 - [x] 5. Teste E2E e Envio ao GitHub (`git push origin main`)
 
+### Fase 8: Validação, Ampliação e Envio para Fila na Aba Amazon (Concluída)
+- [x] 1. Adicionar o botão "Preparar na fila (`txt-queue-count-amazon`)" no HTML da aba Amazon (`index.html`) e integrar os eventos de fila no frontend (`app.js`).
+- [x] 2. Reformular o scraper Puppeteer (`execution/amazon_deals.js`) para raspagem em volume por categorias com taxonomia (`category_helper.js`), badges de cupons, frete Prime e popular `amazon_deals_report.json`.
+- [x] 3. Validar a recepção das ofertas da Amazon no endpoint `/api/queue` e a criação dos Stories/envio ao WhatsApp.
+- [x] 4. Testes E2E e validação no Dashboard.
+
+
+

@@ -5,13 +5,15 @@
  *
  * Scraper de ofertas da Amazon Brasil com Puppeteer.
  * Roda headless: false localmente (para visualização e evasão de bots)
- * e headless: true na VPS (Linux). Em caso de falha/bloqueio,
- * salva uma lista vazia [] para deixar a tela limpa no painel.
+ * e headless: true na VPS (Linux).
+ * Captura ofertas da página de Deals e Bestsellers, categoriza via
+ * category_helper.js e gera a base rica de dados em amazon_deals_report.json.
  */
 
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');
+const { inferCategoryAndSub, getRecurringPurchaseCategory } = require('./category_helper.js');
 
 function findBrowserPath() {
   const possiblePaths = [
@@ -36,10 +38,7 @@ function findBrowserPath() {
 
 function cleanPriceString(priceStr) {
   if (!priceStr) return '';
-  // Limpa textos indesejados como "Preço da Oferta:" ou repetições
   let clean = priceStr.replace(/Preço\s+da\s+Oferta:\s*/i, '').trim();
-  
-  // Extrai o primeiro padrão de R$ X.XXX,XX
   const match = clean.match(/R\$\s*[0-9.,]+/i);
   if (match) {
     return match[0].replace(/\s+/g, ' ');
@@ -47,9 +46,150 @@ function cleanPriceString(priceStr) {
   return clean;
 }
 
+function parseNumericPrice(priceStr) {
+  if (!priceStr) return 0;
+  const clean = priceStr.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(clean);
+  return isNaN(num) ? 0 : num;
+}
+
+async function scrapeDealsFromPage(page, url) {
+  console.log(`Navegando para: ${url}`);
+  try {
+    await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: 35000
+    });
+  } catch (err) {
+    console.warn(`⚠️ Timeout/Aviso navegando para ${url}: ${err.message}`);
+  }
+
+  await new Promise(r => setTimeout(r, 4000));
+
+  // Rola a página para acionar o lazy loading
+  for (let scroll = 0; scroll < 4; scroll++) {
+    await page.evaluate(() => window.scrollBy(0, 800));
+    await new Promise(r => setTimeout(r, 1200));
+  }
+
+  const rawDeals = await page.evaluate(() => {
+    const dealsList = [];
+    const seenLinks = new Set();
+
+    // Coleção ampla de seletores da Amazon Brasil
+    const cardSelectors = [
+      '[data-testid="discount-asin-grid"] [data-test-index]',
+      '[class*="DesktopDiscountAsinGrid-module__root"] [data-test-index]',
+      '[data-testid="grid-de-ofertas"] > div',
+      '[data-testid="deal-card"]',
+      'div[class*="DealCard-module"]',
+      'div[class*="ProductCard-module"]',
+      'div[data-asin]',
+      '.a-cardui[data-asin]',
+      'div.zg-grid-general-faceout',
+      'div.p13n-sc-unroller',
+      '.p13n-grid-content'
+    ];
+
+    const containers = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
+
+    // Fallback: se nenhum container específico for achado, busca cards por estrutura genérica contendo link de produto e preço R$
+    if (containers.length === 0) {
+      const allDivs = document.querySelectorAll('div.a-section');
+      allDivs.forEach(div => {
+        if (div.querySelector('a[href*="/dp/"], a[href*="/gp/product/"]') && div.textContent.includes('R$')) {
+          containers.push(div);
+        }
+      });
+    }
+
+    containers.forEach(container => {
+      const linkEl = container.querySelector('a[href*="/dp/"], a[href*="/gp/product/"], a[href*="/deal/"], a.a-link-normal');
+      if (!linkEl) return;
+
+      let link = linkEl.href;
+      if (!link || link.startsWith('javascript:')) return;
+      
+      // Normaliza link da Amazon para remover parâmetros desnecessários
+      try {
+        const urlObj = new URL(link);
+        const asinMatch = urlObj.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+        if (asinMatch) {
+          link = `https://www.amazon.com.br/dp/${asinMatch[1]}`;
+        }
+      } catch (e) {}
+
+      if (seenLinks.has(link)) return;
+      seenLinks.add(link);
+
+      // Imagem do produto
+      const imgEl = container.querySelector('img');
+      let image = imgEl ? (imgEl.getAttribute('data-old-hires') || imgEl.src || imgEl.getAttribute('data-src') || '') : '';
+      if (image.startsWith('data:')) image = '';
+
+      // Título do produto
+      let title = imgEl && imgEl.alt ? imgEl.alt.trim() : '';
+      if (!title || title.toLowerCase().includes('oferta') || title.length < 6) {
+        const titleEl = container.querySelector(
+          '[class*="DealCard-module__titleText"], [class*="ProductCard-module__title"], .p13n-sc-truncate, ._cDEfh_name_1_H, h4, h2, span.a-truncate-full'
+        );
+        if (titleEl) title = titleEl.textContent.trim();
+      }
+
+      if (!title || title.length < 4) return;
+
+      // Desconto
+      const discountEl = container.querySelector('[class*="Badge-module__badgeText"], [class*="DiscountBadge"], .a-badge-text, [class*="badgeText"]');
+      let discountText = discountEl ? discountEl.textContent.trim() : '';
+      let discount = 0;
+      const discountMatch = discountText.match(/([0-9]+)%\s*off/i);
+      if (discountMatch) {
+        discount = parseInt(discountMatch[1], 10);
+      }
+
+      // Preço atual (Promo)
+      const currentPriceEl = container.querySelector('[class*="Price-module__priceText"], [class*="PriceText"], .a-price .a-offscreen, span.a-price');
+      let currentPrice = currentPriceEl ? currentPriceEl.textContent.trim() : '';
+      
+      if (!currentPrice) {
+        const priceMatch = container.textContent.match(/R\$\s*[0-9.,]+/i);
+        if (priceMatch) currentPrice = priceMatch[0];
+      }
+
+      // Preço original (Riscado)
+      const originalPriceEl = container.querySelector('[class*="Price-module__strikeThrough"], .a-text-strike, span.a-color-secondary');
+      let originalPrice = originalPriceEl ? originalPriceEl.textContent.trim() : '';
+
+      // Badge de Cupom de Clipe Amazon
+      const couponEl = container.querySelector('[class*="coupon"], [class*="Coupon"], .a-badge-coupon, [data-badge-type="COUPON"]');
+      let couponBadge = couponEl ? couponEl.textContent.trim() : null;
+
+      if (!currentPrice || !currentPrice.includes('R$')) return;
+
+      dealsList.push({
+        title,
+        link,
+        image,
+        discount,
+        originalPrice,
+        currentPrice,
+        isFreeShipping: true,
+        dealType: discount >= 30 ? "Oferta Relâmpago" : "Oferta do Dia",
+        timeLeft: "",
+        couponBadge
+      });
+    });
+
+    return dealsList;
+  });
+
+  return rawDeals || [];
+}
+
 async function main() {
-  console.log("Amazon Deals Scraper (Stealth & Custom Headless)");
-  console.log("-----------------------------------------------");
+  console.log("===============================================");
+  console.log("Amazon Deals Scraper (Multi-Category & Stealth)");
+  console.log("===============================================");
 
   const browserPath = findBrowserPath();
   if (!browserPath) {
@@ -59,12 +199,10 @@ async function main() {
   }
 
   const amazonDealsPath = path.join(__dirname, '..', 'amazon_deals_report.json');
-  
-  // Roda Headless: true em Linux (VPS) e Headless: false no Windows (Local do usuário)
   const isLinux = process.platform === 'linux';
   const isHeadless = isLinux;
 
-  console.log(`Configuração: Headless = ${isHeadless} | Plataforma = ${process.platform}`);
+  console.log(`Configuração: Headless = ${isHeadless} | SO = ${process.platform}`);
 
   let browser;
   try {
@@ -76,8 +214,8 @@ async function main() {
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
-        '--window-size=1280,1024',
-        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        '--window-size=1366,768',
+        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
       ]
     });
   } catch (err) {
@@ -88,167 +226,117 @@ async function main() {
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 1024 });
+    await page.setViewport({ width: 1366, height: 768 });
 
-    // Remove WebDriver flag
     await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined,
-      });
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
 
-    console.log("Navegando para a página de ofertas da Amazon Brasil...");
-    await page.goto('https://www.amazon.com.br/deals', {
-      waitUntil: 'networkidle2',
-      timeout: 45000
-    });
+    const targetUrls = [
+      'https://www.amazon.com.br/deals',
+      'https://www.amazon.com.br/gp/bestsellers/computers/',
+      'https://www.amazon.com.br/gp/bestsellers/electronics/',
+      'https://www.amazon.com.br/gp/bestsellers/kitchen/'
+    ];
 
-    console.log("Aguardando carregamento inicial das ofertas...");
-    await new Promise(r => setTimeout(r, 6000));
+    let allExtractedDeals = [];
 
-    // Rola a página para baixo de forma incremental para garantir o lazy loading de imagens
-    console.log("Rolando a página...");
-    for (let scroll = 0; scroll < 3; scroll++) {
-      await page.evaluate(() => window.scrollBy(0, 700));
-      await new Promise(r => setTimeout(r, 1500));
+    for (const url of targetUrls) {
+      const deals = await scrapeDealsFromPage(page, url);
+      console.log(` Extraídos ${deals.length} itens da URL: ${url}`);
+      allExtractedDeals = allExtractedDeals.concat(deals);
+      if (allExtractedDeals.length >= 60) break;
     }
-
-    console.log("Extraindo ofertas do DOM...");
-    const extractedDeals = await page.evaluate(() => {
-      const dealsList = [];
-      
-      // Busca cards de produtos individuais (elementos com data-test-index dentro do grid)
-      const cardContainers = document.querySelectorAll('[data-testid="discount-asin-grid"] [data-test-index], [class*="DesktopDiscountAsinGrid-module__root"] [data-test-index]');
-      
-      cardContainers.forEach(container => {
-        const linkEl = container.querySelector('a');
-        if (!linkEl) return;
-        
-        let link = linkEl.href;
-        if (link.startsWith('javascript:')) return; // Descarta botões JavaScript da UI
-
-        // Imagem do produto
-        const imgEl = container.querySelector('img');
-        const image = imgEl ? imgEl.src : '';
-        
-        // Título do produto: Prioriza o 'alt' da imagem do produto (que contém a descrição completa na Amazon)
-        let title = imgEl && imgEl.alt ? imgEl.alt.trim() : '';
-        
-        // Fallback de título se a imagem não tiver alt
-        if (!title || title.toLowerCase().includes('oferta') || title.length < 5) {
-          const titleEl = container.querySelector('[class*="DealCard-module__titleText"], [class*="ProductCard-module__title"], h4');
-          if (titleEl) title = titleEl.textContent.trim();
-        }
-
-        // Se mesmo assim o título for vazio, ignora
-        if (!title) return;
-
-        // Desconto
-        const discountEl = container.querySelector('[class*="Badge-module__badgeText"], [class*="DiscountBadge"], .a-badge-text');
-        let discountText = discountEl ? discountEl.textContent.trim() : '';
-        
-        let discount = 0;
-        const discountMatch = discountText.match(/([0-9]+)%\s*off/i);
-        if (discountMatch) {
-          discount = parseInt(discountMatch[1], 10);
-        } else {
-          // Fallback de calculo de desconto
-          discount = 15; // padrão para exibir
-        }
-
-        // Preço atual (Promo)
-        const currentPriceEl = container.querySelector('[class*="Price-module__priceText"], [class*="PriceText"], .a-price');
-        let currentPrice = currentPriceEl ? currentPriceEl.textContent.trim() : '';
-
-        // Preço original (Riscado)
-        const originalPriceEl = container.querySelector('[class*="Price-module__strikeThrough"], .a-text-strike');
-        let originalPrice = originalPriceEl ? originalPriceEl.textContent.trim() : '';
-
-        // Verificação de Cupom de Clipe Amazon no Card
-        const couponEl = container.querySelector('[class*="coupon"], [class*="Coupon"], .a-badge-coupon');
-        let couponText = couponEl ? couponEl.textContent.trim() : '';
-
-        // Filtros e validações mínimas
-        if (!currentPrice) return;
-
-        dealsList.push({
-          title: title,
-          link: link,
-          image: image,
-          discount: discount,
-          originalPrice: originalPrice,
-          currentPrice: currentPrice,
-          isFreeShipping: true, // Amazon Prime oferece frete grátis na maioria das ofertas
-          dealType: discount >= 30 ? "Oferta Relâmpago" : "Oferta do Dia",
-          timeLeft: "",
-          couponBadge: couponText || null
-        });
-      });
-      
-      return dealsList;
-    });
 
     await browser.close();
 
     const tag = process.env.AMAZON_ASSOCIATE_TAG || 'alertadesc0dd-20';
+    const seenTitles = new Set();
+    const formattedDeals = [];
 
-    // Filtra e formata os preços no Node.js
-    const formattedDeals = extractedDeals.map(d => {
-      let cur = cleanPriceString(d.currentPrice);
-      let orig = cleanPriceString(d.originalPrice);
-      
-      // Se não tiver preço original, simula com base no desconto
-      if (!orig && cur) {
-        const numericCur = parseFloat(cur.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
-        if (!isNaN(numericCur) && d.discount > 0) {
-          const numericOrig = numericCur / (1 - (d.discount / 100));
-          orig = `R$ ${numericOrig.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    for (const d of allExtractedDeals) {
+      if (seenTitles.has(d.title.toLowerCase())) continue;
+      seenTitles.add(d.title.toLowerCase());
+
+      let curStr = cleanPriceString(d.currentPrice);
+      let origStr = cleanPriceString(d.originalPrice);
+
+      const curVal = parseNumericPrice(curStr);
+      let origVal = parseNumericPrice(origStr);
+
+      let discount = d.discount;
+
+      if (curVal > 0 && origVal > curVal && discount === 0) {
+        discount = Math.round(((origVal - curVal) / origVal) * 100);
+      }
+
+      if (!origStr || origVal <= curVal) {
+        if (discount > 0 && curVal > 0) {
+          origVal = curVal / (1 - (discount / 100));
+          origStr = `R$ ${origVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        } else {
+          origStr = curStr;
+          discount = 15; // Desconto padrão visual se não detectado
         }
       }
 
-      // Adiciona a tag de afiliado da Amazon ao link
+      // Tag de afiliado
       let affiliateLink = d.link;
       try {
         const urlObj = new URL(d.link);
         urlObj.searchParams.set('tag', tag);
         affiliateLink = urlObj.toString();
       } catch (e) {
-        if (affiliateLink.includes('?')) {
-          affiliateLink += `&tag=${tag}`;
-        } else {
-          affiliateLink += `?tag=${tag}`;
-        }
+        affiliateLink += (affiliateLink.includes('?') ? '&' : '?') + `tag=${tag}`;
       }
 
-      return {
-        ...d,
-        link: affiliateLink,
-        currentPrice: cur,
-        originalPrice: orig || cur // fallback se der erro
-      };
-    }).filter(d => d.currentPrice && d.title);
+      // Categorização Taxonômica
+      const catInfo = inferCategoryAndSub(d.title);
+      const recurringCat = getRecurringPurchaseCategory(d.title);
 
-    if (formattedDeals.length > 0) {
-      formattedDeals.sort((a, b) => b.discount - a.discount);
-      const finalDeals = formattedDeals.slice(0, 30);
-      
+      formattedDeals.push({
+        title: d.title,
+        link: affiliateLink,
+        image: d.image || 'https://m.media-amazon.com/images/G/32/social_share/amazon_logo._CB633266945_.png',
+        discount: discount,
+        originalPrice: origStr,
+        currentPrice: curStr,
+        isFreeShipping: true,
+        dealType: discount >= 30 ? "Oferta Relâmpago" : "Oferta do Dia",
+        timeLeft: "",
+        couponBadge: d.couponBadge || null,
+        category: catInfo.category,
+        subcategory: catInfo.subcategory,
+        icon: catInfo.icon,
+        recurringCategory: recurringCat
+      });
+    }
+
+    // Ordena por maior desconto
+    formattedDeals.sort((a, b) => b.discount - a.discount);
+    const finalDeals = formattedDeals.slice(0, 50);
+
+    if (finalDeals.length > 0) {
       const reportData = {
         generatedAt: new Date().toISOString(),
         deals: finalDeals
       };
-      
       fs.writeFileSync(amazonDealsPath, JSON.stringify(reportData, null, 2), 'utf-8');
-      console.log(`✅ Sucesso! Scraping da Amazon concluído. ${finalDeals.length} ofertas salvas.`);
+      console.log(`\n✅ Sucesso! Scraping da Amazon concluído.`);
+      console.log(`📊 Total de ${finalDeals.length} ofertas ricas salvas em amazon_deals_report.json.`);
     } else {
-      console.log("⚠️ Scraper não conseguiu extrair nenhuma oferta válida da Amazon. Salvando relatório vazio.");
-      writeEmptyReport();
+      console.log("⚠️ Nenhuma oferta válida foi extraída. Mantendo relatório anterior se válido.");
+      if (!fs.existsSync(amazonDealsPath)) {
+        writeEmptyReport();
+      }
     }
 
   } catch (err) {
-    console.warn("⚠️ Falha durante a navegação do Puppeteer na Amazon. Salvando relatório vazio.");
-    console.error("Erro:", err.message);
+    console.warn("⚠️ Falha durante execução do Puppeteer na Amazon:", err.message);
     try { await browser.close(); } catch (e) {}
-    writeEmptyReport();
+    if (!fs.existsSync(amazonDealsPath)) {
+      writeEmptyReport();
+    }
   }
 }
 

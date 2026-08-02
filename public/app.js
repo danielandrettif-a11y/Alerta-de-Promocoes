@@ -100,6 +100,8 @@ const elBtnGenerateAmazon = document.getElementById('btn-generate-amazon');
 const elChkSelectAllAmazon = document.getElementById('chk-select-all-amazon');
 const elBtnClearSelectionAmazon = document.getElementById('btn-clear-selection-amazon');
 const elTxtSelectedCountAmazon = document.getElementById('txt-selected-count-amazon');
+const elBtnQueueAmazon = document.getElementById('btn-queue-amazon');
+const elTxtQueueCountAmazon = document.getElementById('txt-queue-count-amazon');
 
 // DOM elements - Shopee Actions
 const elBtnUpdateShopee = document.getElementById('btn-update-shopee');
@@ -1589,10 +1591,11 @@ async function fetchPublicationQueue(options = {}) {
     publicationQueueEnabled = data.enabled === true;
     elTabQueue.hidden = !publicationQueueEnabled;
     elBtnQueueML.hidden = !publicationQueueEnabled;
+    if (elBtnQueueAmazon) elBtnQueueAmazon.hidden = !publicationQueueEnabled;
     elBtnQueueShopee.hidden = !publicationQueueEnabled;
     elBtnMobileQueue.hidden =
       !publicationQueueEnabled ||
-      !['ml', 'shopee'].includes(activeDealPlatform);
+      !['ml', 'amazon', 'shopee'].includes(activeDealPlatform);
 
     if (!publicationQueueEnabled) {
       publicationQueueItems = [];
@@ -1741,6 +1744,11 @@ function getSelectedPublicationDeals() {
       index,
       platform: 'mercado_livre'
     })),
+    ...Array.from(selectedAmazonIndices, index => ({
+      deal: allAmazonDeals[index],
+      index,
+      platform: 'amazon'
+    })),
     ...Array.from(selectedShopeeIndices, index => ({
       deal: allShopeeDeals[index],
       index,
@@ -1814,9 +1822,13 @@ async function enqueueDealsForPublication(items = getSelectedPublicationDeals())
           addLog('A oferta já estava na fila.', 'warning');
         }
         if (source) {
-          (source.platform === 'shopee'
-            ? selectedShopeeIndices
-            : selectedMLIndices).delete(source.index);
+          if (source.platform === 'shopee') {
+            selectedShopeeIndices.delete(source.index);
+          } else if (source.platform === 'amazon') {
+            selectedAmazonIndices.delete(source.index);
+          } else {
+            selectedMLIndices.delete(source.index);
+          }
         }
       } else {
         failed += 1;
@@ -1877,6 +1889,7 @@ async function enqueueDealsForPublication(items = getSelectedPublicationDeals())
     stopButton.hidden = true;
     closeButton.disabled = false;
     updateMLSelectionUI();
+    updateAmazonSelectionUI();
     updateShopeeSelectionUI();
   }
 
@@ -3090,10 +3103,12 @@ function updateShopeeSelectionUI() {
 }
 
 function updatePublicationQueueSelectionUI() {
-  const count = selectedMLIndices.size + selectedShopeeIndices.size;
+  const count = selectedMLIndices.size + selectedAmazonIndices.size + selectedShopeeIndices.size;
   elTxtQueueCountML.textContent = count;
+  if (elTxtQueueCountAmazon) elTxtQueueCountAmazon.textContent = count;
   elTxtQueueCountShopee.textContent = count;
   elBtnQueueML.disabled = count === 0;
+  if (elBtnQueueAmazon) elBtnQueueAmazon.disabled = count === 0;
   elBtnQueueShopee.disabled = count === 0;
   updateMobileSelectionBar();
 }
@@ -3232,6 +3247,11 @@ function init() {
   elBtnQueueML.addEventListener('click', () =>
     enqueueDealsForPublication()
   );
+  if (elBtnQueueAmazon) {
+    elBtnQueueAmazon.addEventListener('click', () =>
+      enqueueDealsForPublication()
+    );
+  }
   elBtnQueueShopee.addEventListener('click', () =>
     enqueueDealsForPublication()
   );

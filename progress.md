@@ -181,4 +181,15 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
     - Implementado modal de preview (`#coupon-story-modal`) que calcula preço sem cupom vs. preço com cupom, exibe badge do código, economia e gera imagem de Story vertical (1080x1920) via rota `POST /api/generate-coupon-story` para download em JPG.
   - Testes de sintaxe JS executados sem erros (`node -c`).
 
+### 02/08/2026
+- **Fase de Validação, Ampliação e Envio para Fila da Aba Amazon**:
+  - Criado o plano de implementação em `implementation_plan.md` e registradas as descobertas em `findings.md`.
+  - Formuladas as 5 Perguntas de Descoberta do Protocolo V.L.A.E.G. para alinhamento com o usuário.
+  - Adicionado o botão `#btn-queue-amazon` e o contador `#txt-queue-count-amazon` no `index.html` e integrado no `app.js`.
+  - Reformulado o scraper Puppeteer (`execution/amazon_deals.js`) para raspagem em volume por categorias com taxonomia (`category_helper.js`), badges de cupons, frete Prime e geração automatizada de `amazon_deals_report.json`.
+  - Executado o scraper com sucesso, extraindo **50 ofertas ricas** da Amazon Brasil divididas em categorias taxonômicas e salvando com tag de afiliado.
+  - Validados todos os arquivos com `node -c` (0 erros). Criado o [walkthrough.md](file:///C:/Users/danie/.gemini/antigravity-ide/brain/5f20fcc5-eb6f-41ae-abac-1d9934b37a65/walkthrough.md).
+
+
+
 
