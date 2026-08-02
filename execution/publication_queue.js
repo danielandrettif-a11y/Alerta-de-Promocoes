@@ -291,9 +291,12 @@ function claimAffiliateJobs(
   const expiresAt = new Date(now.getTime() + leaseMs).toISOString();
   const jobs = normalized.items.filter(item => {
     const processing = normalizeAffiliateProcessing(item);
+    const sameDeviceClaim = Boolean(claimant && processing.claimedBy === claimant);
     const manuallyRetriable =
       retryFailed &&
-      processing.state === AFFILIATE_PROCESSING_STATES.ERROR;
+      (processing.state === AFFILIATE_PROCESSING_STATES.ERROR ||
+       processing.state === AFFILIATE_PROCESSING_STATES.CLAIMED ||
+       sameDeviceClaim);
     return (
       !excluded.has(item.id) &&
       item.status === STATUSES.AWAITING_AFFILIATE &&
@@ -302,6 +305,7 @@ function claimAffiliateJobs(
           processing.state === AFFILIATE_PROCESSING_STATES.PENDING &&
           processing.attempts < maxAttempts
         ) ||
+        sameDeviceClaim ||
         manuallyRetriable
       )
     );

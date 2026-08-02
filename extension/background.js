@@ -499,7 +499,14 @@ async function processQueue() {
         })
       });
       const job = claimed.jobs?.[0];
-      if (!job) break;
+      if (!job) {
+        if (index === 0) {
+          await persistState({
+            lastError: 'Nenhuma oferta pendente de link na fila.'
+          });
+        }
+        break;
+      }
       attemptedItemIds.push(job.id);
       try {
         const platform = job.platform === 'shopee'
