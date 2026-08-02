@@ -1830,7 +1830,7 @@ async function enqueueDealsForPublication(items = getSelectedPublicationDeals())
           addLog('Story adicionado à fila.', 'success');
         } else {
           reused += 1;
-          addLog('A oferta já estava na fila.', 'warning');
+          addLog('Oferta já ativa na fila.', 'info');
         }
         if (source) {
           if (source.platform === 'shopee') {
@@ -1888,15 +1888,31 @@ async function enqueueDealsForPublication(items = getSelectedPublicationDeals())
       );
     }
 
+    let pollFailures = 0;
     while (job.state === 'running') {
       consumeJob(job);
-      await new Promise(resolve => setTimeout(resolve, 750));
-      const statusResponse = await fetch(
-        `/api/publication-queue/generation/${encodeURIComponent(job.id)}`
-      );
-      job = await readApiJson(statusResponse, 'acompanhar a geração');
-      if (!statusResponse.ok) {
-        throw new Error(job.error || 'Não foi possível acompanhar a geração.');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      try {
+        const statusResponse = await fetch(
+          `/api/publication-queue/generation/${encodeURIComponent(job.id)}`
+        );
+        if (!statusResponse.ok) {
+          pollFailures++;
+          if (pollFailures >= 6) {
+            job = await readApiJson(statusResponse, 'acompanhar a geração');
+            throw new Error(job.error || `Servidor temporariamente indisponível (HTTP ${statusResponse.status})`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+        pollFailures = 0;
+        job = await statusResponse.json();
+      } catch (pollErr) {
+        pollFailures++;
+        if (pollFailures >= 6) {
+          throw pollErr;
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
     consumeJob(job);

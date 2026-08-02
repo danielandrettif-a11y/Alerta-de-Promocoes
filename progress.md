@@ -190,7 +190,9 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Igualada a performance e comportamento da aba da Amazon com Mercado Livre e Shopee (`public/app.js` e `execution/automation_state.js`): Inseridos botões "Preparar para Instagram" diretos em cada card da Amazon, preservada a propriedade `platform: 'amazon'` e unificada a seleção em tempo real sem latência.
   - Corrigida a sincronização dos contadores de seleção da fila ("Preparar na fila") nas abas Amazon, ML e Shopee (`public/app.js`), adicionando proteções nulas completas para evitar interrupções de execução e atualizar instantaneamente o total em tempo real (0ms).
   - Corrigida a fixação da barra de controle no topo ao rolar a tela no desktop (`public/style.css`): alterado `overflow-x: hidden` para `overflow-x: clip` no `html, body` (revisão de especificação CSS sticky) e aplicado fundo escuro sólido `#171120` com elevação e sombra na `.control-bar`.
-  - Atualizados os seletores e a versão do cache buster (`v=32`) no `public/index.html`.
+  - Implementada a resiliência no acompanhamento do lote da fila (`public/app.js`): adicionado mecanismo de auto-retry (até 6 tentativas com pausa de 2s) para contornar instabilidades temporárias de Nginx/Proxy HTTP 502 Bad Gateway e aumentado o intervalo de polling para 1500ms, reduzindo a carga do servidor.
+  - Ajustadas as mensagens do modal de geração para `Oferta já ativa na fila.` (`type: info`), diferenciando itens que já estavam prontos de eventuais erros de processamento.
+  - Atualizada a versão do cache buster (`v=33`) no `index.html`.
 
 
 
