@@ -1867,6 +1867,18 @@ async function enqueueDealsForPublication(items = getSelectedPublicationDeals())
       throw new Error(job.error || 'Não foi possível iniciar a geração.');
     }
     activeQueueGenerationJobId = job.id;
+
+    // Limpa a seleção imediatamente e atualiza os contadores em tempo real (resposta instantânea)
+    items.forEach(item => {
+      if (item.platform === 'shopee') selectedShopeeIndices.delete(item.index);
+      else if (item.platform === 'amazon') selectedAmazonIndices.delete(item.index);
+      else selectedMLIndices.delete(item.index);
+    });
+    updateMLSelectionUI();
+    updateAmazonSelectionUI();
+    updateShopeeSelectionUI();
+    fetchPublicationQueue({ render: true });
+
     if (stopQueueGenerationRequested) {
       await fetch(
         '/api/publication-queue/generation/' +

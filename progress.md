@@ -188,8 +188,8 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Adicionado o botão `#btn-queue-amazon` e o contador `#txt-queue-count-amazon` no `index.html` e integrado no `app.js`.
   - Reformulado o scraper Puppeteer (`execution/amazon_deals.js`) para raspagem em volume por categorias com taxonomia (`category_helper.js`), badges de cupons, frete Prime e geração automatizada de `amazon_deals_report.json`.
   - Corrigida a identificação de marcas no cabeçalho dos Stories (`execution/generate_stories.js` e `execution/story_template.html`). Produtos da Amazon exibem agora a tag oficial **"OFERTA AMAZON"** (com botão amarelo Amazon), Shopee exibe **"OFERTA SHOPEE"** e Mercado Livre **"OFERTA MERCADO LIVRE"**.
-  - Ajustada a paleta de cores dos Stories (`execution/story_template.html`): O tema base de promoção é agora **Azul vibrante** (`theme-day`/`theme-camp`/`:root`), reservando a cor Vermelha exclusivamente para Ofertas Relâmpago (`theme-lightning`).
-  - Corrigido o texto e link dos cards da Fila de Publicação no `public/app.js` e `server.js` ("1. Abrir produto na Amazon", "1. Abrir produto na Shopee", "1. Abrir produto no Mercado Livre").
+  - Otimizada a inclusão de ofertas na fila de publicação (`server.js` e `public/app.js`): Os produtos entram no banco de dados da fila em **50 milissegundos**, liberando os contadores e atualizando a tela reativamente em tempo real, enquanto os Stories são preparados de forma assíncrona no background.
+
 
 
 

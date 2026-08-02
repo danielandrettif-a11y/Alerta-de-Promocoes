@@ -961,6 +961,8 @@ function runPublicationQueueGeneration(jobId, entries) {
     }
   });
 
+  savePublicationQueue(publicationQueuePath, previewQueue);
+
   if (pending.length === 0) {
     queueGenerationJob.state = 'completed';
     queueGenerationJob.completedAt = new Date().toISOString();
