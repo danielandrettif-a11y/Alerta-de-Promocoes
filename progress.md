@@ -193,7 +193,7 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Implementada a resiliência no acompanhamento do lote da fila (`public/app.js`): adicionado mecanismo de auto-retry (até 6 tentativas com pausa de 2s) para contornar instabilidades temporárias de Nginx/Proxy HTTP 502 Bad Gateway e aumentado o intervalo de polling para 1500ms, reduzindo a carga do servidor.
   - Ajustadas as mensagens do modal de geração para `Oferta já ativa na fila.` (`type: info`), diferenciando itens que já estavam prontos de eventuais erros de processamento.
   - Implementado o filtro dinamico `isDealInActiveQueue` (`public/app.js`): Produtos que já estejam ativos na Fila de Publicação somem automaticamente da tela de seleção de ofertas (Amazon, ML e Shopee), prevenindo duplicidades e mantendo a lista de catálogo limpa apenas com ofertas disponíveis para inclusão.
-  - Atualizada a versão do cache buster (`v=34`) no `index.html`.
+  - Corrigido o fluxo de geração e atribuição de Stories na Fila de Publicação (`server.js`): garantida a inclusão de itens com imagem pendente no lote de renderização do Puppeteer e corrigida a vinculação do arquivo `.jpg` do Story ao objeto da fila mesmo para itens pré-existentes, eliminando a exibição de ícones de imagem quebrada (`storyFile`).
 
 
 

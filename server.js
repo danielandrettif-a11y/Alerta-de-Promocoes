@@ -930,7 +930,8 @@ function runPublicationQueueGeneration(jobId, entries) {
         publicationQueueInput(deal, platform)
       );
       previewQueue = result.queue;
-      if (result.created) {
+      const storyExists = result.item.storyFile && fs.existsSync(path.join(publicationQueueAssetsPath, result.item.storyFile));
+      if (result.created || !storyExists) {
         pending.push({
           clientId: String(entry.clientId || position),
           position: position + 1,
@@ -1006,26 +1007,33 @@ function runPublicationQueueGeneration(jobId, entries) {
     if (!fileName) return;
     try {
       const currentQueue = loadPublicationQueue(publicationQueuePath);
-      const result = enqueueOffer(
-        currentQueue,
-        publicationQueueInput(
-          item.deal,
-          item.platform,
-          item.queueItemId
-        )
-      );
-      if (result.created) {
-        fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
-        result.item.storyFile = `${result.item.id}.jpg`;
-        fs.copyFileSync(
-          path.join(storiesDir, fileName),
-          path.join(publicationQueueAssetsPath, result.item.storyFile)
+      let queueItem = (currentQueue.items || []).find(it => it.id === item.queueItemId) ||
+        (currentQueue.items || []).find(it => it.dealId === generateDealId({ ...item.deal, platform: item.platform }));
+
+      if (!queueItem) {
+        const result = enqueueOffer(
+          currentQueue,
+          publicationQueueInput(
+            item.deal,
+            item.platform,
+            item.queueItemId
+          )
         );
-        savePublicationQueue(publicationQueuePath, result.queue);
+        queueItem = result.item;
       }
+
+      fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
+      queueItem.storyFile = `${queueItem.id}.jpg`;
+      queueItem.updatedAt = new Date().toISOString();
+      fs.copyFileSync(
+        path.join(storiesDir, fileName),
+        path.join(publicationQueueAssetsPath, queueItem.storyFile)
+      );
+      savePublicationQueue(publicationQueuePath, currentQueue);
+
       settle(item, {
         success: true,
-        created: result.created
+        created: true
       });
     } catch (error) {
       settle(item, { success: false, error: error.message });
