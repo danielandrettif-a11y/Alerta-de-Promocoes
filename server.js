@@ -164,6 +164,8 @@ const localAffiliateWorkerEnabled =
 let queueValidationJob = {
   state: 'idle',
   phase: null,
+  platforms: [],
+  skippedPlatforms: [],
   processed: 0,
   total: 0,
   result: null,
@@ -635,21 +637,11 @@ function applyAffiliateLinkToQueue(
   );
 }
 
-function loadQueueValidationCatalog(queue) {
+function loadQueueValidationCatalog(platforms) {
   const reports = {
     mercado_livre: mlDealsReportPath,
     shopee: shopeeDealsReportPath
   };
-  const activeStatuses = new Set([
-    PUBLICATION_QUEUE_STATUSES.AWAITING_AFFILIATE,
-    PUBLICATION_QUEUE_STATUSES.READY,
-    PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW
-  ]);
-  const platforms = new Set(
-    queue.items
-      .filter(item => activeStatuses.has(item.status))
-      .map(item => item.platform)
-  );
   const catalog = new Map();
   for (const platform of platforms) {
     const reportPath = reports[platform];
@@ -672,7 +664,7 @@ function loadQueueValidationCatalog(queue) {
   return catalog;
 }
 
-function getQueueValidationPlatforms(queue) {
+function getActiveQueuePlatforms(queue) {
   const activeStatuses = new Set([
     PUBLICATION_QUEUE_STATUSES.AWAITING_AFFILIATE,
     PUBLICATION_QUEUE_STATUSES.READY,
@@ -682,8 +674,13 @@ function getQueueValidationPlatforms(queue) {
     queue.items
       .filter(item => activeStatuses.has(item.status))
       .map(item => item.platform)
-      .filter(platform => platform === 'mercado_livre' || platform === 'shopee')
   )];
+}
+
+function getQueueValidationPlatforms(queue) {
+  return getActiveQueuePlatforms(queue).filter(platform =>
+    platform === 'mercado_livre' || platform === 'shopee'
+  );
 }
 
 function applyObservedQueuePrices(queue, catalog) {
@@ -763,14 +760,18 @@ async function runPublicationQueueValidation(jobId) {
     const queue = loadPublicationQueue(publicationQueuePath);
     const platforms = getQueueValidationPlatforms(queue);
     queueValidationJob.platforms = platforms;
+    queueValidationJob.skippedPlatforms = getActiveQueuePlatforms(queue)
+      .filter(platform => !platforms.includes(platform));
     await Promise.all(platforms.map(refreshCatalog));
     queueValidationJob.phase = 'validating';
-    const catalog = loadQueueValidationCatalog(queue);
+    const catalog = loadQueueValidationCatalog(platforms);
+    const validationPlatforms = new Set(platforms);
     applyObservedQueuePrices(queue, catalog);
     const coupons = loadAvailableDeals().coupons;
     const preview = validateQueueItems(
       loadPublicationQueue(publicationQueuePath),
-      catalog
+      catalog,
+      { platforms: validationPlatforms }
     );
     queueValidationJob.total = preview.updated.length;
     queueValidationJob.phase = preview.updated.length > 0
@@ -788,7 +789,8 @@ async function runPublicationQueueValidation(jobId) {
 
     const result = validateQueueItems(
       loadPublicationQueue(publicationQueuePath),
-      catalog
+      catalog,
+      { platforms: validationPlatforms }
     );
     fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
     for (const { item, current } of result.updated) {
@@ -832,6 +834,7 @@ async function runPublicationQueueValidation(jobId) {
         removed: result.removed.length,
         updated: result.updated.length,
         unchanged: result.unchanged,
+        skippedPlatforms: queueValidationJob.skippedPlatforms,
         summary: summarizeQueue(result.queue)
       }
     };
@@ -1396,6 +1399,7 @@ app.post(
         startedAt: new Date().toISOString(),
         completedAt: null,
         platforms: [],
+        skippedPlatforms: [],
         processed: 0,
         total: 0,
         result: null,
@@ -1615,7 +1619,9 @@ app.post(
       updateWorker(workers, {
         ...current,
         deviceId,
-        status: code === 'AUTH_REQUIRED' ? 'auth_required' : 'error',
+        status: ['AUTH_REQUIRED', 'SHOPEE_ACCOUNT_ACTION_REQUIRED'].includes(code)
+          ? 'auth_required'
+          : 'error',
         currentItemId: null,
         lastError: req.body?.message || code
       });

@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = '1.5.1';
+const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 const SHOPEE_CONVERTER_URL =
   'https://affiliate.shopee.com.br/offer/custom_link';
 const WORKER_WINDOW_KEY = 'affiliateWorkerWindowId';
@@ -15,6 +15,9 @@ const DEFAULTS = {
 
 let stopRequested = false;
 let processingPromise = null;
+let activeWorkerWindowId = null;
+let runGeneration = 0;
+const pendingCancellations = new Set();
 let workerState = {
   status: 'idle',
   processedCount: 0,
@@ -22,8 +25,25 @@ let workerState = {
   currentItem: null,
   lastError: null,
   authRequired: false,
-  waitingCount: 0
+  waitingCount: 0,
+  stage: 'idle',
+  stageStartedAt: null,
+  lastDiagnostic: null,
+  diagnosticEvents: []
 };
+
+const SHOPEE_BLOCKING_CODES = new Set([
+  'SHOPEE_PORTAL_NOT_READY',
+  'SHOPEE_CONVERTER_NOT_REACHED',
+  'SHOPEE_MENU_NOT_FOUND',
+  'SHOPEE_INPUT_NOT_FOUND',
+  'SHOPEE_GENERATE_BUTTON_NOT_FOUND'
+]);
+
+const USER_ACTION_CODES = new Set([
+  'AUTH_REQUIRED',
+  'SHOPEE_ACCOUNT_ACTION_REQUIRED'
+]);
 
 async function loadSettings() {
   const stored = await chrome.storage.local.get(Object.keys(DEFAULTS));
@@ -118,7 +138,7 @@ async function findOrCreateShopeeTab() {
 
 function tabMatchesPlatform(tab, platform) {
   try {
-    const hostname = new URL(tab.url || '').hostname;
+    const hostname = new URL(tab.pendingUrl || tab.url || '').hostname;
     return platform === 'shopee'
       ? hostname === 'affiliate.shopee.com.br'
       : hostname === 'www.mercadolivre.com.br' ||
@@ -170,6 +190,77 @@ async function restoreMainWindowState() {
   }
 }
 
+async function setStage(stage, diagnostic = null) {
+  const event = {
+    stage,
+    at: new Date().toISOString(),
+    ...(diagnostic ? { diagnostic } : {})
+  };
+  return persistState({
+    stage,
+    stageStartedAt: event.at,
+    lastDiagnostic: diagnostic || workerState.lastDiagnostic,
+    diagnosticEvents: [...(workerState.diagnosticEvents || []), event].slice(-20)
+  });
+}
+
+function cancelledError() {
+  return Object.assign(new Error('Processamento cancelado.'), {
+    code: 'CANCELLED'
+  });
+}
+
+function assertRunning(generation) {
+  if (stopRequested || generation !== runGeneration) throw cancelledError();
+}
+
+function cancelPendingOperations() {
+  runGeneration += 1;
+  for (const cancel of [...pendingCancellations]) cancel();
+  pendingCancellations.clear();
+}
+
+function cancellableDelay(ms, generation) {
+  assertRunning(generation);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingCancellations.delete(cancel);
+      try {
+        assertRunning(generation);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    }, ms);
+    const cancel = () => {
+      clearTimeout(timer);
+      pendingCancellations.delete(cancel);
+      reject(cancelledError());
+    };
+    pendingCancellations.add(cancel);
+  });
+}
+
+async function getMainWindow(workerWindowId) {
+  const stored = await chrome.storage.session.get(MAIN_WINDOW_STATE_KEY);
+  const savedId = stored[MAIN_WINDOW_STATE_KEY]?.windowId;
+  if (Number.isInteger(savedId) && savedId !== workerWindowId) {
+    const savedWindow = await chrome.windows.get(savedId).catch(() => null);
+    if (savedWindow) return savedWindow;
+  }
+  const lastFocused = await chrome.windows.getLastFocused({
+    windowTypes: ['normal']
+  }).catch(() => null);
+  if (lastFocused?.id && lastFocused.id !== workerWindowId) return lastFocused;
+  const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+  return windows.find(window => window.id !== workerWindowId) || null;
+}
+
+async function setWindowBounds(windowId, bounds) {
+  await chrome.windows.update(windowId, { state: 'normal' });
+  return chrome.windows.update(windowId, bounds);
+}
+
 async function positionSplitWindows(workerWindowId) {
   try {
     let screenWidth = 1920;
@@ -198,8 +289,7 @@ async function positionSplitWindows(workerWindowId) {
     }
 
     const halfWidth = Math.floor(screenWidth / 2);
-    const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
-    const mainWindow = windows.find(w => w.id !== workerWindowId);
+    const mainWindow = await getMainWindow(workerWindowId);
 
     if (mainWindow?.id) {
       const stored = await chrome.storage.session.get(MAIN_WINDOW_STATE_KEY);
@@ -211,23 +301,24 @@ async function positionSplitWindows(workerWindowId) {
           }
         });
       }
-      await chrome.windows.update(mainWindow.id, {
-        left: screenLeft,
-        top: screenTop,
-        width: halfWidth,
-        height: screenHeight,
-        state: 'normal'
-      }).catch(() => {});
     }
 
     if (workerWindowId) {
-      await chrome.windows.update(workerWindowId, {
+      await setWindowBounds(workerWindowId, {
         left: screenLeft + halfWidth,
         top: screenTop,
         width: halfWidth,
         height: screenHeight,
-        state: 'normal',
         focused: false
+      }).catch(() => {});
+    }
+    if (mainWindow?.id) {
+      await setWindowBounds(mainWindow.id, {
+        left: screenLeft,
+        top: screenTop,
+        width: halfWidth,
+        height: screenHeight,
+        focused: true
       }).catch(() => {});
     }
   } catch (err) {
@@ -235,12 +326,23 @@ async function positionSplitWindows(workerWindowId) {
   }
 }
 
-async function getOrCreateWorkerTab(platform) {
+async function getOrCreateWorkerTab(platform, productUrl) {
   const url = platform === 'shopee'
     ? SHOPEE_CONVERTER_URL
-    : 'https://www.mercadolivre.com.br/';
+    : productUrl || 'https://www.mercadolivre.com.br/';
   let workerWindow = await getWorkerWindow();
+  const createdWindow = !workerWindow;
   if (!workerWindow) {
+    await chrome.storage.session.remove(MAIN_WINDOW_STATE_KEY);
+    const mainWindow = await getMainWindow(null);
+    if (mainWindow?.id) {
+      await chrome.storage.session.set({
+        [MAIN_WINDOW_STATE_KEY]: {
+          windowId: mainWindow.id,
+          state: mainWindow.state || 'maximized'
+        }
+      });
+    }
     workerWindow = await chrome.windows.create({
       url,
       type: 'normal',
@@ -253,40 +355,52 @@ async function getOrCreateWorkerTab(platform) {
       [WORKER_WINDOW_KEY]: workerWindow.id
     });
   }
+  activeWorkerWindowId = workerWindow.id;
   
   await positionSplitWindows(workerWindow.id);
 
-  const tabs = workerWindow.tabs ||
+  const previousTabs = workerWindow.tabs ||
     await chrome.tabs.query({ windowId: workerWindow.id });
-  const existing = tabs.find(tab => tabMatchesPlatform(tab, platform));
-  const tab = existing || await chrome.tabs.create({
-    windowId: workerWindow.id,
-    url,
-    active: false
-  });
+  const initialTab = (createdWindow || platform === 'shopee')
+    ? previousTabs.find(tab => tabMatchesPlatform(tab, platform))
+    : null;
+  const tab = initialTab || await chrome.tabs.create({
+      windowId: workerWindow.id,
+      url,
+      active: false
+    });
+  for (const previousTab of previousTabs) {
+    if (!previousTab.id || previousTab.id === tab.id) continue;
+    await chrome.tabs.remove(previousTab.id).catch(() => {});
+  }
   return tab;
 }
 
-async function closeWorkerWindow() {
-  const workerWindow = await getWorkerWindow();
-  if (workerWindow?.id) {
-    try {
-      const tabs = await chrome.tabs.query({ windowId: workerWindow.id });
-      // Fecha aba por aba com uma pequena pausa (150ms) para fechar a janela suavemente
-      // sem acionar a caixa de diálogo "Fechar janela com X guias?" do Opera GX / Chrome
-      for (const tab of tabs) {
-        if (tab.id) {
-          await chrome.tabs.remove(tab.id).catch(() => {});
-          await new Promise(resolve => setTimeout(resolve, 150));
-        }
+async function closeWorkerWindow(windowId = activeWorkerWindowId) {
+  const stored = await chrome.storage.session.get(WORKER_WINDOW_KEY);
+  const targetId = Number.isInteger(windowId)
+    ? windowId
+    : stored[WORKER_WINDOW_KEY];
+  let closed = !Number.isInteger(targetId);
+  try {
+    for (let attempt = 0; attempt < 3 && !closed; attempt += 1) {
+      const openWindow = await chrome.windows.get(targetId).catch(() => null);
+      if (!openWindow) {
+        closed = true;
+        break;
       }
-    } catch {
-      await chrome.windows.remove(workerWindow.id).catch(() => {});
+      await chrome.windows.remove(targetId).catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 250));
+      closed = !(await chrome.windows.get(targetId).catch(() => null));
     }
+  } finally {
+    activeWorkerWindowId = null;
+    await chrome.storage.session.remove(WORKER_WINDOW_KEY);
+    await restoreMainWindowState();
   }
-  await chrome.storage.session.remove(WORKER_WINDOW_KEY);
-  // Restaura a janela principal do usuario para maximizada / tela cheia como estava antes
-  await restoreMainWindowState();
+  if (!closed) {
+    throw new Error('O navegador impediu o fechamento da janela de trabalho.');
+  }
 }
 
 function samePageUrl(leftValue, rightValue) {
@@ -301,6 +415,23 @@ function samePageUrl(leftValue, rightValue) {
   }
 }
 
+function navigationReachedTarget(tab, targetUrl) {
+  if (tab.pendingUrl) return false;
+  if (/login|captcha|verification|challenge/i.test(tab.url || '')) return true;
+  if (samePageUrl(tab.url, targetUrl)) return true;
+  try {
+    const current = new URL(tab.url || '');
+    const target = new URL(targetUrl);
+    const targetItemId = target.href.match(/MLB\d+/i)?.[0];
+    return Boolean(
+      targetItemId &&
+      current.href.toUpperCase().includes(targetItemId.toUpperCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function navigateTab(
   tabId,
   url,
@@ -308,10 +439,11 @@ async function navigateTab(
   { reloadSamePage = true } = {}
 ) {
   const currentTab = await chrome.tabs.get(tabId);
+  const samePage = samePageUrl(currentTab.url, url);
   if (
     !reloadSamePage &&
     currentTab.status === 'complete' &&
-    samePageUrl(currentTab.url, url)
+    samePage
   ) {
     return currentTab;
   }
@@ -323,14 +455,20 @@ async function navigateTab(
       }));
     }, timeoutMs);
     const listener = (updatedId, changeInfo, tab) => {
-      if (updatedId !== tabId || changeInfo.status !== 'complete') return;
+      if (
+        updatedId !== tabId ||
+        changeInfo.status !== 'complete' ||
+        !navigationReachedTarget(tab, url)
+      ) return;
       clearTimeout(timeout);
       chrome.tabs.onUpdated.removeListener(listener);
       resolve(tab);
     };
     chrome.tabs.onUpdated.addListener(listener);
-    const navigation = samePageUrl(currentTab.url, url)
-      ? chrome.tabs.reload(tabId, { bypassCache: true })
+    const navigation = samePage
+      ? reloadSamePage
+        ? chrome.tabs.reload(tabId, { bypassCache: true })
+        : Promise.resolve(currentTab)
       : chrome.tabs.update(tabId, { url, active: false });
     navigation.catch(error => {
       clearTimeout(timeout);
@@ -347,7 +485,10 @@ async function sendContentMessage(
 ) {
   try {
     return await chrome.tabs.sendMessage(tabId, message);
-  } catch {
+  } catch (error) {
+    if (!/receiving end does not exist|could not establish connection/i.test(
+      error.message || ''
+    )) throw error;
     await chrome.scripting.executeScript({
       target: { tabId },
       files: [scriptFile]
@@ -377,6 +518,167 @@ async function dispatchTrustedClick(tabId, clickPoint) {
   }
 }
 
+async function getShopeePageState(tabId) {
+  return sendContentMessage(tabId, {
+    type: 'GET_SHOPEE_PAGE_STATE'
+  }, 'content/shopee.js');
+}
+
+async function waitForShopeeState(tabId, predicate, deadline, generation) {
+  let lastState = null;
+  while (Date.now() < deadline) {
+    assertRunning(generation);
+    try {
+      lastState = await getShopeePageState(tabId);
+      if (lastState?.code || predicate(lastState)) return lastState;
+    } catch (error) {
+      if (error.code === 'CANCELLED') throw error;
+    }
+    await cancellableDelay(250, generation);
+  }
+  return lastState;
+}
+
+async function activateShopeeControl(tabId, kind, deadline, generation) {
+  assertRunning(generation);
+  const result = await sendContentMessage(tabId, {
+    type: 'ACTIVATE_SHOPEE_CONTROL',
+    kind
+  }, 'content/shopee.js');
+  if (!result?.success) return result;
+  if (result.control?.visible && result.control.clickPoint) {
+    await dispatchTrustedClick(tabId, result.control.clickPoint);
+  }
+  const predicate = kind === 'offer'
+    ? state => state?.diagnostic?.controls?.customLink?.visible ||
+        state?.state === 'READY'
+    : state => state?.state === 'READY';
+  let state = await waitForShopeeState(
+    tabId,
+    predicate,
+    Math.min(deadline, Date.now() + 3000),
+    generation
+  );
+  return state;
+}
+
+async function ensureShopeeConverter(tab, settings, generation) {
+  const deadline = Date.now() + Number(settings.pageTimeoutMs || 45000);
+  await setStage('shopee_opening');
+  const current = await chrome.tabs.get(tab.id);
+  if (!tabMatchesPlatform(current, 'shopee')) {
+    await chrome.tabs.update(tab.id, { url: SHOPEE_CONVERTER_URL, active: false });
+  }
+  let state = await waitForShopeeState(
+    tab.id,
+    value => value?.state !== 'PORTAL_LOADING',
+    Math.min(deadline, Date.now() + 10000),
+    generation
+  );
+  if (state?.code) return { success: false, ...state };
+  if (state?.state === 'READY') {
+    await setStage('shopee_ready', state.diagnostic);
+    return { success: true, state };
+  }
+  if (state?.state === 'CONVERTER_LOADING') {
+    await setStage('shopee_waiting_converter', state.diagnostic);
+    state = await waitForShopeeState(
+      tab.id,
+      value => value?.state === 'READY',
+      deadline,
+      generation
+    );
+    if (state?.code) return { success: false, ...state };
+    if (state?.state === 'READY') {
+      await setStage('shopee_ready', state.diagnostic);
+      return { success: true, state };
+    }
+    return {
+      success: false,
+      code: 'SHOPEE_PORTAL_NOT_READY',
+      message: 'A página Link personalizado abriu, mas o formulário não carregou.',
+      diagnostic: state?.diagnostic || null
+    };
+  }
+
+  await setStage('shopee_opening_converter', state?.diagnostic);
+  if (state?.diagnostic?.controls?.customLink?.present) {
+    state = await activateShopeeControl(
+      tab.id, 'custom_link', deadline, generation
+    );
+    if (state?.code) return { success: false, ...state };
+    if (state?.state === 'READY') {
+      await setStage('shopee_ready', state.diagnostic);
+      return { success: true, state };
+    }
+    if (state?.state === 'CONVERTER_LOADING') {
+      await setStage('shopee_waiting_converter', state.diagnostic);
+      state = await waitForShopeeState(
+        tab.id,
+        value => value?.state === 'READY',
+        deadline,
+        generation
+      );
+      if (state?.code) return { success: false, ...state };
+      if (state?.state === 'READY') {
+        await setStage('shopee_ready', state.diagnostic);
+        return { success: true, state };
+      }
+      return {
+        success: false,
+        code: 'SHOPEE_PORTAL_NOT_READY',
+        message: 'Link personalizado abriu, mas o formulário não carregou.',
+        diagnostic: state?.diagnostic || null
+      };
+    }
+  }
+
+  state = await getShopeePageState(tab.id).catch(() => state);
+  if (!state?.diagnostic?.controls?.offer?.present) {
+    return {
+      success: false,
+      code: state?.state === 'PORTAL_LOADING'
+        ? 'SHOPEE_PORTAL_NOT_READY'
+        : 'SHOPEE_MENU_NOT_FOUND',
+      message: state?.state === 'PORTAL_LOADING'
+        ? 'O portal da Shopee não terminou de carregar.'
+        : 'A Shopee abriu o portal, mas não expôs o menu Oferta.',
+      diagnostic: state?.diagnostic || null
+    };
+  }
+  state = await activateShopeeControl(tab.id, 'offer', deadline, generation);
+  if (state?.code) return { success: false, ...state };
+  if (!state?.diagnostic?.controls?.customLink?.present) {
+    return {
+      success: false,
+      code: 'SHOPEE_CONVERTER_NOT_REACHED',
+      message: 'O menu Oferta abriu, mas Link personalizado não apareceu.',
+      diagnostic: state?.diagnostic || null
+    };
+  }
+  state = await activateShopeeControl(
+    tab.id, 'custom_link', deadline, generation
+  );
+  if (state?.code) return { success: false, ...state };
+  state = await waitForShopeeState(
+    tab.id,
+    value => value?.state === 'READY',
+    deadline,
+    generation
+  );
+  if (state?.code) return { success: false, ...state };
+  if (state?.state !== 'READY') {
+    return {
+      success: false,
+      code: 'SHOPEE_CONVERTER_NOT_REACHED',
+      message: 'A Shopee não concluiu a abertura de Link personalizado.',
+      diagnostic: state?.diagnostic || null
+    };
+  }
+  await setStage('shopee_ready', state.diagnostic);
+  return { success: true, state };
+}
+
 async function runContentAction(tabId, timeoutMs) {
   const located = await sendContentMessage(tabId, {
     type: 'LOCATE_AFFILIATE_SHARE',
@@ -402,38 +704,41 @@ async function runContentAction(tabId, timeoutMs) {
 
 async function reportFailure(job, code, message) {
   const settings = await loadSettings();
-  await apiRequest(
-    `/api/local-affiliate-worker/jobs/${encodeURIComponent(job.id)}/fail`,
-    {
+  const sendFailure = (failureCode, failureMessage) => apiRequest(
+      `/api/local-affiliate-worker/jobs/${encodeURIComponent(job.id)}/fail`,
+      {
       method: 'POST',
       body: JSON.stringify({
         deviceId: settings.deviceId,
-        code,
-        message
+        code: failureCode,
+        message: failureMessage
       })
+      }
+    );
+  try {
+    return await sendFailure(code, message);
+  } catch (error) {
+    if (
+      code !== 'UNKNOWN_ERROR' &&
+      /c[oó]digo de falha inv[aá]lido/i.test(error.message || '')
+    ) {
+      return sendFailure('UNKNOWN_ERROR', `[${code}] ${message}`);
     }
-  );
+    throw error;
+  }
 }
 
-async function processJob(job, settings, tab) {
-  await persistState({
-    status: 'processing',
-    currentItem: { id: job.id, title: job.title },
-    lastError: null
-  });
-  await heartbeat('processing');
-  const shopee = job.platform === 'shopee';
+async function processMercadoLivreJob(job, settings, tab) {
   const loadedTab = await navigateTab(
     tab.id,
-    shopee ? SHOPEE_CONVERTER_URL : job.productLink,
-    settings.pageTimeoutMs,
-    { reloadSamePage: !shopee }
+    job.productLink,
+    settings.pageTimeoutMs
   );
   if (/login|captcha|verification|challenge/i.test(loadedTab.url || '')) {
     return {
       success: false,
       code: 'AUTH_REQUIRED',
-      message: `${shopee ? 'A Shopee' : 'O Mercado Livre'} solicitou autenticação.`
+      message: 'O Mercado Livre solicitou autenticação.'
     };
   }
   await chrome.tabs.update(tab.id, { active: true });
@@ -442,13 +747,6 @@ async function processJob(job, settings, tab) {
     focused: false
   });
   await new Promise(resolve => setTimeout(resolve, 200));
-  if (shopee) {
-    return sendContentMessage(tab.id, {
-      type: 'GENERATE_SHOPEE_AFFILIATE_LINK',
-      productLink: job.productLink,
-      timeoutMs: settings.actionTimeoutMs
-    }, 'content/shopee.js');
-  }
   const couponResult = await sendContentMessage(tab.id, {
     type: 'DETECT_PRODUCT_COUPON',
     candidates: job.couponCandidates || [],
@@ -464,10 +762,58 @@ async function processJob(job, settings, tab) {
   return affiliateResult;
 }
 
+async function processShopeeJob(job, settings, tab, generation) {
+  const prepared = await ensureShopeeConverter(tab, settings, generation);
+  if (!prepared.success) {
+    await setStage('shopee_blocked', prepared.diagnostic);
+    return prepared;
+  }
+  assertRunning(generation);
+  await setStage('shopee_generating', prepared.state?.diagnostic);
+  let result;
+  try {
+    result = await sendContentMessage(tab.id, {
+      type: 'GENERATE_SHOPEE_AFFILIATE_LINK',
+      productLink: job.productLink,
+      timeoutMs: settings.actionTimeoutMs
+    }, 'content/shopee.js');
+  } catch (error) {
+    if (stopRequested || generation !== runGeneration) throw cancelledError();
+    result = {
+      success: false,
+      code: 'SHOPEE_PORTAL_NOT_READY',
+      message: `A comunicação com a página da Shopee foi interrompida: ${error.message}`,
+      diagnostic: workerState.lastDiagnostic
+    };
+  }
+  if (result?.diagnostic) {
+    await setStage(
+      result.success ? 'shopee_link_generated' : 'shopee_generation_failed',
+      result.diagnostic
+    );
+  }
+  return result;
+}
+
+async function processJob(job, settings, tab, generation) {
+  await persistState({
+    status: 'processing',
+    currentItem: { id: job.id, title: job.title, platform: job.platform },
+    lastError: null
+  });
+  await heartbeat('processing');
+  if (job.platform === 'shopee') {
+    return processShopeeJob(job, settings, tab, generation);
+  }
+  await setStage('mercado_livre_processing');
+  return processMercadoLivreJob(job, settings, tab);
+}
+
 async function processQueue() {
   if (processingPromise) return processingPromise;
   processingPromise = (async () => {
     stopRequested = false;
+    const generation = ++runGeneration;
     const settings = await loadSettings();
     await persistState({
       status: 'processing',
@@ -475,10 +821,14 @@ async function processQueue() {
       failedCount: 0,
       currentItem: null,
       lastError: null,
-      authRequired: false
+      authRequired: false,
+      stage: 'starting',
+      stageStartedAt: new Date().toISOString(),
+      lastDiagnostic: null,
+      diagnosticEvents: []
     });
     await heartbeat('processing');
-    const tabs = {};
+    let workerTab = null;
     const batchSize = Math.min(40, Math.max(
       1,
       Number(settings.batchSize) || 10
@@ -487,6 +837,7 @@ async function processQueue() {
     const attemptedItemIds = [];
     try {
     for (let index = 0; index < batchSize && !stopRequested; index += 1) {
+      assertRunning(generation);
       const claimed = await apiRequest('/api/local-affiliate-worker/claim', {
         method: 'POST',
         body: JSON.stringify({
@@ -512,16 +863,18 @@ async function processQueue() {
         const platform = job.platform === 'shopee'
           ? 'shopee'
           : 'mercado_livre';
-        tabs[platform] ||= platform === 'shopee'
-          ? await getOrCreateWorkerTab('shopee')
-          : await getOrCreateWorkerTab('mercado_livre');
-        const tab = tabs[platform];
-        const result = await processJob(job, settings, tab);
+        workerTab = await getOrCreateWorkerTab(
+          platform,
+          job.productLink
+        );
+        const tab = workerTab;
+        const result = await processJob(job, settings, tab, generation);
+        assertRunning(generation);
         if (!result?.success) {
           const code = result?.code || 'UNKNOWN_ERROR';
           const message = result?.message || 'Falha ao gerar o link.';
           await reportFailure(job, code, message);
-          if (code === 'AUTH_REQUIRED') {
+          if (USER_ACTION_CODES.has(code)) {
             stopRequested = true;
             await chrome.windows.update(tab.windowId, {
               state: 'normal',
@@ -531,16 +884,24 @@ async function processQueue() {
             await persistState({
               status: 'auth_required',
               authRequired: true,
-              currentItem: null,
-              lastError: message
+              lastError: message,
+              lastDiagnostic: result?.diagnostic || workerState.lastDiagnostic
             });
             await heartbeat('auth_required');
             break;
           }
+          if (code === 'CANCELLED') break;
           await persistState({
             failedCount: workerState.failedCount + 1,
-            lastError: message
+            lastError: message,
+            lastDiagnostic: result?.diagnostic || workerState.lastDiagnostic
           });
+          if (SHOPEE_BLOCKING_CODES.has(code)) {
+            stopRequested = true;
+            await persistState({ status: 'error' });
+            await heartbeat('error');
+            break;
+          }
           continue;
         }
         await apiRequest(
@@ -560,34 +921,41 @@ async function processQueue() {
           waitingCount: Math.max(0, batchSize - index - 1)
         });
       } catch (error) {
-        const code = error.code || 'UNKNOWN_ERROR';
-        await reportFailure(job, code, error.message).catch(() => {});
+        const cancelled = stopRequested || generation !== runGeneration;
+        const code = cancelled ? 'CANCELLED' : error.code || 'UNKNOWN_ERROR';
+        const message = cancelled ? 'Processamento cancelado.' : error.message;
+        await reportFailure(job, code, message).catch(() => {});
+        if (code === 'CANCELLED') break;
         await persistState({
           failedCount: workerState.failedCount + 1,
-          lastError: error.message
+          lastError: message
         });
       }
       if (!stopRequested) {
-        await new Promise(resolve =>
-          setTimeout(resolve, Number(settings.intervalMs) || 2500)
+        await cancellableDelay(
+          Number(settings.intervalMs) || 2500,
+          generation
         );
       }
     }
-    if (!workerState.authRequired) {
+    if (!workerState.authRequired && workerState.status !== 'error') {
       await persistState({
         status: 'idle',
         currentItem: null,
-        waitingCount: 0
+        waitingCount: 0,
+        stage: 'idle'
       });
       await heartbeat('idle');
     }
     return workerState;
     } finally {
-      if (!workerState.authRequired) {
-        await closeWorkerWindow();
+      if (!workerState.authRequired && activeWorkerWindowId) {
+        const workerWindowId = workerTab?.windowId;
+        await closeWorkerWindow(workerWindowId);
       }
     }
   })().finally(() => {
+    pendingCancellations.clear();
     processingPromise = null;
   });
   return processingPromise;
@@ -613,7 +981,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.type === 'STOP_PROCESSING') {
       stopRequested = true;
-      await persistState({ status: 'idle', currentItem: null });
+      cancelPendingOperations();
+      const workerWindow = await getWorkerWindow();
+      if (workerWindow?.tabs) {
+        await Promise.all(workerWindow.tabs.map(tab =>
+          chrome.tabs.sendMessage(tab.id, {
+            type: 'CANCEL_SHOPEE_ACTION'
+          }).catch(() => {})
+        ));
+      }
+      if (workerWindow?.id) await closeWorkerWindow(workerWindow.id);
+      await persistState({
+        status: 'idle',
+        currentItem: null,
+        authRequired: false,
+        waitingCount: 0,
+        stage: 'stopped'
+      });
       await heartbeat('idle').catch(() => {});
       return { success: true };
     }
@@ -643,6 +1027,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       await chrome.tabs.update(tab.id, { active: true });
       return { success: true };
     }
+    if (message.type === 'TEST_SHOPEE') {
+      if (processingPromise) {
+        throw new Error('Pare o processamento antes de testar a Shopee.');
+      }
+      stopRequested = false;
+      const generation = ++runGeneration;
+      const settings = await loadSettings();
+      const tab = await getOrCreateWorkerTab('shopee', SHOPEE_CONVERTER_URL);
+      await persistState({
+        status: 'processing',
+        currentItem: { title: 'Teste do gerador Shopee', platform: 'shopee' },
+        lastError: null,
+        authRequired: false
+      });
+      const result = await ensureShopeeConverter(tab, settings, generation);
+      if (result.success) {
+        await persistState({
+          status: 'idle',
+          currentItem: null,
+          stage: 'shopee_ready',
+          lastError: null
+        });
+        await closeWorkerWindow(tab.windowId);
+        return { success: true };
+      }
+      const needsUser = USER_ACTION_CODES.has(result.code);
+      await persistState({
+        status: needsUser ? 'auth_required' : 'error',
+        authRequired: needsUser,
+        lastError: result.message,
+        lastDiagnostic: result.diagnostic || workerState.lastDiagnostic
+      });
+      if (!needsUser) await closeWorkerWindow(tab.windowId);
+      return { success: false, error: result.message };
+    }
     throw new Error('Ação desconhecida.');
   })().then(sendResponse).catch(error =>
     sendResponse({ success: false, error: error.message })
@@ -657,12 +1076,25 @@ chrome.alarms.onAlarm.addListener(alarm => {
   }
 });
 
-chrome.storage.local.get('workerRuntime').then(stored => {
-  if (stored.workerRuntime) workerState = stored.workerRuntime;
-});
+async function restoreWorkerRuntime() {
+  const stored = await chrome.storage.local.get('workerRuntime');
+  if (!stored.workerRuntime) return;
+  workerState = stored.workerRuntime;
+  if (workerState.status === 'processing') {
+    workerState = {
+      ...workerState,
+      status: 'error',
+      authRequired: false,
+      stage: 'interrupted',
+      lastError: 'A execução anterior foi interrompida pelo navegador. Inicie novamente.'
+    };
+    await chrome.storage.local.set({ workerRuntime: workerState });
+  }
+}
+
+restoreWorkerRuntime();
 
 chrome.runtime.onStartup.addListener(async () => {
-  const stored = await chrome.storage.local.get('workerRuntime');
-  if (stored.workerRuntime) workerState = stored.workerRuntime;
+  await restoreWorkerRuntime();
   heartbeat().catch(() => {});
 });

@@ -10,13 +10,13 @@
   <header>
     <span class="eyebrow">PROMO AUTOMATOR</span>
     <h1>Gerador local de links</h1>
-    <p id="device-name">Dispositivo local</p>
+    <p><span id="device-name">Dispositivo local</span> · <span id="version"></span></p>
   </header>
 
   <main>
     <section class="status-card">
       <div><span>Servidor</span><strong id="server-status">Verificando...</strong></div>
-      <div><span>Mercado Livre</span><strong id="auth-status">Sessão local</strong></div>
+      <div><span id="marketplace-label">Marketplace</span><strong id="auth-status">Sessão local</strong></div>
       <div><span>Aguardando</span><strong id="waiting-count">0</strong></div>
       <div><span>Processadas</span><strong id="processed-count">0</strong></div>
       <div><span>Falhas</span><strong id="failed-count">0</strong></div>
@@ -25,8 +25,16 @@
     <section class="current-card">
       <span>Item atual</span>
       <strong id="current-item">Nenhum</strong>
+      <span>Etapa</span>
+      <strong id="current-stage">Aguardando</strong>
       <p id="last-error" role="status"></p>
     </section>
+
+    <details id="diagnostic-card" hidden>
+      <summary>Diagnóstico da última execução</summary>
+      <pre id="diagnostic"></pre>
+      <button id="copy-diagnostic">Copiar diagnóstico</button>
+    </details>
 
     <label for="batch-size">Tamanho do lote</label>
     <select id="batch-size">
@@ -42,6 +50,7 @@
     <button id="stop">Parar</button>
     <div class="button-row">
       <button id="test">Testar conexão</button>
+      <button id="test-shopee">Testar Shopee</button>
       <button id="open-ml">Abrir Mercado Livre</button>
       <button id="open-shopee">Abrir Shopee</button>
     </div>

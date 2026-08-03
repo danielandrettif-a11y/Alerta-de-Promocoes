@@ -18,10 +18,11 @@ servidor.
 
 1. O painel adiciona ofertas à fila e gera os Stories existentes.
 2. A extensão envia heartbeat e reserva até o tamanho de lote escolhido.
-3. A extensão abre uma janela de trabalho separada, sem foco e atrás da janela
-   principal. Ela permanece renderizada para os marketplaces não reduzirem a
-   velocidade nem ignorarem cliques, e é reutilizada durante todo o lote.
-4. Para Mercado Livre, uma aba nessa janela abre o produto, usa o controle
+3. A extensão mantém a janela que o usuário já estava usando na metade esquerda
+   e abre a janela de trabalho diretamente no primeiro produto, na metade
+   direita. No Mercado Livre, abre a aba seguinte antes de fechar a anterior.
+   Na Shopee, reutiliza a mesma aba do gerador durante o lote.
+4. Para Mercado Livre, a aba do produto usa o controle
    `Compartilhar`, extrai o link `meli.la`, lê o preço exibido e procura um
    cupom candidato confirmado na própria página.
 5. Para Shopee, outra aba abre `Oferta > Link personalizado`, preenche o produto
@@ -31,6 +32,8 @@ servidor.
 8. Quando houver cupom comprovado para o produto, o servidor recria o Story
    com o preço normal, o preço com cupom e o código.
 9. Itens prontos podem formar um lote e um ZIP persistente.
+10. Ao terminar, a extensão fecha diretamente a janela auxiliar para o navegador
+    não criar uma aba substituta e restaura a janela original.
 
 ## Segurança e falhas
 
@@ -40,6 +43,10 @@ servidor.
 - `AUTH_REQUIRED` não consome tentativa: o lote pausa e o usuário conclui
   login, CAPTCHA ou segundo fator manualmente. Nesse caso, a janela de trabalho
   é restaurada e trazida para frente.
+- Falhas estruturais do portal Shopee também não consomem tentativa, mas são
+  registradas como erro técnico e não como autenticação. O popup preserva um
+  diagnóstico sanitizado da rota, viewport e controles encontrados.
+- **Parar** cancela a ação ativa, libera a reserva e fecha a janela auxiliar.
 - Outros erros respeitam `LOCAL_AFFILIATE_MAX_ATTEMPTS`.
 - O worker não contorna bloqueios nem usa endpoints internos dos marketplaces.
 - Se a página não expuser um preço confiável, o link continua válido sem gerar

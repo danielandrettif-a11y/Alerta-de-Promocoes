@@ -25,6 +25,17 @@ const AFFILIATE_PROCESSING_STATES = Object.freeze({
   COMPLETED: 'completed'
 });
 
+const NON_ATTEMPT_FAILURE_CODES = new Set([
+  'AUTH_REQUIRED',
+  'SHOPEE_ACCOUNT_ACTION_REQUIRED',
+  'SHOPEE_PORTAL_NOT_READY',
+  'SHOPEE_CONVERTER_NOT_REACHED',
+  'SHOPEE_MENU_NOT_FOUND',
+  'SHOPEE_INPUT_NOT_FOUND',
+  'SHOPEE_GENERATE_BUTTON_NOT_FOUND',
+  'CANCELLED'
+]);
+
 function emptyAffiliateProcessing() {
   return {
     state: AFFILIATE_PROCESSING_STATES.PENDING,
@@ -352,8 +363,8 @@ function recordAffiliateFailure(
   const item = findItem(normalized, itemId);
   if (!item) throw new Error('Item da fila nao encontrado.');
   const processing = assertClaimOwner(item, deviceId, now);
-  const authRequired = code === 'AUTH_REQUIRED';
-  const attempts = processing.attempts + (authRequired ? 0 : 1);
+  const doesNotConsumeAttempt = NON_ATTEMPT_FAILURE_CODES.has(code);
+  const attempts = processing.attempts + (doesNotConsumeAttempt ? 0 : 1);
   item.affiliateProcessing = {
     ...processing,
     state: attempts >= maxAttempts
@@ -465,7 +476,7 @@ function removeItems(queue, itemIds) {
   return { queue: normalized, removed };
 }
 
-function validateQueueItems(queue, catalog) {
+function validateQueueItems(queue, catalog, { platforms = null } = {}) {
   const normalized = normalizeQueue(queue);
   const activeStatuses = new Set([
     STATUSES.AWAITING_AFFILIATE,
@@ -477,6 +488,10 @@ function validateQueueItems(queue, catalog) {
   let unchanged = 0;
   normalized.items = normalized.items.filter(item => {
     if (!activeStatuses.has(item.status)) return true;
+    if (platforms && !platforms.has(item.platform)) {
+      unchanged += 1;
+      return true;
+    }
     const current = catalog.get(item.dealId);
     if (!current) {
       removed.push(item);

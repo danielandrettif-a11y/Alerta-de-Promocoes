@@ -1796,12 +1796,18 @@ async function validateEntireQueue() {
       throw new Error(job.error || 'A validação da fila falhou.');
     }
     const result = job.result || {};
+    const skippedStores = (result.skippedPlatforms || [])
+      .map(platform => getQueueMarketplaceBrand(platform).name)
+      .join(' e ');
+    const skippedMessage = skippedStores
+      ? ` ${skippedStores} não foi alterada porque ainda não possui validação de catálogo.`
+      : '';
     await fetchPublicationQueue({
       render: true,
       feedback:
         `${result.removed || 0} removida(s), ` +
         `${result.updated || 0} atualizada(s) e ` +
-        `${result.unchanged || 0} sem alterações.`,
+        `${result.unchanged || 0} sem alterações.${skippedMessage}`,
       type: 'success'
     });
   } catch (error) {

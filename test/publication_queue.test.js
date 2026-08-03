@@ -255,6 +255,27 @@ test('valida a fila removendo oferta encerrada e separando Story alterado', () =
   assert.equal(result.updated[0].item.currentPrice, 'R$ 179,90');
 });
 
+test('validação parcial preserva plataforma sem catálogo', () => {
+  const mercadoLivre = enqueueOffer(emptyQueue(), sampleOffer());
+  const withAmazon = enqueueOffer(
+    mercadoLivre.queue,
+    sampleOffer({
+      id: 'queue-amazon',
+      dealId: 'deal_amazon',
+      platform: 'amazon',
+      productLink: 'https://www.amazon.com.br/dp/B000000001'
+    })
+  );
+  const catalog = new Map([['deal_123', sampleOffer()]]);
+  const result = validateQueueItems(withAmazon.queue, catalog, {
+    platforms: new Set(['mercado_livre'])
+  });
+
+  assert.equal(result.removed.length, 0);
+  assert.equal(result.queue.items.some(item => item.id === 'queue-amazon'), true);
+  assert.equal(result.unchanged, 2);
+});
+
 test('reserva exclusiva expira e volta para outro dispositivo', () => {
   const created = enqueueOffer(
     emptyQueue(),
@@ -309,6 +330,21 @@ test('falhas respeitam autenticacao e limite de tentativas', () => {
   assert.equal(authFailure.item.affiliateProcessing.attempts, 0);
 
   claimed = claimAffiliateJobs(authFailure.queue, {
+    deviceId: 'device_home_01'
+  });
+  const portalFailure = recordAffiliateFailure(
+    claimed.queue,
+    claimed.jobs[0].id,
+    {
+      deviceId: 'device_home_01',
+      code: 'SHOPEE_MENU_NOT_FOUND',
+      message: 'Menu da Shopee indisponível.',
+      maxAttempts: 2
+    }
+  );
+  assert.equal(portalFailure.item.affiliateProcessing.attempts, 0);
+
+  claimed = claimAffiliateJobs(portalFailure.queue, {
     deviceId: 'device_home_01'
   });
   const firstFailure = recordAffiliateFailure(
