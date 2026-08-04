@@ -4,13 +4,10 @@ const { parsePrice } = require('./price_comparison.js');
 const { loadJson, saveJsonAtomic } = require('./json_store.js');
 
 const SCORE_WEIGHTS = Object.freeze({
-  demand: 25,
-  offer: 25,
+  demand: 35,
+  offer: 30,
   commission: 20,
-  trust: 10,
-  instagramFit: 10,
-  freshness: 5,
-  strategy: 5
+  trust: 15
 });
 
 function clamp(value, minimum = 0, maximum = 100) {
@@ -76,6 +73,15 @@ function weightedAvailable(parts) {
   };
 }
 
+function scoreDiscount(value) {
+  const discount = clamp(value, 0, 70);
+  return discount <= 30 ? discount * 2 : 60 + (discount - 30);
+}
+
+function scoreToStars(value) {
+  return Number((Math.round(clamp(value) / 10) / 2).toFixed(1));
+}
+
 function categoryRule(rules, platform, deal) {
   const marketplace = rules?.marketplaces?.[platform] || {};
   const categories = marketplace.categories || {};
@@ -126,10 +132,11 @@ function velocityForDeal(historyEntries, key, currentSales, now) {
   return Number(((currentSales - previous.salesCount) / days).toFixed(2));
 }
 
-function component(score, available, reasons = []) {
+function component(score, coverage, reasons = []) {
   return {
     score: Number.isFinite(score) ? Math.round(clamp(score)) : null,
-    available: Boolean(available),
+    available: coverage > 0,
+    coverage: Math.round(clamp(coverage)),
     reasons
   };
 }
@@ -137,7 +144,6 @@ function component(score, available, reasons = []) {
 function scoreDeals(deals, options = {}) {
   const platform = normalizePlatform(options.platform);
   const now = options.now || new Date();
-  const generatedAt = options.generatedAt ? new Date(options.generatedAt) : now;
   const historyEntries = Array.isArray(options.history?.entries)
     ? options.history.entries
     : [];
@@ -178,8 +184,6 @@ function scoreDeals(deals, options = {}) {
     .map(item => item.commission?.estimatedAmount)
     .filter(Number.isFinite)
     .sort((left, right) => left - right);
-  const priceValues = sorted('currentPrice');
-
   return prepared.map(item => {
     const { deal, currentPrice, salesCount, salesVelocity, commission } = item;
     const rating = Number(deal.rating) || null;
@@ -192,65 +196,51 @@ function scoreDeals(deals, options = {}) {
       ? Number(deal.comparison.score) * 10
       : null;
     const demand = weightedAvailable([
-      { score: percentile(salesCount, salesValues), weight: 0.5 },
-      { score: percentile(salesVelocity, velocityValues), weight: 0.2 },
-      { score: rating ? clamp((rating - 3.5) / 1.5 * 100) : null, weight: 0.2 },
+      { score: percentile(salesCount, salesValues), weight: 0.65 },
+      { score: percentile(salesVelocity, velocityValues), weight: 0.25 },
       { score: Number.isFinite(likes) && likes > 0 ? clamp(Math.log10(likes + 1) * 30) : null, weight: 0.1 }
     ]);
     const offer = weightedAvailable([
-      { score: comparisonScore, weight: 0.6 },
-      { score: Number.isFinite(discount) && discount >= 0 ? clamp(discount * 2) : null, weight: 0.4 }
+      { score: comparisonScore, weight: 0.7 },
+      { score: Number.isFinite(discount) && discount >= 0 ? scoreDiscount(discount) : null, weight: 0.3 }
     ]);
     const commissionScore = weightedAvailable([
-      { score: percentile(commission?.rate, commissionRates), weight: 0.6 },
-      { score: percentile(commission?.estimatedAmount, commissionAmounts), weight: 0.4 }
+      { score: percentile(commission?.rate, commissionRates), weight: 0.5 },
+      { score: percentile(commission?.estimatedAmount, commissionAmounts), weight: 0.5 }
     ]);
     const trust = weightedAvailable([
-      { score: rating ? clamp((rating - 3.5) / 1.5 * 100) : null, weight: 0.4 },
-      { score: shopRating ? clamp((shopRating - 3.5) / 1.5 * 100) : null, weight: 0.3 },
-      { score: deal.isFull || deal.isFreeShipping ? 90 : null, weight: 0.2 },
+      { score: rating ? clamp((rating - 3) / 2 * 100) : null, weight: 0.55 },
+      { score: shopRating ? clamp((shopRating - 3) / 2 * 100) : null, weight: 0.25 },
+      { score: deal.isFull || deal.isFreeShipping ? 90 : null, weight: 0.1 },
       { score: deal.officialFeed ? 90 : null, weight: 0.1 }
     ]);
-    const accessiblePrice = percentile(currentPrice, priceValues);
-    const instagramFit = weightedAvailable([
-      { score: deal.image ? 85 : null, weight: 0.25 },
-      { score: deal.title && deal.title.length <= 110 ? 85 : 55, weight: 0.2 },
-      { score: accessiblePrice === null ? null : 100 - accessiblePrice, weight: 0.25 },
-      { score: deal.recurringPurchase ? 85 : 65, weight: 0.15 },
-      { score: Number.isFinite(discount) ? clamp(discount * 2) : null, weight: 0.15 }
-    ]);
-    const ageHours = Math.max(0, (now - generatedAt) / 3_600_000);
-    const freshnessScore = clamp(100 - ageHours / 48 * 100);
-    const strategyScore = deal.recurringPurchase ? 80 : 60;
     const components = {
-      demand: component(demand.score, demand.coverage > 0, [
+      demand: component(demand.score, demand.coverage, [
         salesVelocity !== null
           ? `${salesVelocity} vendas/dia estimadas`
           : salesCount !== null
             ? `${salesCount} vendas acumuladas`
             : 'Sem dados de vendas recentes'
       ]),
-      offer: component(offer.score, offer.coverage > 0, [
+      offer: component(offer.score, offer.coverage, [
         comparisonScore !== null
           ? 'Comparado com outros marketplaces'
           : 'Sem comparacao externa confirmada'
       ]),
-      commission: component(commissionScore.score, commissionScore.coverage > 0, [
+      commission: component(commissionScore.score, commissionScore.coverage, [
         commission
           ? `${commission.rate}% (${commission.estimatedAmount?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'valor indisponivel'})`
           : 'Comissao nao informada'
       ]),
-      trust: component(trust.score, trust.coverage > 0),
-      instagramFit: component(instagramFit.score, instagramFit.coverage > 0),
-      freshness: component(freshnessScore, true),
-      strategy: component(strategyScore, true)
+      trust: component(trust.score, trust.coverage)
     };
     let availableWeight = 0;
     let weightedScore = 0;
     for (const [name, weight] of Object.entries(SCORE_WEIGHTS)) {
       if (!components[name].available) continue;
-      availableWeight += weight;
-      weightedScore += components[name].score * weight;
+      const evidenceWeight = weight * components[name].coverage / 100;
+      availableWeight += evidenceWeight;
+      weightedScore += components[name].score * evidenceWeight;
     }
     const rawScore = availableWeight ? weightedScore / availableWeight : 0;
     const confidence = clamp(availableWeight);
@@ -269,17 +259,17 @@ function scoreDeals(deals, options = {}) {
       commission,
       promotionScore: {
         value,
-        stars: Number((Math.round(value / 10) / 2).toFixed(1)),
+        stars: scoreToStars(value),
         confidence: Math.round(confidence),
         label: value >= 90
-          ? 'Prioridade maxima'
+          ? 'Potencial excepcional'
           : value >= 80
-            ? 'Excelente para o Instagram'
+            ? 'Potencial muito alto'
             : value >= 70
-              ? 'Boa promocao'
+              ? 'Potencial alto'
               : value >= 60
-                ? 'Melhor para nicho'
-                : 'Oferta comum',
+                ? 'Potencial moderado'
+                : 'Potencial baixo',
         eligible: blockers.length === 0,
         blockers,
         components,
@@ -331,5 +321,7 @@ module.exports = {
   parseSalesCount,
   recordDealSnapshots,
   resolveCommission,
-  scoreDeals
+  scoreDiscount,
+  scoreDeals,
+  scoreToStars
 };

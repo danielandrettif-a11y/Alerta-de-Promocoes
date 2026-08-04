@@ -16,6 +16,11 @@ test('painel mostra nota explicavel e ordena pelos sinais comerciais', () => {
   assert.match(app, /commission_amount/);
   assert.match(app, /promotionScore\?\.components\?\.demand/);
   assert.match(css, /\.promotion-score\s*\{/);
+  assert.match(app, /Potencial da oferta/);
+  assert.match(app, /Avaliação Shopee/);
+  assert.match(app, /Array\.from\(\{ length: 5 \}/);
+  assert.match(app, /escapeQueueHtml\(scoreExplanation\)/);
+  assert.match(css, /\.promotion-star\.is-half/);
   assert.match(html, /id="btn-coupon-tab-shopee"/);
 });
 

@@ -450,6 +450,20 @@ async function run() {
       { timeout: 5000 }
     );
     if (shopee.deals.length) {
+      const scoreLabels = await page.$eval('#grid-shopee .deal-card', card => ({
+        marketplace: card.querySelector('.card-rating small')?.textContent,
+        opportunity: card.querySelector('.promotion-score-main small')?.textContent,
+        starCount: card.querySelectorAll('.promotion-star').length,
+        tooltip: card.querySelector('.promotion-score-rating')?.title
+      }));
+      if (
+        scoreLabels.marketplace !== 'Avaliação Shopee' ||
+        scoreLabels.opportunity !== 'Potencial da oferta' ||
+        scoreLabels.starCount !== 5 ||
+        !scoreLabels.tooltip.includes('Força da oferta:')
+      ) {
+        throw new Error(`Notas indistintas: ${JSON.stringify(scoreLabels)}`);
+      }
       await page.$eval('#grid-shopee .deal-chk', checkbox =>
         checkbox.click()
       );

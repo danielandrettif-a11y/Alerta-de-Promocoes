@@ -55,4 +55,5 @@ test('servidor mantem o worker atras da feature flag', () => {
   );
   assert.match(server, /requireLocalAffiliateWorker/);
   assert.match(server, /res\.status\(401\)/);
+  assert.match(server, /!verifiedPrice && item\.platform !== 'amazon'/);
 });

@@ -2520,28 +2520,54 @@ function getFilteredDealEntries(deals, platform) {
 function renderPromotionScore(deal) {
   const score = deal.promotionScore;
   if (!score) return '';
+  const starValue = Math.min(5, Math.max(0, Number(score.stars) || 0));
+  const stars = Array.from({ length: 5 }, (_, index) => {
+    const remaining = starValue - index;
+    const state = remaining >= 1
+      ? 'is-full'
+      : remaining >= 0.5
+        ? 'is-half'
+        : '';
+    return `<span class="promotion-star ${state}" aria-hidden="true">★</span>`;
+  }).join('');
   const components = score.components || {};
-  const rows = [
+  const categories = [
     ['Chance de venda', components.demand],
-    ['Qualidade da oferta', components.offer],
+    ['Força da oferta', components.offer],
     ['Retorno de afiliado', components.commission],
-    ['Confianca do produto', components.trust]
-  ].map(([label, item]) => `
+    ['Confiança do produto', components.trust]
+  ];
+  const rows = categories.map(([label, item]) => `
     <span>${label}</span>
-    <strong>${item?.available ? `${item.score}/100` : 'Sem dados'}</strong>
+    <strong>${item?.available
+      ? `${item.score}/100 · ${item.coverage}% dos dados`
+      : 'Sem dados'}</strong>
   `).join('');
+  const scoreExplanation = [
+    ...categories.map(([label, item]) => item?.available
+      ? `${label}: ${item.score}/100 (${item.coverage}% dos dados)`
+      : `${label}: sem dados`),
+    `Nota final: ${starValue.toFixed(1)}/5`,
+    `Cobertura total: ${score.confidence}%`
+  ].join(' · ');
   const commission = deal.commission
     ? `${deal.commission.rate}% · ${Number(deal.commission.estimatedAmount || 0)
       .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} por venda`
-    : 'Comissao ainda nao informada';
+    : 'Comissão ainda não informada';
   return `
     <details class="promotion-score ${score.eligible ? '' : 'is-ineligible'}">
       <summary>
-        <span class="promotion-score-stars" aria-label="Nota ${score.stars} de 5 estrelas">
-          ★ ${score.stars.toFixed(1)}
+        <span class="promotion-score-main">
+          <small>Potencial da oferta</small>
+          <span class="promotion-score-rating"
+            title="${escapeQueueHtml(scoreExplanation)}"
+            aria-label="Potencial ${starValue.toFixed(1)} de 5 estrelas">
+            <span class="promotion-score-stars">${stars}</span>
+            <strong>${starValue.toFixed(1)}</strong>
+          </span>
         </span>
-        <span>${escapeQueueHtml(score.label)}</span>
-        <small>${score.confidence}% de confianca</small>
+        <span class="promotion-score-label">${escapeQueueHtml(score.label)}</span>
+        <small class="promotion-score-confidence">Dados: ${score.confidence}%</small>
       </summary>
       <div class="promotion-score-breakdown">
         ${rows}
@@ -2577,6 +2603,7 @@ function getDealRenderConfig(platform) {
       visibleLimit: visibleAmazonLimit,
       theme: 'amazon-theme',
       sourceCta: 'Ver Produto na Amazon 🔗',
+      ratingLabel: 'Avaliação Amazon',
       emptyMessage: 'Nenhuma oferta da Amazon carregada. Clique em "Atualizar Amazon".',
       supportsPublished: true,
       showCoupon: false,
@@ -2592,6 +2619,7 @@ function getDealRenderConfig(platform) {
       visibleLimit: visibleShopeeLimit,
       theme: 'shopee-theme',
       sourceCta: 'Ver produto na Shopee 🔗',
+      ratingLabel: 'Avaliação Shopee',
       emptyMessage: 'Nenhuma oferta da Shopee carregada.',
       supportsPublished: false,
       showCoupon: false,
@@ -2606,6 +2634,7 @@ function getDealRenderConfig(platform) {
     visibleLimit: visibleMLLimit,
     theme: '',
     sourceCta: 'Ver Produto no ML 🔗',
+    ratingLabel: 'Avaliação Mercado Livre',
     emptyMessage: 'Nenhuma oferta do Mercado Livre carregada. Clique em "Atualizar Mercado Livre".',
     supportsPublished: true,
     showCoupon: true,
@@ -2623,6 +2652,7 @@ function renderDeals(deals, platform) {
     visibleLimit,
     theme,
     sourceCta,
+    ratingLabel,
     emptyMessage,
     supportsPublished,
     showCoupon,
@@ -2736,8 +2766,9 @@ function renderDeals(deals, platform) {
         <a href="${link}" target="_blank" rel="noopener noreferrer"
           class="card-link-product">${sourceCta}</a>
         <div class="card-meta">
-          <span class="card-rating">
-            ${rating ? `⭐ ${rating.toFixed(1)}` : 'Sem avaliação'}
+          <span class="card-rating" title="Nota informada pelo marketplace">
+            <small>${ratingLabel}</small>
+            <strong>${rating ? `⭐ ${rating.toFixed(1)}` : 'Sem avaliação'}</strong>
           </span>
           <span class="card-sales">${escapeQueueHtml(deal.salesInfo || '')}</span>
         </div>

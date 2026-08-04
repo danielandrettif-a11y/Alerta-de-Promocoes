@@ -53,6 +53,24 @@ function parseNumericPrice(priceStr) {
   return isNaN(num) ? 0 : num;
 }
 
+function parsePromotionText(text) {
+  const value = String(text || '');
+  return {
+    discount: Number(value.match(/(\d+)%\s*off/i)?.[1]) || 0,
+    originalPrice: value.match(
+      /De:\s*(?:De:\s*)?(R\$\s*[\d.,]+)/i
+    )?.[1] || ''
+  };
+}
+
+function selectVerifiedDeals(deals, limit = 50) {
+  return deals
+    .filter(deal => Number(deal.discount) > 0 &&
+      parseNumericPrice(deal.originalPrice) > parseNumericPrice(deal.currentPrice))
+    .sort((a, b) => b.discount - a.discount)
+    .slice(0, limit);
+}
+
 async function scrapeDealsFromPage(page, url) {
   console.log(`Navegando para: ${url}`);
   try {
@@ -176,6 +194,7 @@ async function scrapeDealsFromPage(page, url) {
         title,
         link,
         image,
+        cardText: container.textContent,
         discount,
         originalPrice,
         currentPrice,
@@ -267,13 +286,17 @@ async function main() {
       if (seenTitles.has(d.title.toLowerCase())) continue;
       seenTitles.add(d.title.toLowerCase());
 
+      const promotion = parsePromotionText(d.cardText);
       let curStr = cleanPriceString(d.currentPrice);
       let origStr = cleanPriceString(d.originalPrice);
+      if (!parseNumericPrice(origStr)) {
+        origStr = cleanPriceString(promotion.originalPrice);
+      }
 
       const curVal = parseNumericPrice(curStr);
       let origVal = parseNumericPrice(origStr);
 
-      let discount = d.discount;
+      let discount = d.discount || promotion.discount;
 
       if (curVal > 0 && origVal > curVal && discount === 0) {
         discount = Math.round(((origVal - curVal) / origVal) * 100);
@@ -325,24 +348,14 @@ async function main() {
       });
     }
 
-    // Ordena por maior desconto
-    formattedDeals.sort((a, b) => b.discount - a.discount);
-    const finalDeals = formattedDeals.slice(0, 50);
-
-    if (finalDeals.length > 0) {
-      const reportData = {
-        generatedAt: new Date().toISOString(),
-        deals: finalDeals
-      };
-      fs.writeFileSync(amazonDealsPath, JSON.stringify(reportData, null, 2), 'utf-8');
-      console.log(`\n✅ Sucesso! Scraping da Amazon concluído.`);
-      console.log(`📊 Total de ${finalDeals.length} ofertas ricas salvas em amazon_deals_report.json.`);
-    } else {
-      console.log("⚠️ Nenhuma oferta válida foi extraída. Mantendo relatório anterior se válido.");
-      if (!fs.existsSync(amazonDealsPath)) {
-        writeEmptyReport();
-      }
-    }
+    const finalDeals = selectVerifiedDeals(formattedDeals);
+    const reportData = {
+      generatedAt: new Date().toISOString(),
+      deals: finalDeals
+    };
+    fs.writeFileSync(amazonDealsPath, JSON.stringify(reportData, null, 2), 'utf-8');
+    console.log(`\n✅ Sucesso! Scraping da Amazon concluído.`);
+    console.log(`📊 Total de ${finalDeals.length} ofertas com desconto comprovado salvas em amazon_deals_report.json.`);
 
   } catch (err) {
     console.warn("⚠️ Falha durante execução do Puppeteer na Amazon:", err.message);
@@ -366,3 +379,5 @@ function writeEmptyReport() {
 if (require.main === module) {
   main();
 }
+
+module.exports = { parsePromotionText, selectVerifiedDeals };

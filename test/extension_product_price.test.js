@@ -41,7 +41,7 @@ test('le preco Amazon e Shopee e identifica o produto', () => {
   );
 });
 
-test('manifest autoriza a verificacao local nas tres lojas', () => {
+test('Amazon usa a tag afiliada sem abrir a pagina do produto', () => {
   const root = path.join(__dirname, '..');
   const manifest = JSON.parse(fs.readFileSync(
     path.join(root, 'extension', 'manifest.json'),
@@ -56,6 +56,10 @@ test('manifest autoriza a verificacao local nas tres lojas', () => {
     path.join(root, 'extension', 'background.js'),
     'utf8'
   );
-  assert.match(background, /processAmazonJob/);
-  assert.match(background, /READ_PRODUCT_PRICE/);
+  const amazonProcess = background.slice(
+    background.indexOf('async function processAmazonJob'),
+    background.indexOf('async function processJob')
+  );
+  assert.doesNotMatch(amazonProcess, /navigateTab|READ_PRODUCT_PRICE/);
+  assert.match(background, /platform === 'amazon' \? null/);
 });

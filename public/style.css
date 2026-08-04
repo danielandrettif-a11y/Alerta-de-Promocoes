@@ -1109,11 +1109,23 @@ select:focus-visible {
 }
 
 .card-rating {
-  color: #ffb300;
-  font-weight: 600;
   display: flex;
-  align-items: center;
-  gap: 5px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.card-rating small {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.card-rating strong {
+  color: #ffb300;
+  font-weight: 700;
 }
 
 .card-title {
@@ -4294,17 +4306,62 @@ select:focus-visible {
   font-size: 0.75rem;
 }
 
+.promotion-score-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.promotion-score-main > small {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.promotion-score-rating,
 .promotion-score-stars {
-  color: #ffd24a;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+}
+
+.promotion-score-rating {
+  gap: 7px;
+}
+
+.promotion-score-stars {
+  gap: 2px;
   white-space: nowrap;
 }
 
-.promotion-score summary > span:nth-child(2) {
+.promotion-star {
+  color: rgba(255, 255, 255, 0.18);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.promotion-star.is-full {
+  color: #ffd24a;
+}
+
+.promotion-star.is-half {
+  color: transparent;
+  background: linear-gradient(90deg, #ffd24a 50%, rgba(255, 255, 255, 0.18) 50%);
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.promotion-score-rating strong {
+  color: #ffd24a;
+  font-size: 0.82rem;
+}
+
+.promotion-score-label {
   font-weight: 700;
 }
 
-.promotion-score summary small {
+.promotion-score-confidence {
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -4328,8 +4385,13 @@ select:focus-visible {
 }
 
 .promotion-score-warning,
-.promotion-score.is-ineligible .promotion-score-stars {
+.promotion-score.is-ineligible .promotion-score-rating strong,
+.promotion-score.is-ineligible .promotion-star.is-full {
   color: #ff7a7a;
+}
+
+.promotion-score.is-ineligible .promotion-star.is-half {
+  background-image: linear-gradient(90deg, #ff7a7a 50%, rgba(255, 255, 255, 0.18) 50%);
 }
 
 .queue-price-source {

@@ -4,10 +4,13 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const {
+  SCORE_WEIGHTS,
   loadDealHistory,
   normalizeCommissionRate,
   parseSalesCount,
   recordDealSnapshots,
+  scoreDiscount,
+  scoreToStars,
   scoreDeals
 } = require('../execution/deal_intelligence.js');
 
@@ -40,6 +43,52 @@ test('gera nota explicavel e reduz a confianca sem comissao', () => {
   assert.ok(deal.promotionScore.stars >= 0 && deal.promotionScore.stars <= 5);
   assert.ok(deal.promotionScore.confidence < 100);
   assert.equal(deal.promotionScore.components.commission.available, false);
+});
+
+test('calibra estrelas e nao conta avaliacao duas vezes', () => {
+  assert.deepEqual(SCORE_WEIGHTS, {
+    demand: 35,
+    offer: 30,
+    commission: 20,
+    trust: 15
+  });
+  assert.equal(scoreDiscount(30), 60);
+  assert.equal(scoreDiscount(50), 80);
+  assert.equal(scoreDiscount(70), 100);
+  assert.equal(scoreToStars(84), 4);
+  assert.equal(scoreToStars(85), 4.5);
+
+  const scored = scoreDeals([
+    {
+      title: 'Produto nota quatro',
+      link: 'https://shopee.com.br/produto-1',
+      image: 'https://cf.shopee.com.br/produto-1.jpg',
+      currentPrice: 'R$ 100,00',
+      discount: 30,
+      rating: 4,
+      salesCount: 100,
+      officialFeed: true
+    },
+    {
+      title: 'Produto nota cinco',
+      link: 'https://shopee.com.br/produto-2',
+      image: 'https://cf.shopee.com.br/produto-2.jpg',
+      currentPrice: 'R$ 100,00',
+      discount: 30,
+      rating: 5,
+      salesCount: 100,
+      officialFeed: true
+    }
+  ], { platform: 'shopee' });
+
+  assert.equal(
+    scored[0].promotionScore.components.demand.score,
+    scored[1].promotionScore.components.demand.score
+  );
+  assert.ok(
+    scored[0].promotionScore.components.trust.score <
+      scored[1].promotionScore.components.trust.score
+  );
 });
 
 test('calcula retorno e persiste apenas um retrato por atualizacao', () => {

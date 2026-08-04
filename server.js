@@ -337,6 +337,11 @@ function inferCategory(title) {
   return `${info.icon} ${info.category} > ${info.subcategory}`;
 }
 
+function isVerifiedAmazonDeal(deal) {
+  return Number(deal.discount) > 0 &&
+    parsePrice(deal.originalPrice) > parsePrice(deal.currentPrice);
+}
+
 function enrichDeals(deals, platform, generatedAt) {
   const normalizedDeals = deals.map(deal => {
     const legacySyntheticAmazonDiscount = platform === 'amazon' &&
@@ -345,7 +350,7 @@ function enrichDeals(deals, platform, generatedAt) {
     return legacySyntheticAmazonDiscount
       ? { ...deal, discount: 0, discountSource: 'synthetic' }
       : deal;
-  });
+  }).filter(deal => platform !== 'amazon' || isVerifiedAmazonDeal(deal));
   const enriched = scoreDeals(normalizedDeals, {
     platform,
     generatedAt,
@@ -670,7 +675,7 @@ function applyAffiliateLinkToQueue(
   let latestPrice = null;
   const verifiedPrice = parsePrice(observedPrice);
   const storyPrice = parsePrice(item.currentPrice);
-  if (!verifiedPrice) {
+  if (!verifiedPrice && item.platform !== 'amazon') {
     reviewReason =
       'O link foi gerado, mas a extensao nao confirmou o preco do produto.';
   } else if (
@@ -2823,7 +2828,7 @@ function loadAvailableDeals() {
   if (fs.existsSync(amazonDealsReportPath)) {
     try {
       const data = JSON.parse(fs.readFileSync(amazonDealsReportPath, 'utf-8'));
-      deals.push(...(data.deals || []).map(deal => ({
+      deals.push(...(data.deals || []).filter(isVerifiedAmazonDeal).map(deal => ({
         ...deal,
         platform: 'amazon'
       })));

@@ -34,6 +34,9 @@ Automate the extraction of Amazon Brasil daily deals (`https://www.amazon.com.br
 - Runs in headless mode (true on Linux, false on Windows local).
 - In case of network failure or bot blocking, writes a clean empty report (`deals: []`) to prevent panel crashes.
 - Never invent a default discount when the crossed-out reference price is
-  absent. Keep `discount=0` and `discountSource=unknown`.
+  absent. Discard products without a positive discount backed by a higher
+  reference price.
+- A successful collection with no verified deals writes an empty report so
+  stale offers cannot return to the panel.
 - A product-page coupon badge is discovery metadata, not proof of the final
   price after coupon.

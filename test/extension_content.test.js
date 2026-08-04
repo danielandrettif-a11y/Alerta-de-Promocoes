@@ -167,6 +167,19 @@ test('content script aceita somente link curto oficial da Shopee', async () => {
   assert.match(background, /GET_SHOPEE_PAGE_STATE/);
   assert.match(background, /SHOPEE_BLOCKING_CODES/);
   assert.match(background, /async function ensureShopeeConverter/);
+  const processShopee = background.slice(
+    background.indexOf('async function processShopeeJob'),
+    background.indexOf('async function processAmazonJob')
+  );
+  assert.doesNotMatch(processShopee, /navigateTab|READ_PRODUCT_PRICE/);
+  assert.match(background, /function tabIsShopeeConverter/);
+  assert.match(background, /if \(!tabIsShopeeConverter\(current\)\)/);
+  const converterGuard = background.slice(
+    background.indexOf('function tabIsShopeeConverter'),
+    background.indexOf('function samePageUrl')
+  );
+  assert.match(converterGuard, /url\.pathname\.replace/);
+  assert.match(converterGuard, /'\/offer\/custom_link'/);
   assert.match(background, /CANCEL_SHOPEE_ACTION/);
   const activateShopee = background.slice(
     background.indexOf('async function activateShopeeControl'),
