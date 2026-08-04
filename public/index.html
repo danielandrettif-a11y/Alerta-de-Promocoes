@@ -14,7 +14,7 @@
   <!-- CSS Link -->
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=36">
+  <link rel="stylesheet" href="style.css?v=37">
 </head>
 <body>
 
@@ -247,6 +247,18 @@
               <option value="recurring">Compra recorrente</option>
             </select>
           </div>
+          <div class="filter-group score-sort-filter">
+            <span class="filter-icon">★</span>
+            <select id="sel-sort-ml" class="select-premium" aria-label="Ordenar ofertas do Mercado Livre">
+              <option value="score">Melhores oportunidades</option>
+              <option value="demand">Maior chance de venda</option>
+              <option value="commission_rate">Maior comissao %</option>
+              <option value="commission_amount">Maior comissao em reais</option>
+              <option value="discount">Maior desconto</option>
+              <option value="sales">Mais vendidos</option>
+              <option value="rating">Melhor avaliacao</option>
+            </select>
+          </div>
         </div>
         <div class="filter-row-taxonomy">
           <div class="filter-group category-filter">
@@ -330,6 +342,18 @@
               <option value="15">15% OFF ou mais</option>
               <option value="30">30% OFF ou mais</option>
               <option value="45">45% OFF ou mais</option>
+            </select>
+          </div>
+          <div class="filter-group score-sort-filter">
+            <span class="filter-icon">★</span>
+            <select id="sel-sort-amazon" class="select-premium" aria-label="Ordenar ofertas da Amazon">
+              <option value="score">Melhores oportunidades</option>
+              <option value="demand">Maior chance de venda</option>
+              <option value="commission_rate">Maior comissao %</option>
+              <option value="commission_amount">Maior comissao em reais</option>
+              <option value="discount">Maior desconto</option>
+              <option value="sales">Mais vendidos</option>
+              <option value="rating">Melhor avaliacao</option>
             </select>
           </div>
         </div>
@@ -428,6 +452,18 @@
                 <option value="recurring">Compra recorrente</option>
               </select>
             </div>
+            <div class="filter-group score-sort-filter">
+              <span class="filter-icon">★</span>
+              <select id="sel-sort-shopee" class="select-premium" aria-label="Ordenar ofertas da Shopee">
+                <option value="score">Melhores oportunidades</option>
+                <option value="demand">Maior chance de venda</option>
+                <option value="commission_rate">Maior comissao %</option>
+                <option value="commission_amount">Maior comissao em reais</option>
+                <option value="discount">Maior desconto</option>
+                <option value="sales">Mais vendidos</option>
+                <option value="rating">Melhor avaliacao</option>
+              </select>
+            </div>
           </div>
           <div class="filter-row-taxonomy">
             <div class="filter-group category-filter">
@@ -480,6 +516,7 @@
             <button id="btn-coupon-tab-all" class="coupon-source-tab active" type="button">Todas as lojas</button>
             <button id="btn-coupon-tab-ml" class="coupon-source-tab" type="button">🛍️ Mercado Livre</button>
             <button id="btn-coupon-tab-amazon" class="coupon-source-tab" type="button">🟡 Amazon</button>
+            <button id="btn-coupon-tab-shopee" class="coupon-source-tab" type="button">🟠 Shopee</button>
           </div>
           <div class="filter-group search-filter">
             <span class="filter-icon">🔍</span>
@@ -491,8 +528,10 @@
             <span class="filter-icon">✅</span>
             <select id="sel-filter-coupon-status" class="select-premium">
               <option value="">Todos os status</option>
-              <option value="confirmed">Apenas verificados</option>
-              <option value="unverified">Não verificados</option>
+              <option value="verified_product">Confirmados no produto</option>
+              <option value="source_confirmed">Confirmados na fonte</option>
+              <option value="discovered">Descobertos</option>
+              <option value="expired">Expirados</option>
             </select>
           </div>
           <div class="filter-group">
@@ -734,6 +773,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=36"></script>
+  <script src="app.js?v=37"></script>
 </body>
 </html>

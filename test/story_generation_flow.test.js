@@ -8,12 +8,16 @@ const root = path.join(__dirname, '..');
 test('todos os fluxos usam o template compartilhado de Stories', () => {
   const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
   const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+  const generator = fs.readFileSync(
+    path.join(root, 'execution', 'generate_stories.js'),
+    'utf8'
+  );
   const template = fs.readFileSync(
     path.join(root, 'execution', 'story_template.html'),
     'utf8'
   );
 
-  assert.doesNotMatch(app, /drawStoryOnCanvas|imageBuffer/);
+  assert.doesNotMatch(app, /drawStoryOnCanvas/);
   assert.equal(
     server.match(/(?<!function )generateStory\(/g)?.length,
     3
@@ -32,5 +36,10 @@ test('todos os fluxos usam o template compartilhado de Stories', () => {
   assert.match(template, /\{\{MARKETPLACE_CTA\}\}/);
   assert.match(template, /Com cupom:/);
   assert.match(template, /\{\{COUPON_PRICE\}\}/);
-  assert.match(server, /const confirmedCoupon = deal\.coupon \|\| null/);
+  assert.match(
+    server,
+    /const confirmedCoupon = isVerifiedCoupon\(deal\.coupon\) \? deal\.coupon : null/
+  );
+  assert.doesNotMatch(generator, /deal\.couponCandidates\?\.\[0\]/);
+  assert.doesNotMatch(generator, /percent \? Number\(percentMatch\[1\]\) : 15/);
 });

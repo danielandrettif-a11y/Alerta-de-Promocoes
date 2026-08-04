@@ -144,9 +144,13 @@ async function main() {
       
       console.log(`[${rank}/${deals.length}] Processando: "${deal.title.substring(0, 40)}..."`);
 
-      // Informações do cupom selecionado (direto, candidato ou global)
-      let selectedCoupon = deal.coupon || deal.couponCandidates?.[0] || data.selectedCoupon;
-      const hasCoupon = !!selectedCoupon;
+      // O preco do cupom chega pronto da verificacao no produto.
+      const selectedCoupon = deal.coupon?.verificationStatus === 'verified_product'
+        ? deal.coupon
+        : null;
+      const hasCoupon = Boolean(
+        selectedCoupon?.verifiedAt && selectedCoupon?.priceWithCoupon
+      );
       const couponClass = hasCoupon ? 'show-coupon' : 'hide-coupon';
       
       let rawCode = '';
@@ -164,17 +168,6 @@ async function main() {
           couponSavings = selectedCoupon.savings || '';
         }
 
-        // Se o preço com cupom não foi pré-calculado, calcula com base no desconto ou estimativa do cupom
-        if (!couponPrice && deal.currentPrice) {
-          const currentPriceNum = parseFloat(String(deal.currentPrice).replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.')) || 0;
-          const percentMatch = (rawRules || '').match(/(\d+)\s*%/);
-          const percent = percentMatch ? Number(percentMatch[1]) : 15;
-          if (currentPriceNum > 0) {
-            const priceWithCouponNum = currentPriceNum * (1 - (percent / 100));
-            couponPrice = `R$ ${priceWithCouponNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            couponSavings = `R$ ${(currentPriceNum - priceWithCouponNum).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-          }
-        }
       }
 
       const couponCode = escapeHtml(rawCode);

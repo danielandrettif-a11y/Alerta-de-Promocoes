@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Alerta de Descontos - Links Afiliados",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "description": "Gera links afiliados usando suas sessões locais.",
   "permissions": [
     "storage",
@@ -14,7 +14,11 @@
   "host_permissions": [
     "https://www.mercadolivre.com.br/*",
     "https://produto.mercadolivre.com.br/*",
-    "https://affiliate.shopee.com.br/*"
+    "https://affiliate.shopee.com.br/*",
+    "https://shopee.com.br/*",
+    "https://www.shopee.com.br/*",
+    "https://amazon.com.br/*",
+    "https://www.amazon.com.br/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -44,6 +48,18 @@
       ],
       "js": [
         "content/shopee.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://shopee.com.br/*",
+        "https://www.shopee.com.br/*",
+        "https://amazon.com.br/*",
+        "https://www.amazon.com.br/*"
+      ],
+      "js": [
+        "content/product_price.js"
       ],
       "run_at": "document_idle"
     }

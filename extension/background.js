@@ -139,10 +139,12 @@ async function findOrCreateShopeeTab() {
 function tabMatchesPlatform(tab, platform) {
   try {
     const hostname = new URL(tab.pendingUrl || tab.url || '').hostname;
-    return platform === 'shopee'
-      ? hostname === 'affiliate.shopee.com.br'
-      : hostname === 'www.mercadolivre.com.br' ||
-          hostname === 'produto.mercadolivre.com.br';
+    if (platform === 'shopee') return hostname === 'affiliate.shopee.com.br';
+    if (platform === 'amazon') {
+      return hostname === 'amazon.com.br' || hostname === 'www.amazon.com.br';
+    }
+    return hostname === 'www.mercadolivre.com.br' ||
+      hostname === 'produto.mercadolivre.com.br';
   } catch {
     return false;
   }
@@ -546,9 +548,6 @@ async function activateShopeeControl(tabId, kind, deadline, generation) {
     kind
   }, 'content/shopee.js');
   if (!result?.success) return result;
-  if (result.control?.visible && result.control.clickPoint) {
-    await dispatchTrustedClick(tabId, result.control.clickPoint);
-  }
   const predicate = kind === 'offer'
     ? state => state?.diagnostic?.controls?.customLink?.visible ||
         state?.state === 'READY'
@@ -792,7 +791,42 @@ async function processShopeeJob(job, settings, tab, generation) {
       result.diagnostic
     );
   }
+  if (result?.success) {
+    const affiliateLink = result.affiliateLink;
+    const productTab = await navigateTab(
+      tab.id,
+      job.productLink,
+      settings.pageTimeoutMs
+    );
+    const product = await sendContentMessage(productTab.id, {
+      type: 'READ_PRODUCT_PRICE'
+    }, 'content/product_price.js').catch(() => null);
+    return {
+      ...result,
+      affiliateLink,
+      observedPrice: product?.observedPrice || null,
+      productId: product?.productId || null
+    };
+  }
   return result;
+}
+
+async function processAmazonJob(job, settings, tab) {
+  await setStage('amazon_verifying_price');
+  const loadedTab = await navigateTab(
+    tab.id,
+    job.productLink,
+    settings.pageTimeoutMs
+  );
+  const product = await sendContentMessage(loadedTab.id, {
+    type: 'READ_PRODUCT_PRICE'
+  }, 'content/product_price.js').catch(() => null);
+  return {
+    success: true,
+    affiliateLink: job.productLink,
+    observedPrice: product?.observedPrice || null,
+    productId: product?.productId || null
+  };
 }
 
 async function processJob(job, settings, tab, generation) {
@@ -804,6 +838,9 @@ async function processJob(job, settings, tab, generation) {
   await heartbeat('processing');
   if (job.platform === 'shopee') {
     return processShopeeJob(job, settings, tab, generation);
+  }
+  if (job.platform === 'amazon') {
+    return processAmazonJob(job, settings, tab);
   }
   await setStage('mercado_livre_processing');
   return processMercadoLivreJob(job, settings, tab);
@@ -860,8 +897,8 @@ async function processQueue() {
       }
       attemptedItemIds.push(job.id);
       try {
-        const platform = job.platform === 'shopee'
-          ? 'shopee'
+        const platform = ['shopee', 'amazon'].includes(job.platform)
+          ? job.platform
           : 'mercado_livre';
         workerTab = await getOrCreateWorkerTab(
           platform,
@@ -912,6 +949,7 @@ async function processQueue() {
               deviceId: settings.deviceId,
               affiliateLink: result.affiliateLink,
               observedPrice: result.observedPrice,
+              productId: result.productId || null,
               coupon: result.coupon || null
             })
           }
@@ -949,7 +987,8 @@ async function processQueue() {
     }
     return workerState;
     } finally {
-      if (!workerState.authRequired && activeWorkerWindowId) {
+      if (!workerState.authRequired && workerState.status !== 'error' &&
+          activeWorkerWindowId) {
         const workerWindowId = workerTab?.windowId;
         await closeWorkerWindow(workerWindowId);
       }

@@ -189,6 +189,7 @@
       /com\s+cupom[^\d]{0,30}R\$\s*([\d.]+(?:,\d{1,2})?)/ig
     ];
     const priceWithoutCoupon = findCurrentPrice(root);
+    let bestCoupon = null;
     for (const candidate of candidates) {
       const code = String(candidate.code || '').trim().toUpperCase();
       const codeIndex = code.length >= 4 ? upperText.indexOf(code) : -1;
@@ -206,12 +207,14 @@
             priceWithoutCoupon &&
             priceWithCoupon < priceWithoutCoupon
           ) {
-            return { code, priceWithoutCoupon, priceWithCoupon };
+            if (!bestCoupon || priceWithCoupon < bestCoupon.priceWithCoupon) {
+              bestCoupon = { code, priceWithoutCoupon, priceWithCoupon };
+            }
           }
         }
       }
     }
-    return null;
+    return bestCoupon;
   }
 
   async function detectProductCoupon(candidates = [], timeoutMs = 5000) {

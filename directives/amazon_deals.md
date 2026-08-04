@@ -27,7 +27,13 @@ Automate the extraction of Amazon Brasil daily deals (`https://www.amazon.com.br
   - `isFreeShipping`: true (Prime standard)
   - `dealType`: "Oferta Relâmpago" or "Oferta do Dia"
   - `couponBadge`: Clip coupon text if present on the deal card (or null)
+  - `rating`, `reviewCount`, `salesInfo`: Demand and trust signals when the
+    Amazon page exposes them
 
 ## Reliability & Fallback
 - Runs in headless mode (true on Linux, false on Windows local).
 - In case of network failure or bot blocking, writes a clean empty report (`deals: []`) to prevent panel crashes.
+- Never invent a default discount when the crossed-out reference price is
+  absent. Keep `discount=0` and `discountSource=unknown`.
+- A product-page coupon badge is discovery metadata, not proof of the final
+  price after coupon.

@@ -1,0 +1,17 @@
+{
+  "updatedAt": null,
+  "marketplaces": {
+    "mercado_livre": {
+      "defaultRate": null,
+      "categories": {}
+    },
+    "amazon": {
+      "defaultRate": null,
+      "categories": {}
+    },
+    "shopee": {
+      "defaultRate": null,
+      "categories": {}
+    }
+  }
+}

@@ -30,12 +30,50 @@ function parseCouponRules(coupon) {
   return { percent, fixed, minimum, maximum };
 }
 
+function normalizeCoupon(coupon, defaultPlatform = 'mercado_livre') {
+  const marketplace = String(
+    coupon?.marketplace || coupon?.platform || defaultPlatform
+  ).toLowerCase();
+  const expiresAt = coupon?.expiresAt || coupon?.validUntil || null;
+  const expired = expiresAt && new Date(expiresAt).getTime() <= Date.now();
+  return {
+    ...coupon,
+    code: String(coupon?.code || '').trim().toUpperCase(),
+    marketplace,
+    status: expired
+      ? 'expired'
+      : coupon?.status || coupon?.verificationStatus || 'discovered',
+    expiresAt
+  };
+}
+
+function normalizeCoupons(coupons, defaultPlatform = 'mercado_livre') {
+  return (Array.isArray(coupons) ? coupons : [])
+    .map(coupon => normalizeCoupon(coupon, defaultPlatform))
+    .filter(coupon => coupon.code);
+}
+
 function couponMatchesProduct(coupon, deal) {
+  const normalizedCoupon = normalizeCoupon(coupon);
+  const dealPlatform = String(deal?.platform || 'mercado_livre').toLowerCase();
+  if (normalizedCoupon.marketplace !== dealPlatform) return false;
+  if (['expired', 'unavailable'].includes(normalizedCoupon.status)) return false;
   const rules = normalizedText(coupon?.rules);
   const title = normalizedText(deal?.title);
   const price = parsePrice(deal?.currentPrice);
   const parsed = parseCouponRules(coupon);
   if (!price || price < parsed.minimum) return false;
+  if (
+    /produtos? selecionad/.test(rules) &&
+    !Array.isArray(coupon?.eligibleProductIds) &&
+    !Array.isArray(coupon?.productIds)
+  ) return false;
+
+  const eligibleIds = coupon?.eligibleProductIds || coupon?.productIds;
+  if (Array.isArray(eligibleIds) && eligibleIds.length > 0) {
+    const productId = String(deal?.itemId || deal?.productId || deal?.dealId || '');
+    if (!eligibleIds.map(String).includes(productId)) return false;
+  }
 
   for (const [category, terms] of Object.entries(CATEGORY_TERMS)) {
     if (
@@ -62,18 +100,41 @@ function estimateCoupon(coupon, deal) {
 }
 
 function findCouponCandidates(deal, coupons, limit = 5) {
-  return (Array.isArray(coupons) ? coupons : [])
+  return normalizeCoupons(coupons)
     .map(coupon => estimateCoupon(coupon, deal))
     .filter(candidate => candidate?.code)
+    .map(candidate => ({
+      ...candidate,
+      marketplace: String(deal?.platform || 'mercado_livre').toLowerCase(),
+      status: 'eligible_estimate'
+    }))
     .sort((left, right) => right.estimatedSavings - left.estimatedSavings)
     .slice(0, limit);
 }
 
+function findCouponsForVerification(deal, coupons, limit = 50) {
+  const platform = String(deal?.platform || 'mercado_livre').toLowerCase();
+  return normalizeCoupons(coupons)
+    .filter(coupon => coupon.marketplace === platform)
+    .filter(coupon => !['expired', 'unavailable'].includes(coupon.status))
+    .map(coupon => {
+      const estimate = estimateCoupon(coupon, deal);
+      return {
+        code: coupon.code,
+        rules: coupon.rules || '',
+        estimatedSavings: estimate?.estimatedSavings || 0,
+        status: 'verification_required'
+      };
+    })
+    .sort((left, right) => right.estimatedSavings - left.estimatedSavings)
+    .slice(0, Math.min(50, Math.max(1, Number(limit) || 50)));
+}
+
 function normalizeVerifiedCoupon(item, rawCoupon, coupons, now = new Date()) {
-  if (item?.platform !== 'mercado_livre' || !rawCoupon) return null;
+  if (!item?.platform || !rawCoupon) return null;
   const code = String(rawCoupon.code || '').trim().toUpperCase();
-  const candidate = findCouponCandidates(item, coupons)
-    .find(entry => entry.code === code);
+  const candidate = normalizeCoupons(coupons)
+    .find(entry => entry.code === code && entry.marketplace === item.platform);
   const priceWithoutCoupon =
     parsePrice(rawCoupon.priceWithoutCoupon) ||
     parsePrice(item.latestPrice) ||
@@ -88,19 +149,33 @@ function normalizeVerifiedCoupon(item, rawCoupon, coupons, now = new Date()) {
   ) return null;
   return {
     code,
-    rules: candidate.rules,
+    marketplace: item.platform,
+    rules: candidate?.rules || String(rawCoupon.rules || ''),
     priceWithoutCoupon: formatPrice(priceWithoutCoupon),
     priceWithCoupon: formatPrice(priceWithCoupon),
     savings: formatPrice(priceWithoutCoupon - priceWithCoupon),
     verifiedAt: now.toISOString(),
-    verificationSource: 'mercado_livre_product_page'
+    expiresAt: rawCoupon.expiresAt || candidate?.expiresAt || null,
+    verificationStatus: 'verified_product',
+    productId: item.dealId || item.itemId || null,
+    verificationSource: `${item.platform}_product_page`
   };
+}
+
+function isVerifiedCoupon(coupon) {
+  if (!coupon || coupon.verificationStatus !== 'verified_product') return false;
+  if (!parsePrice(coupon.priceWithCoupon) || !coupon.verifiedAt) return false;
+  return !coupon.expiresAt || new Date(coupon.expiresAt).getTime() > Date.now();
 }
 
 module.exports = {
   parseCouponRules,
+  normalizeCoupon,
+  normalizeCoupons,
   couponMatchesProduct,
   estimateCoupon,
   findCouponCandidates,
-  normalizeVerifiedCoupon
+  findCouponsForVerification,
+  normalizeVerifiedCoupon,
+  isVerifiedCoupon
 };

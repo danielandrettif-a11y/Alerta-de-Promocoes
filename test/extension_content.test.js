@@ -68,6 +68,8 @@ test('fluxo preserva Mercado Livre e isola a automação da Shopee', () => {
   assert.match(background, /createdWindow \|\| platform === 'shopee'/);
   assert.match(background, /for \(let attempt = 0; attempt < 3/);
   assert.match(background, /await closeWorkerWindow\(workerWindowId\)/);
+  assert.match(background,
+    /!workerState\.authRequired && workerState\.status !== 'error' &&/);
   assert.match(background, /setWindowBounds\(mainWindow\.id,[\s\S]*focused: true/);
   assert.match(mercadoLivre, /if \(!candidates\.length\) return/);
   assert.match(background, /chrome\.windows\.remove\(targetId\)/);
@@ -84,7 +86,7 @@ test('fluxo preserva Mercado Livre e isola a automação da Shopee', () => {
   assert.match(popup, /state\.lastError \|\| ''/);
 });
 
-test('content script aceita somente link curto oficial da Shopee', () => {
+test('content script aceita somente link curto oficial da Shopee', async () => {
   assert.equal(
     'https://s.shopee.com.br/AUso2xdRXP'.match(shopee.LINK_PATTERN)?.[0],
     'https://s.shopee.com.br/AUso2xdRXP'
@@ -143,8 +145,8 @@ test('content script aceita somente link curto oficial da Shopee', () => {
   const offerActivation = shopee.activateControl('offer', collapsedMenu);
   assert.equal(offerActivation.success, true);
   assert.deepEqual(offerActivation.control.clickPoint, { x: 20, y: 30 });
-  assert.equal(offerActivation.activatedProgrammatically, false);
-  assert.equal(offerSubmenu.clicked, undefined);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(offerSubmenu.clicked, true);
   const root = path.join(__dirname, '..', 'extension');
   const manifest = JSON.parse(
     fs.readFileSync(path.join(root, 'manifest.json'), 'utf8')
@@ -166,6 +168,11 @@ test('content script aceita somente link curto oficial da Shopee', () => {
   assert.match(background, /SHOPEE_BLOCKING_CODES/);
   assert.match(background, /async function ensureShopeeConverter/);
   assert.match(background, /CANCEL_SHOPEE_ACTION/);
+  const activateShopee = background.slice(
+    background.indexOf('async function activateShopeeControl'),
+    background.indexOf('async function ensureShopeeConverter')
+  );
+  assert.doesNotMatch(activateShopee, /dispatchTrustedClick/);
   assert.match(shopeeContent, /currentLink && currentLink !== previousLink/);
   assert.match(shopeeContent, /state: 'DASHBOARD'/);
   assert.deepEqual(shopee.findPageIssue({
@@ -189,7 +196,7 @@ test('content script aceita somente link curto oficial da Shopee', () => {
     body: { innerText: '' }
   });
   assert.equal(hiddenActivation.success, true);
-  assert.equal(hiddenActivation.activatedProgrammatically, true);
+  await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(hiddenCustomLink.clicked, true);
 });
 

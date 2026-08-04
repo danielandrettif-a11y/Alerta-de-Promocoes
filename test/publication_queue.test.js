@@ -146,6 +146,59 @@ test('link valido deixa oferta pronta e revisao impede publicacao', () => {
   assert.equal(approved.item.reviewReason, null);
 });
 
+test('aceita Amazon somente no dominio brasileiro com tag de afiliado', () => {
+  assert.equal(
+    validateAffiliateLink(
+      'https://www.amazon.com.br/dp/B000000001?tag=alertadesc0dd-20',
+      'amazon'
+    ),
+    'https://www.amazon.com.br/dp/B000000001?tag=alertadesc0dd-20'
+  );
+  assert.throws(
+    () => validateAffiliateLink(
+      'https://www.amazon.com.br.evil.example/dp/B000000001?tag=x',
+      'amazon'
+    ),
+    /Amazon Brasil/
+  );
+  assert.throws(
+    () => validateAffiliateLink(
+      'https://www.amazon.com.br/dp/B000000001',
+      'amazon'
+    ),
+    /tag de afiliado/
+  );
+});
+
+test('preserva a prova de preco recebida da extensao', () => {
+  const now = new Date('2026-08-04T12:00:00Z');
+  const created = enqueueOffer(emptyQueue(), sampleOffer(), now);
+  const result = setAffiliateLink(
+    created.queue,
+    created.item.id,
+    'https://meli.la/ABC123',
+    {
+      priceVerification: {
+        regularPrice: 199.9,
+        finalPrice: 179.9,
+        source: 'extension',
+        verifiedAt: now.toISOString(),
+        productId: 'MLB123'
+      }
+    },
+    now
+  );
+  assert.deepEqual(result.item.priceVerification, {
+    regularPrice: 199.9,
+    finalPrice: 179.9,
+    source: 'extension',
+    verifiedAt: now.toISOString(),
+    productId: 'MLB123',
+    sellerId: null,
+    variationId: null
+  });
+});
+
 test('persiste a fila e resume os estados', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'publication-queue-'));
   const queuePath = path.join(directory, 'runtime', 'queue.json');

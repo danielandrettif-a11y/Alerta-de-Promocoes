@@ -26,7 +26,7 @@ test('fila usa uma selecao e valida em segundo plano', () => {
   assert.match(app, /publication-queue\/validation\/.*encodeURIComponent\(job\.id\)/s);
   assert.match(app, /publicationQueueRequestSequence/);
   assert.match(page, /id="queue-sort-filter"/);
-  assert.match(page, /<optgroup label="A.o necess.ria">/);
+  assert.match(page, /<optgroup label="A..o necess.ria">/);
 });
 
 test('prepara Mercado Livre e Shopee juntos com progresso cancelavel', () => {
@@ -39,7 +39,7 @@ test('prepara Mercado Livre e Shopee juntos com progresso cancelavel', () => {
   );
 
   assert.match(app, /function getSelectedPublicationDeals\(\)/);
-  assert.match(app, /selectedMLIndices\.size \+ selectedShopeeIndices\.size/);
+  assert.match(app, /selectedMLIndices\.size \+ selectedAmazonIndices\.size \+ selectedShopeeIndices\.size/);
   assert.match(app, /logEl\.scrollTop = logEl\.scrollHeight/);
   assert.match(app, /Todos os Stories foram gerados\./);
   assert.match(app, /stopQueueGenerationRequested/);

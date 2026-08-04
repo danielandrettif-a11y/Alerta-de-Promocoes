@@ -207,12 +207,10 @@
         diagnostic: collectDiagnostic(root)
       };
     }
-    const activatedProgrammatically = !control.visible;
-    if (activatedProgrammatically) element.click();
+    setTimeout(() => element.click(), 0);
     return {
       success: true,
       control,
-      activatedProgrammatically,
       diagnostic: collectDiagnostic(root)
     };
   }

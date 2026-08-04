@@ -8,11 +8,13 @@ const root = path.resolve(__dirname, '..');
 const files = [
   path.join(root, 'server.js'),
   path.join(root, 'public', 'app.js'),
+  path.join(root, 'public', 'sw.js'),
   path.join(root, 'extension', 'background.js'),
   path.join(root, 'extension', 'popup.js'),
   path.join(root, 'extension', 'options.js'),
   path.join(root, 'extension', 'content', 'mercado_livre.js'),
   path.join(root, 'extension', 'content', 'shopee.js'),
+  path.join(root, 'extension', 'content', 'product_price.js'),
   ...fs.readdirSync(__dirname)
     .filter(file => file.endsWith('.js'))
     .map(file => path.join(__dirname, file))

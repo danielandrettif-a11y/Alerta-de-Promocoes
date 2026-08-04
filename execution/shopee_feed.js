@@ -169,6 +169,15 @@ function normalizeShopeeProduct(row, source = {}) {
   const itemRating = parseNonNegativeNumber(row.item_rating);
   const shopRating = parseNonNegativeNumber(row.shop_rating);
   const likes = Math.max(0, Number.parseInt(row.like || '0', 10) || 0);
+  const salesCount = Math.max(0, Number.parseInt(
+    row.sales || row.sold || row.historical_sold || '0',
+    10
+  ) || 0);
+  const commissionRate = parseNonNegativeNumber(
+    row.commission_rate ||
+    row.commission_percentage ||
+    row.affiliate_commission_rate
+  );
   const title = String(row.title || '').trim();
   const shopName = String(row.shop_name || '').trim();
   const recurringPurchaseCategory = getRecurringPurchaseCategory(title);
@@ -203,6 +212,9 @@ function normalizeShopeeProduct(row, source = {}) {
     rating: itemRating,
     shopRating,
     likes,
+    salesCount: salesCount || null,
+    commissionRate,
+    commissionCheckedAt: source.generatedAt || null,
     shopName: shopName || null,
     salesInfo: shopName ? `Loja: ${shopName}` : 'Shopee Brasil',
     discount,

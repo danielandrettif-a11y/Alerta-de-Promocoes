@@ -33,6 +33,9 @@ const {
 } = require('./execution/marketplace_search.js');
 const {
   findCouponCandidates,
+  findCouponsForVerification,
+  isVerifiedCoupon,
+  normalizeCoupons,
   normalizeVerifiedCoupon
 } = require('./execution/coupon_rules.js');
 const {
@@ -68,6 +71,11 @@ const {
   isSafeBatchId
 } = require('./execution/publication_batches.js');
 const { loadJson, saveJsonAtomic } = require('./execution/json_store.js');
+const {
+  loadDealHistory,
+  recordDealSnapshots,
+  scoreDeals
+} = require('./execution/deal_intelligence.js');
 
 // puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
 // load Puppeteer lazily only when the price-comparison endpoint needs it.
@@ -127,6 +135,7 @@ const mlDealsReportPath = path.join(__dirname, 'mercado_livre_deals_report.json'
 const amazonDealsReportPath = path.join(__dirname, 'amazon_deals_report.json');
 const shopeeDealsReportPath = path.join(__dirname, 'shopee_deals_report.json');
 const couponsPath = path.join(__dirname, 'coupons.json');
+const affiliateCommissionsPath = path.join(__dirname, 'affiliate_commissions.json');
 ensureSessionDirectories();
 const historyPath = path.join(APP_RUNTIME_DIR, 'published_history.json');
 const legacyHistoryPath = path.join(__dirname, '.tmp', 'published_history.json');
@@ -134,6 +143,7 @@ const couponConfirmationsPath = path.join(
   APP_RUNTIME_DIR,
   'coupon_confirmations.json'
 );
+const dealHistoryPath = path.join(APP_RUNTIME_DIR, 'deal_metrics_history.json');
 const marketplaceSearchCachePath = path.join(
   APP_RUNTIME_DIR,
   'marketplace_search_cache.json'
@@ -327,6 +337,33 @@ function inferCategory(title) {
   return `${info.icon} ${info.category} > ${info.subcategory}`;
 }
 
+function enrichDeals(deals, platform, generatedAt) {
+  const normalizedDeals = deals.map(deal => {
+    const legacySyntheticAmazonDiscount = platform === 'amazon' &&
+      Number(deal.discount) === 15 &&
+      parsePrice(deal.originalPrice) === parsePrice(deal.currentPrice);
+    return legacySyntheticAmazonDiscount
+      ? { ...deal, discount: 0, discountSource: 'synthetic' }
+      : deal;
+  });
+  const enriched = scoreDeals(normalizedDeals, {
+    platform,
+    generatedAt,
+    now: generatedAt ? new Date(generatedAt) : new Date(),
+    history: loadDealHistory(dealHistoryPath),
+    commissionRules: loadJson(affiliateCommissionsPath, {
+      updatedAt: null,
+      marketplaces: {}
+    })
+  });
+  try {
+    recordDealSnapshots(dealHistoryPath, enriched, platform, generatedAt);
+  } catch (error) {
+    console.error(`Falha ao registrar historico de ${platform}: ${error.message}`);
+  }
+  return enriched;
+}
+
 function getPlatformTag(platform) {
   if (platform === 'amazon') return '🟡 *AMAZON*';
   if (platform === 'shopee') return '🟠 *SHOPEE*';
@@ -353,15 +390,19 @@ app.get('/api/deals', (req, res) => {
   if (fs.existsSync(couponsPath)) {
     try {
       const rawCoupons = fs.readFileSync(couponsPath, 'utf-8');
-      coupons = JSON.parse(rawCoupons);
+      coupons = normalizeCoupons(JSON.parse(rawCoupons));
     } catch (err) {
       console.error('Erro ao ler cupons:', err);
     }
   }
   deals = deals.map(deal => ({
     ...deal,
-    couponCandidates: findCouponCandidates(deal, coupons)
+    couponCandidates: findCouponCandidates(
+      { ...deal, platform: 'mercado_livre' },
+      coupons
+    )
   }));
+  deals = enrichDeals(deals, 'mercado_livre', generatedAt);
 
   res.json({
     deals,
@@ -387,7 +428,7 @@ app.post('/api/coupons/:code/confirm', (req, res) => {
     if (!coupon) {
       return res.status(404).json({ error: 'Cupom nao encontrado.' });
     }
-    coupon.verificationStatus = 'manually_confirmed';
+    coupon.verificationStatus = 'source_confirmed';
     coupon.lastConfirmedAt = new Date().toISOString();
     fs.writeFileSync(couponsPath, JSON.stringify(coupons, null, 2), 'utf-8');
     let confirmations = {};
@@ -412,7 +453,7 @@ app.post('/api/coupons/:code/confirm', (req, res) => {
   }
 });
 
-// POST /api/coupons/validate - Valida se um cupom é aplicável a um produto e calcula os preços
+// Um candidato e apenas uma estimativa. A confirmacao real vem da extensao.
 app.post('/api/coupons/validate', (req, res) => {
   try {
     const { deal, couponCode } = req.body || {};
@@ -423,41 +464,24 @@ app.post('/api/coupons/validate', (req, res) => {
       ? JSON.parse(fs.readFileSync(couponsPath, 'utf-8'))
       : [];
 
-    let targetCoupon = null;
-    if (couponCode) {
-      targetCoupon = coupons.find(c => String(c.code).trim().toUpperCase() === String(couponCode).trim().toUpperCase());
-    }
-    if (!targetCoupon) {
-      const candidates = findCouponCandidates(deal, coupons);
-      targetCoupon = candidates[0] || null;
-    }
-
-    if (!targetCoupon) {
+    const candidates = findCouponCandidates(deal, coupons);
+    const candidate = couponCode
+      ? candidates.find(item => item.code === String(couponCode).trim().toUpperCase())
+      : candidates[0];
+    if (!candidate) {
       return res.json({
         valid: false,
-        message: 'Nenhum cupom válido aplicável a esta oferta no momento.'
+        status: 'not_found',
+        message: 'Nenhum cupom potencialmente compativel foi encontrado.'
       });
     }
-
-    const estimated = estimateCoupon(targetCoupon, deal);
-    if (!estimated || estimated.estimatedSavings <= 0) {
-      return res.json({
-        valid: false,
-        coupon: targetCoupon,
-        message: `Cupom ${targetCoupon.code} não atinge as regras mínimas para esta oferta.`
-      });
-    }
-
     return res.json({
-      valid: true,
-      coupon: {
-        code: estimated.code,
-        rules: estimated.rules,
-        estimatedPrice: `R$ ${estimated.estimatedPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        estimatedSavings: `R$ ${estimated.estimatedSavings.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        verifiedAt: new Date().toISOString()
-      },
-      message: `✓ Cupom ${estimated.code} VÁLIDO! Preço com cupom: R$ ${estimated.estimatedPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Economia de R$ ${estimated.estimatedSavings.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+      valid: false,
+      status: 'eligible_estimate',
+      needsExtension: true,
+      coupon: candidate,
+      message: `O cupom ${candidate.code} e apenas um candidato. ` +
+        'Adicione o produto a fila para a extensao confirmar o preco real.'
     });
   } catch (err) {
     res.status(500).json({ error: `Erro ao validar cupom: ${err.message}` });
@@ -472,9 +496,14 @@ app.post('/api/generate-coupon-story', async (req, res) => {
   }
 
   try {
+    if (!isVerifiedCoupon(coupon || deal.coupon)) {
+      return res.status(409).json({
+        error: 'O Story com cupom exige confirmacao no produto pela extensao.'
+      });
+    }
     const dealWithCoupon = {
       ...deal,
-      coupon: coupon || deal.coupon || null
+      coupon: coupon || deal.coupon
     };
     const { buffer } = await generateStoryBuffer(dealWithCoupon, []);
     const base64Image = `data:image/jpeg;base64,${buffer.toString('base64')}`;
@@ -522,6 +551,8 @@ app.get('/api/amazon-deals', (req, res) => {
       console.error('Erro ao ler ofertas da Amazon:', err);
     }
   }
+
+  deals = enrichDeals(deals, 'amazon', generatedAt);
 
   res.json({
     deals,
@@ -605,6 +636,7 @@ app.get('/api/shopee-deals', (req, res) => {
       console.error('Erro ao ler ofertas da Shopee:', err);
     }
   }
+  deals = enrichDeals(deals, 'shopee', generatedAt);
   res.json({
     deals,
     generatedAt,
@@ -631,16 +663,17 @@ function applyAffiliateLinkToQueue(
   queue,
   item,
   affiliateLink,
-  observedPrice
+  observedPrice,
+  productId = null
 ) {
-  const currentDeal = findCurrentDealForQueueItem(item);
   let reviewReason = null;
   let latestPrice = null;
-  const verifiedPrice =
-    parsePrice(observedPrice) ||
-    parsePrice(currentDeal?.currentPrice);
+  const verifiedPrice = parsePrice(observedPrice);
   const storyPrice = parsePrice(item.currentPrice);
-  if (
+  if (!verifiedPrice) {
+    reviewReason =
+      'O link foi gerado, mas a extensao nao confirmou o preco do produto.';
+  } else if (
     verifiedPrice &&
     storyPrice &&
     Math.abs(verifiedPrice - storyPrice) >= 0.01
@@ -654,7 +687,17 @@ function applyAffiliateLinkToQueue(
     queue,
     item.id,
     affiliateLink,
-    { reviewReason, latestPrice }
+    {
+      reviewReason,
+      latestPrice,
+      priceVerification: verifiedPrice ? {
+        regularPrice: verifiedPrice,
+        finalPrice: verifiedPrice,
+        source: 'extension',
+        verifiedAt: new Date().toISOString(),
+        productId: productId || item.dealId
+      } : null
+    }
   );
 }
 
@@ -734,7 +777,7 @@ function generateStoryBuffer(deal, coupons) {
     APP_RUNTIME_DIR,
     `queue-validation-${runId}.json`
   );
-  const confirmedCoupon = deal.coupon || null;
+  const confirmedCoupon = isVerifiedCoupon(deal.coupon) ? deal.coupon : null;
   fs.mkdirSync(storiesDir, { recursive: true });
   fs.writeFileSync(selectionPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
@@ -1100,7 +1143,12 @@ function publicationQueueInput(deal, platform, id) {
     currentPrice: deal.currentPrice,
     discount: deal.discount,
     image: deal.image,
-    productLink: deal.link || deal.productLink
+    productLink: deal.link || deal.productLink,
+    rating: deal.rating || null,
+    salesCount: deal.salesCount || null,
+    salesInfo: deal.salesInfo || '',
+    commission: deal.commission || null,
+    promotionScore: deal.promotionScore || null
   };
 }
 
@@ -1645,7 +1693,7 @@ app.post(
           title: item.title,
           productLink: item.productLink,
           couponCandidates: item.platform === 'mercado_livre'
-            ? findCouponCandidates(item, loadAvailableDeals().coupons)
+            ? findCouponsForVerification(item, loadAvailableDeals().coupons)
             : [],
           claimExpiresAt: item.affiliateProcessing.claimExpiresAt,
           attempts: item.affiliateProcessing.attempts
@@ -1675,7 +1723,8 @@ app.post(
         initialQueue,
         initialItem,
         req.body?.affiliateLink,
-        req.body?.observedPrice
+        req.body?.observedPrice,
+        req.body?.productId
       );
       const verifiedCoupon = normalizeVerifiedCoupon(
         preview.item,
@@ -1683,13 +1732,14 @@ app.post(
         loadAvailableDeals().coupons
       );
       let generatedStory = null;
-      if (verifiedCoupon) {
+      const observedPrice = parsePrice(req.body?.observedPrice);
+      if (observedPrice && (verifiedCoupon || preview.item.reviewReason)) {
         const currentDeal = findCurrentDealForQueueItem(preview.item) || {};
         generatedStory = await generateStoryBuffer({
           ...currentDeal,
           ...preview.item,
           currentPrice:
-            preview.item.latestPrice || preview.item.currentPrice,
+            formatPrice(observedPrice),
           coupon: verifiedCoupon
         }, []);
       }
@@ -1704,9 +1754,15 @@ app.post(
         queue,
         item,
         req.body?.affiliateLink,
-        req.body?.observedPrice
+        req.body?.observedPrice,
+        req.body?.productId
       );
       result.item.coupon = verifiedCoupon;
+      if (result.item.priceVerification && verifiedCoupon) {
+        result.item.priceVerification.finalPrice = parsePrice(
+          verifiedCoupon.priceWithCoupon
+        );
+      }
       const previousStory = result.item.storyFile;
       if (generatedStory) {
         result.item.storyFile = `${result.item.id}-${Date.now()}.jpg`;
@@ -1923,16 +1979,24 @@ app.post('/api/scrape', async (req, res) => {
 
     let coupons = [];
     if (fs.existsSync(couponsPath)) {
-      coupons = JSON.parse(fs.readFileSync(couponsPath, 'utf-8'));
+      coupons = normalizeCoupons(JSON.parse(fs.readFileSync(couponsPath, 'utf-8')));
     }
+    const deals = enrichDeals(
+      (parsedData.deals || []).map(deal => ({
+        ...deal,
+        couponCandidates: findCouponCandidates(
+          { ...deal, platform: 'mercado_livre' },
+          coupons
+        )
+      })),
+      'mercado_livre',
+      parsedData.generatedAt
+    );
 
     res.json({
       success: true,
       data: {
-        deals: (parsedData.deals || []).map(deal => ({
-          ...deal,
-          couponCandidates: findCouponCandidates(deal, coupons)
-        })),
+        deals,
         coupons,
         generatedAt: parsedData.generatedAt || null,
         freshness: getFreshness(
@@ -1965,7 +2029,11 @@ app.post('/api/scrape-amazon', (req, res) => {
       res.json({
         success: true,
         data: {
-          deals: parsedData.deals || [],
+          deals: enrichDeals(
+            parsedData.deals || [],
+            'amazon',
+            parsedData.generatedAt
+          ),
           generatedAt: parsedData.generatedAt || null,
           freshness: getFreshness(
             parsedData.generatedAt,
@@ -1989,7 +2057,11 @@ app.post('/api/refresh-shopee', async (req, res) => {
     res.json({
       success: true,
       data: {
-        deals: parsedData.deals || [],
+        deals: enrichDeals(
+          parsedData.deals || [],
+          'shopee',
+          parsedData.generatedAt
+        ),
         generatedAt: parsedData.generatedAt || null,
         freshness: getFreshness(
           parsedData.generatedAt,
@@ -2746,9 +2818,21 @@ function loadAvailableDeals() {
     }
   }
 
+  if (fs.existsSync(shopeeDealsReportPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(shopeeDealsReportPath, 'utf-8'));
+      deals.push(...(data.deals || []).map(deal => ({
+        ...deal,
+        platform: 'shopee'
+      })));
+    } catch (err) {
+      console.error(`Erro ao carregar ofertas da Shopee: ${err.message}`);
+    }
+  }
+
   if (fs.existsSync(couponsPath)) {
     try {
-      coupons = JSON.parse(fs.readFileSync(couponsPath, 'utf-8'));
+      coupons = normalizeCoupons(JSON.parse(fs.readFileSync(couponsPath, 'utf-8')));
     } catch (err) {
       console.error(`Erro ao carregar cupons: ${err.message}`);
     }
@@ -2763,7 +2847,7 @@ function generateStory(deal, coupons) {
     APP_RUNTIME_DIR,
     `automatic_story_${process.pid}.json`
   );
-  const confirmedCoupon = deal.coupon || deal.couponCandidates?.[0] || null;
+  const confirmedCoupon = isVerifiedCoupon(deal.coupon) ? deal.coupon : null;
 
   fs.writeFileSync(selectionPath, JSON.stringify({
     generatedAt: new Date().toISOString(),

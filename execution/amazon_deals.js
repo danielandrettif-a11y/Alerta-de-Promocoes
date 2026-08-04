@@ -163,6 +163,12 @@ async function scrapeDealsFromPage(page, url) {
       // Badge de Cupom de Clipe Amazon
       const couponEl = container.querySelector('[class*="coupon"], [class*="Coupon"], .a-badge-coupon, [data-badge-type="COUPON"]');
       let couponBadge = couponEl ? couponEl.textContent.trim() : null;
+      const ratingText = container.querySelector('[aria-label*="de 5 estrelas"], [aria-label*="out of 5 stars"]')
+        ?.getAttribute('aria-label') || '';
+      const rating = Number(ratingText.match(/([0-5](?:[.,]\d)?)/)?.[1]?.replace(',', '.')) || 0;
+      const reviewText = container.textContent.match(/([\d.,]+)\s*(?:avalia[cç][oõ]es|classifica[cç][oõ]es)/i)?.[1] || '';
+      const reviewCount = Number(reviewText.replace(/\./g, '').replace(',', '.')) || 0;
+      const salesInfo = container.textContent.match(/([\d.,]+\+?\s*(?:mil)?\s*comprad[oa]s?[^.\n]*)/i)?.[1]?.trim() || '';
 
       if (!currentPrice || !currentPrice.includes('R$')) return;
 
@@ -176,7 +182,10 @@ async function scrapeDealsFromPage(page, url) {
         isFreeShipping: true,
         dealType: discount >= 30 ? "Oferta Relâmpago" : "Oferta do Dia",
         timeLeft: "",
-        couponBadge
+        couponBadge,
+        rating,
+        reviewCount,
+        salesInfo
       });
     });
 
@@ -276,7 +285,7 @@ async function main() {
           origStr = `R$ ${origVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         } else {
           origStr = curStr;
-          discount = 15; // Desconto padrão visual se não detectado
+          discount = 0;
         }
       }
 
@@ -299,12 +308,16 @@ async function main() {
         link: affiliateLink,
         image: d.image || 'https://m.media-amazon.com/images/G/32/social_share/amazon_logo._CB633266945_.png',
         discount: discount,
+        discountSource: discount > 0 ? 'amazon_page' : 'unknown',
         originalPrice: origStr,
         currentPrice: curStr,
         isFreeShipping: true,
         dealType: discount >= 30 ? "Oferta Relâmpago" : "Oferta do Dia",
         timeLeft: "",
         couponBadge: d.couponBadge || null,
+        rating: Number(d.rating) || 0,
+        reviewCount: Number(d.reviewCount) || 0,
+        salesInfo: d.salesInfo || '',
         category: catInfo.category,
         subcategory: catInfo.subcategory,
         icon: catInfo.icon,

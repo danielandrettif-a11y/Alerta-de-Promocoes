@@ -2,14 +2,15 @@
 
 ## Goal
 
-Add a coupon to a Mercado Livre Story only when the authenticated product page
-shows both the candidate code and a lower price with that coupon.
+Add a coupon to a Story for Mercado Livre, Amazon or Shopee only when the
+authenticated product page shows both the benefit and a lower final price.
 
 ## Flow
 
 1. Parse coupon rules and discard candidates below the minimum purchase or in
    an incompatible category.
-2. Send at most five candidates with the existing affiliate-link job.
+2. Keep candidates isolated by marketplace and send them with the existing
+   affiliate-link job.
 3. The extension reads the normal product page and may open its coupon details.
 4. Accept a coupon only when its code and lower price appear together.
 5. Persist the product-specific proof and regenerate the Story with the regular
@@ -26,5 +27,10 @@ shows both the candidate code and a lower price with that coupon.
 
 ## Persistent data
 
-The queue item stores `coupon.code`, `priceWithoutCoupon`, `priceWithCoupon`,
-`savings`, `verifiedAt` and `verificationSource`.
+The queue item stores `coupon.code`, `marketplace`, `priceWithoutCoupon`,
+`priceWithCoupon`, `savings`, `expiresAt`, `verifiedAt`, `productId`,
+`verificationStatus=verified_product` and `verificationSource`.
+
+Discovery, source confirmation and product verification are separate states.
+Only `verified_product` may change the displayed price or a generated Story.
+Expired coupons are removed from candidates and from product verification.

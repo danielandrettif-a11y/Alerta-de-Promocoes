@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  isVerifiedCoupon,
   parseCouponRules,
   findCouponCandidates,
   normalizeVerifiedCoupon
@@ -45,11 +46,15 @@ test('aceita somente preço menor de cupom candidato confirmado no produto', () 
     ),
     {
       code: 'MODA10',
+      marketplace: 'mercado_livre',
       rules: '10% OFF em moda',
       priceWithoutCoupon: 'R$ 199,99',
       priceWithCoupon: 'R$ 179,99',
       savings: 'R$ 20,00',
       verifiedAt: '2026-07-31T12:00:00.000Z',
+      expiresAt: null,
+      verificationStatus: 'verified_product',
+      productId: null,
       verificationSource: 'mercado_livre_product_page'
     }
   );
@@ -61,4 +66,31 @@ test('aceita somente preço menor de cupom candidato confirmado no produto', () 
     ),
     null
   );
+});
+
+test('nao espalha cupom selecionado nem mistura marketplace', () => {
+  const candidates = findCouponCandidates({
+    platform: 'mercado_livre',
+    title: 'Furadeira',
+    currentPrice: 'R$ 200,00'
+  }, [
+    { code: 'SELEC30', rules: '30% OFF em produtos selecionados' },
+    { code: 'AMZ20', marketplace: 'amazon', rules: '20% OFF' },
+    { code: 'GERAL10', rules: '10% OFF em compras' }
+  ]);
+  assert.deepEqual(candidates.map(candidate => candidate.code), ['GERAL10']);
+  assert.equal(candidates[0].status, 'eligible_estimate');
+});
+
+test('somente cupom confirmado no produto altera o Story', () => {
+  assert.equal(isVerifiedCoupon({
+    code: 'TESTE',
+    priceWithCoupon: 'R$ 10,00'
+  }), false);
+  assert.equal(isVerifiedCoupon({
+    code: 'TESTE',
+    priceWithCoupon: 'R$ 10,00',
+    verifiedAt: new Date().toISOString(),
+    verificationStatus: 'verified_product'
+  }), true);
 });

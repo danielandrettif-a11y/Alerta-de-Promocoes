@@ -125,12 +125,14 @@ const elFilterSubcategoryML = document.getElementById('sel-filter-subcategory-ml
 const elFilterDiscountML = document.getElementById('sel-filter-discount-ml');
 const elFilterRecurringML =
   document.getElementById('sel-filter-recurring-ml');
+const elSortML = document.getElementById('sel-sort-ml');
 
 // DOM elements - Filters Amazon
 const elFilterNameAmazon = document.getElementById('ipt-filter-name-amazon');
 const elFilterCategoryAmazon = document.getElementById('sel-filter-category-amazon');
 const elFilterSubcategoryAmazon = document.getElementById('sel-filter-subcategory-amazon');
 const elFilterDiscountAmazon = document.getElementById('sel-filter-discount-amazon');
+const elSortAmazon = document.getElementById('sel-sort-amazon');
 
 // DOM elements - Filters Shopee
 const elFilterNameShopee = document.getElementById('ipt-filter-name-shopee');
@@ -139,6 +141,7 @@ const elFilterSubcategoryShopee = document.getElementById('sel-filter-subcategor
 const elFilterDiscountShopee = document.getElementById('sel-filter-discount-shopee');
 const elFilterRecurringShopee =
   document.getElementById('sel-filter-recurring-shopee');
+const elSortShopee = document.getElementById('sel-sort-shopee');
 
 let globalTaxonomy = {};
 
@@ -1533,17 +1536,14 @@ function buildQueueCardHTML(item) {
     `
     : '';
 
-  const hasCouponInfo = item.coupon || item.couponCandidates?.[0];
+  const hasCouponInfo = item.coupon?.verificationStatus === 'verified_product';
   const couponDetails = hasCouponInfo
     ? `
       <div class="queue-coupon">
         <span>Cupom: <strong>${escapeQueueHtml(
-          item.coupon?.code || item.couponCandidates?.[0]?.code || 'Ativo'
+          item.coupon.code
         )}</strong></span>
         ${item.coupon?.priceWithCoupon ? `<span>Com cupom: <strong>${escapeQueueHtml(item.coupon.priceWithCoupon)}</strong></span>` : ''}
-        <button type="button" class="btn-validate-coupon-inline" data-queue-action="validate-coupon">
-          🔍 Validar Cupom
-        </button>
       </div>
     `
     : '';
@@ -1628,6 +1628,12 @@ function buildQueueCardHTML(item) {
           <span>De ${escapeQueueHtml(item.originalPrice)}</span>
           <strong>Por ${escapeQueueHtml(item.currentPrice)}</strong>
         </div>
+        ${renderPromotionScore(item)}
+        <p class="queue-price-source">
+          ${item.priceVerification
+            ? `Preco confirmado pela extensao em ${new Date(item.priceVerification.verifiedAt).toLocaleString('pt-BR')}`
+            : 'Aguardando confirmacao de preco pela extensao'}
+        </p>
         ${couponDetails}
         <a
           class="queue-product-link"
@@ -1661,6 +1667,8 @@ function getQueueCardSignature(item) {
     reviewReason: item.reviewReason,
     reviewUpdatedStory: item.reviewUpdatedStory,
     coupon: item.coupon,
+    priceVerification: item.priceVerification,
+    promotionScore: item.promotionScore,
     validation: item.validation,
     affiliateProcessing: item.affiliateProcessing
   });
@@ -2463,7 +2471,7 @@ function getFilteredDealEntries(deals, platform) {
   const selectedDiscount = filters[3].value;
   const recurringOnly = filters[4]?.value === 'recurring';
 
-  return deals
+  const entries = deals
     .map((deal, index) => ({ deal, index }))
     .filter(({ deal }) => {
       if (isDealInActiveQueue(deal, platform)) return false;
@@ -2477,6 +2485,70 @@ function getFilteredDealEntries(deals, platform) {
         (!recurringOnly || deal.recurringPurchase === true)
       );
     });
+  const sortControl = platform === 'amazon'
+    ? elSortAmazon
+    : platform === 'shopee'
+      ? elSortShopee
+      : elSortML;
+  const value = deal => {
+    switch (sortControl?.value || 'score') {
+      case 'demand':
+        return deal.promotionScore?.components?.demand?.score ?? -1;
+      case 'commission_rate':
+        return deal.commission?.rate ?? -1;
+      case 'commission_amount':
+        return deal.commission?.estimatedAmount ?? -1;
+      case 'discount':
+        return Number(deal.discount) || 0;
+      case 'sales':
+        return Number(deal.salesVelocity ?? deal.salesCount) || 0;
+      case 'rating':
+        return Number(deal.rating) || 0;
+      default:
+        return deal.promotionScore?.value ?? -1;
+    }
+  };
+  return entries.sort((left, right) =>
+    value(right.deal) - value(left.deal) ||
+    (Number(right.deal.discount) || 0) - (Number(left.deal.discount) || 0)
+  );
+}
+
+function renderPromotionScore(deal) {
+  const score = deal.promotionScore;
+  if (!score) return '';
+  const components = score.components || {};
+  const rows = [
+    ['Chance de venda', components.demand],
+    ['Qualidade da oferta', components.offer],
+    ['Retorno de afiliado', components.commission],
+    ['Confianca do produto', components.trust]
+  ].map(([label, item]) => `
+    <span>${label}</span>
+    <strong>${item?.available ? `${item.score}/100` : 'Sem dados'}</strong>
+  `).join('');
+  const commission = deal.commission
+    ? `${deal.commission.rate}% · ${Number(deal.commission.estimatedAmount || 0)
+      .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} por venda`
+    : 'Comissao ainda nao informada';
+  return `
+    <details class="promotion-score ${score.eligible ? '' : 'is-ineligible'}">
+      <summary>
+        <span class="promotion-score-stars" aria-label="Nota ${score.stars} de 5 estrelas">
+          ★ ${score.stars.toFixed(1)}
+        </span>
+        <span>${escapeQueueHtml(score.label)}</span>
+        <small>${score.confidence}% de confianca</small>
+      </summary>
+      <div class="promotion-score-breakdown">
+        ${rows}
+        <p>${escapeQueueHtml(commission)}</p>
+        ${score.blockers?.length
+          ? `<p class="promotion-score-warning">${escapeQueueHtml(score.blockers.join(' · '))}</p>`
+          : ''}
+      </div>
+    </details>
+  `;
 }
 
 function updateDealPagination(platform, visibleCount, totalCount) {
@@ -2599,6 +2671,7 @@ function renderMLDeals(deals) {
           <span class="card-orig-price">De: ${deal.originalPrice}</span>
           <span class="card-promo-price">Por: ${deal.currentPrice}</span>
         </div>
+        ${renderPromotionScore(deal)}
         ${deal.recurringPurchase
           ? `<span class="recurring-badge">🔁 ${escapeQueueHtml(
             deal.recurringPurchaseCategory || 'Compra recorrente'
@@ -2736,6 +2809,7 @@ function renderAmazonDeals(deals) {
           <span class="card-orig-price">De: ${deal.originalPrice}</span>
           <span class="card-promo-price">Por: ${deal.currentPrice}</span>
         </div>
+        ${renderPromotionScore(deal)}
         <button
           type="button"
           class="btn-add-queue-card"
@@ -2843,6 +2917,7 @@ function renderShopeeDeals(deals) {
           <span class="card-orig-price">De: ${escapeQueueHtml(deal.originalPrice)}</span>
           <span class="card-promo-price">Por: ${escapeQueueHtml(deal.currentPrice)}</span>
         </div>
+        ${renderPromotionScore(deal)}
         ${deal.recurringPurchase
           ? `<span class="recurring-badge">🔁 ${escapeQueueHtml(
             deal.recurringPurchaseCategory || 'Compra recorrente'
@@ -2908,15 +2983,21 @@ function renderCoupons(coupons) {
     const codeText = (coupon.code || '').toLowerCase();
     const matchesSearch = !searchText || codeText.includes(searchText) || rulesText.includes(searchText);
 
-    const isConfirmed = coupon.verificationStatus === 'manually_confirmed';
-    const matchesStatus = !selectedStatus || (selectedStatus === 'confirmed' ? isConfirmed : !isConfirmed);
+    const marketplace = coupon.marketplace || coupon.platform || 'mercado_livre';
+    const selectedMarketplace = activeCouponMarketplace === 'ml'
+      ? 'mercado_livre'
+      : activeCouponMarketplace;
+    const matchesMarketplace = activeCouponMarketplace === 'all' ||
+      marketplace === selectedMarketplace;
+    const status = coupon.status || coupon.verificationStatus || 'discovered';
+    const matchesStatus = !selectedStatus || status === selectedStatus;
 
     // Extrai % de desconto das regras
     const percentMatch = rulesText.match(/(\d+)\s*%/);
     const percent = percentMatch ? Number(percentMatch[1]) : 0;
     const matchesDiscount = !selectedMinDiscount || percent >= selectedMinDiscount;
 
-    return matchesSearch && matchesStatus && matchesDiscount;
+    return matchesMarketplace && matchesSearch && matchesStatus && matchesDiscount;
   });
 
   if (filteredCoupons.length === 0) {
@@ -2929,8 +3010,12 @@ function renderCoupons(coupons) {
   }
 
   // Agrupa em Verificados e Não Verificados
-  const verifiedCoupons = filteredCoupons.filter(c => c.verificationStatus === 'manually_confirmed');
-  const unverifiedCoupons = filteredCoupons.filter(c => c.verificationStatus !== 'manually_confirmed');
+  const verifiedCoupons = filteredCoupons.filter(c =>
+    c.verificationStatus === 'verified_product'
+  );
+  const unverifiedCoupons = filteredCoupons.filter(c =>
+    c.verificationStatus !== 'verified_product'
+  );
 
   const renderCouponGroup = (title, items, isVerifiedGroup) => {
     if (items.length === 0) return;
@@ -2942,15 +3027,20 @@ function renderCoupons(coupons) {
 
     items.forEach((coupon) => {
       // Seleciona ofertas do marketplace escolhido
-      const dealsToCompare = activeCouponMarketplace === 'amazon' ? allAmazonDeals : allMLDeals;
+      const couponMarketplace = coupon.marketplace || 'mercado_livre';
+      const dealsToCompare = couponMarketplace === 'amazon'
+        ? allAmazonDeals
+        : couponMarketplace === 'shopee'
+          ? allShopeeDeals
+          : allMLDeals;
       const compatibleDeals = findCompatibleDealsForCoupon(coupon, dealsToCompare);
       const compCount = compatibleDeals.length;
-      const isConfirmed = coupon.verificationStatus === 'manually_confirmed';
+      const isConfirmed = coupon.verificationStatus === 'verified_product';
       const checkedAt = parseBackendDate(coupon.lastCheckedAt);
       const confirmedAt = parseBackendDate(coupon.lastConfirmedAt);
       const verificationLabel = isConfirmed
-        ? `Confirmado manualmente${confirmedAt ? ` em ${confirmedAt.toLocaleString('pt-BR')}` : ''}`
-        : 'Não verificado no checkout';
+        ? `Confirmado no produto${confirmedAt ? ` em ${confirmedAt.toLocaleString('pt-BR')}` : ''}`
+        : 'Descoberto; a extensão ainda precisa confirmar no produto';
 
       const item = document.createElement('div');
       item.className = 'coupon-ticket';
@@ -2982,9 +3072,6 @@ function renderCoupons(coupons) {
         </div>
         <div class="coupon-actions">
           <button class="btn-copy" data-code="${coupon.code}">Copiar Código</button>
-          <button class="btn-confirm-coupon" data-code="${coupon.code}">
-            ${isConfirmed ? 'Confirmado ✓' : 'Confirmar após testar'}
-          </button>
         </div>
       `;
       
@@ -3015,16 +3102,9 @@ function renderCoupons(coupons) {
             <div class="mini-details">
               <span class="mini-title">${d.title}</span>
               <span class="mini-price">${d.currentPrice} (${d.discount}% OFF)</span>
-              <button class="btn-coupon-story-action" type="button">📸 Vincular e gerar Story</button>
             </div>
           `;
           
-          // Ação de vincular cupom e abrir modal de preview de Story
-          mini.querySelector('.btn-coupon-story-action').addEventListener('click', (e) => {
-            e.stopPropagation();
-            openCouponStoryModal(coupon, d);
-          });
-
           gridContainer.appendChild(mini);
         });
       };
@@ -3064,35 +3144,12 @@ function renderCoupons(coupons) {
         });
       });
 
-      const confirmBtn = item.querySelector('.btn-confirm-coupon');
-      confirmBtn.addEventListener('click', async () => {
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = 'Salvando...';
-        try {
-          const response = await fetch(
-            `/api/coupons/${encodeURIComponent(coupon.code)}/confirm`,
-            { method: 'POST' }
-          );
-          const result = await response.json();
-          if (!response.ok) {
-            throw new Error(result.error || 'Falha na confirmação');
-          }
-          Object.assign(coupon, result.coupon);
-          renderCoupons(coupons);
-          renderMLDeals(allMLDeals);
-        } catch (err) {
-          alert(`Não foi possível confirmar o cupom: ${err.message}`);
-          confirmBtn.disabled = false;
-          confirmBtn.textContent = 'Confirmar após testar';
-        }
-      });
-
       elGridCoupons.appendChild(item);
     });
   };
 
-  renderCouponGroup('⭐ Cupons Verificados', verifiedCoupons, true);
-  renderCouponGroup('🔍 Outros Cupons Disponíveis', unverifiedCoupons, false);
+  renderCouponGroup('Cupons confirmados no produto', verifiedCoupons, true);
+  renderCouponGroup('Cupons descobertos', unverifiedCoupons, false);
 }
 
 // Modal e Geração de Story com Cupom para Instagram
@@ -3101,25 +3158,16 @@ function openCouponStoryModal(coupon, deal) {
   const previewBody = document.getElementById('coupon-story-preview-body');
   if (!modal || !previewBody) return;
 
-  // Cálculo de Preço estimado com cupom
-  const originalPriceStr = deal.originalPrice || deal.currentPrice;
-  const currentPriceNum = parseFloat(deal.currentPrice.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.')) || 0;
-  
-  // Extrai % de desconto das regras
-  const percentMatch = (coupon.rules || '').match(/(\d+)\s*%/);
-  const percent = percentMatch ? Number(percentMatch[1]) : 15;
-  
-  const priceWithCouponNum = currentPriceNum * (1 - (percent / 100));
-  const priceWithCouponStr = `R$ ${priceWithCouponNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const savingsStr = `R$ ${(currentPriceNum - priceWithCouponNum).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (
+    coupon?.verificationStatus !== 'verified_product' ||
+    !coupon?.verifiedAt ||
+    !coupon?.priceWithCoupon
+  ) return;
 
-  const couponData = {
-    code: coupon.code,
-    rules: coupon.rules,
-    priceWithoutCoupon: deal.currentPrice,
-    priceWithCoupon: priceWithCouponStr,
-    savings: savingsStr
-  };
+  // Cálculo de Preço estimado com cupom
+  const priceWithCouponStr = coupon.priceWithCoupon;
+  const savingsStr = coupon.savings || '';
+  const couponData = { ...coupon };
 
   previewBody.innerHTML = `
     <div class="coupon-story-preview-card">
@@ -3145,7 +3193,7 @@ function openCouponStoryModal(coupon, deal) {
         </div>
         <div class="coupon-price-row">
           <span>Economia extra do cupom:</span>
-          <strong style="color: #ffe600;">${savingsStr} (${percent}% OFF)</strong>
+          <strong style="color: #ffe600;">${savingsStr}</strong>
         </div>
       </div>
       <button id="btn-generate-coupon-story-action" class="btn-cta" type="button" style="margin-top: 10px;">
@@ -3201,6 +3249,11 @@ function openCouponStoryModal(coupon, deal) {
 function findCompatibleDealsForCoupon(coupon, deals) {
   if (!coupon || !coupon.rules || !deals) return [];
   const rulesText = coupon.rules.toLowerCase();
+  if (
+    /produtos? selecionad/.test(rulesText) &&
+    !Array.isArray(coupon.eligibleProductIds) &&
+    !Array.isArray(coupon.productIds)
+  ) return [];
   
   let minPrice = 0;
   const priceMatch = rulesText.match(/(?:r\$\s*|acima de\s+|partir de\s+|mínimas de\s+)([0-9.,]+)/i);
@@ -3703,42 +3756,54 @@ function init() {
   elFilterNameML.addEventListener('input', applyMLFilters);
   elFilterDiscountML.addEventListener('change', applyMLFilters);
   elFilterRecurringML.addEventListener('change', applyMLFilters);
+  elSortML?.addEventListener('change', applyMLFilters);
 
   // Filters Amazon listeners
   elFilterNameAmazon.addEventListener('input', applyAmazonFilters);
   elFilterDiscountAmazon.addEventListener('change', applyAmazonFilters);
+  elSortAmazon?.addEventListener('change', applyAmazonFilters);
 
   // Filters Shopee listeners
   elFilterNameShopee.addEventListener('input', applyShopeeFilters);
   elFilterDiscountShopee.addEventListener('change', applyShopeeFilters);
   elFilterRecurringShopee.addEventListener('change', applyShopeeFilters);
+  elSortShopee?.addEventListener('change', applyShopeeFilters);
 
   // Coupon Filters listeners
   const btnCouponAll = document.getElementById('btn-coupon-tab-all');
   const btnCouponML = document.getElementById('btn-coupon-tab-ml');
   const btnCouponAmazon = document.getElementById('btn-coupon-tab-amazon');
+  const btnCouponShopee = document.getElementById('btn-coupon-tab-shopee');
   const iptFilterCoupons = document.getElementById('ipt-filter-coupons');
   const selFilterCouponStatus = document.getElementById('sel-filter-coupon-status');
   const selFilterCouponDiscount = document.getElementById('sel-filter-coupon-discount');
 
-  if (btnCouponAll && btnCouponML && btnCouponAmazon) {
+  if (btnCouponAll && btnCouponML && btnCouponAmazon && btnCouponShopee) {
     btnCouponAll.addEventListener('click', () => {
       activeCouponMarketplace = 'all';
-      [btnCouponAll, btnCouponML, btnCouponAmazon].forEach(b => b.classList.remove('active'));
+      [btnCouponAll, btnCouponML, btnCouponAmazon, btnCouponShopee].forEach(b => b.classList.remove('active'));
       btnCouponAll.classList.add('active');
       renderCoupons(allCoupons);
     });
     btnCouponML.addEventListener('click', () => {
       activeCouponMarketplace = 'ml';
-      [btnCouponAll, btnCouponML, btnCouponAmazon].forEach(b => b.classList.remove('active'));
+      [btnCouponAll, btnCouponML, btnCouponAmazon, btnCouponShopee].forEach(b => b.classList.remove('active'));
       btnCouponML.classList.add('active');
       renderCoupons(allCoupons);
     });
     btnCouponAmazon.addEventListener('click', () => {
       activeCouponMarketplace = 'amazon';
-      [btnCouponAll, btnCouponML, btnCouponAmazon].forEach(b => b.classList.remove('active'));
+      [btnCouponAll, btnCouponML, btnCouponAmazon, btnCouponShopee].forEach(b => b.classList.remove('active'));
       btnCouponAmazon.classList.add('active');
       if (!amazonDealsLoaded) fetchAmazonDeals().then(() => renderCoupons(allCoupons));
+      else renderCoupons(allCoupons);
+    });
+    btnCouponShopee.addEventListener('click', () => {
+      activeCouponMarketplace = 'shopee';
+      [btnCouponAll, btnCouponML, btnCouponAmazon, btnCouponShopee]
+        .forEach(button => button.classList.remove('active'));
+      btnCouponShopee.classList.add('active');
+      if (!shopeeDealsLoaded) fetchShopeeDeals().then(() => renderCoupons(allCoupons));
       else renderCoupons(allCoupons);
     });
   }
@@ -3979,26 +4044,6 @@ document.addEventListener('click', async (event) => {
           : data.item.reviewReason,
         type: data.ready ? 'success' : 'error'
       });
-      return;
-    }
-
-    if (action === 'validate-coupon') {
-      const response = await fetch('/api/coupons/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deal: {
-            title: item.title,
-            currentPrice: item.currentPrice,
-            originalPrice: item.originalPrice
-          },
-          couponCode: item.coupon?.code || item.couponCandidates?.[0]?.code
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erro ao validar cupom.');
-      setQueueFeedback(data.message, data.valid ? 'success' : 'error');
-      alert(data.message);
       return;
     }
 

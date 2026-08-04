@@ -3,7 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { saveJsonAtomic } = require('./json_store.js');
 
-const QUEUE_VERSION = 2;
+const QUEUE_VERSION = 3;
 
 const STATUSES = Object.freeze({
   AWAITING_AFFILIATE: 'awaiting_affiliate',
@@ -67,6 +67,22 @@ function emptyQueue() {
   };
 }
 
+function normalizePriceVerification(value) {
+  if (!value || typeof value !== 'object') return null;
+  const regularPrice = priceToCents(value.regularPrice) / 100;
+  const finalPrice = priceToCents(value.finalPrice || value.regularPrice) / 100;
+  if (!regularPrice || !finalPrice || !value.verifiedAt) return null;
+  return {
+    regularPrice,
+    finalPrice,
+    source: String(value.source || 'extension'),
+    verifiedAt: String(value.verifiedAt),
+    productId: value.productId || null,
+    sellerId: value.sellerId || null,
+    variationId: value.variationId || null
+  };
+}
+
 function normalizeQueue(queue) {
   return {
     version: QUEUE_VERSION,
@@ -74,7 +90,8 @@ function normalizeQueue(queue) {
     items: Array.isArray(queue?.items)
       ? queue.items.map(item => ({
         ...item,
-        affiliateProcessing: normalizeAffiliateProcessing(item)
+        affiliateProcessing: normalizeAffiliateProcessing(item),
+        priceVerification: normalizePriceVerification(item.priceVerification)
       }))
       : []
   };
@@ -163,8 +180,11 @@ function normalizeHttpsUrl(rawValue, fieldName) {
 function validateAffiliateLink(rawValue, platform = 'mercado_livre') {
   const parsed = normalizeHttpsUrl(rawValue, 'Link afiliado');
   if (platform === 'amazon') {
-    if (!parsed.hostname.toLowerCase().includes('amazon.com.br')) {
+    if (!['amazon.com.br', 'www.amazon.com.br'].includes(parsed.hostname.toLowerCase())) {
       throw new Error('Use um link valido da Amazon Brasil.');
+    }
+    if (!parsed.searchParams.get('tag')) {
+      throw new Error('O link da Amazon precisa conter a tag de afiliado.');
     }
     return parsed.toString();
   }
@@ -230,7 +250,7 @@ function enqueueOffer(queue, input, now = new Date()) {
   
   // Se for Amazon, já é afiliado automaticamente com a tag
   const isAmazon = platform === 'amazon';
-  const status = isAmazon ? STATUSES.READY : STATUSES.AWAITING_AFFILIATE;
+  const status = STATUSES.AWAITING_AFFILIATE;
   const affiliateLink = isAmazon ? productLink : null;
 
   const item = {
@@ -243,20 +263,22 @@ function enqueueOffer(queue, input, now = new Date()) {
     currentPrice: String(input.currentPrice || ''),
     discount: Number(input.discount) || 0,
     image: String(input.image || ''),
+    rating: Number(input.rating) || null,
+    salesCount: Number(input.salesCount) || null,
+    salesInfo: String(input.salesInfo || ''),
+    commission: input.commission || null,
+    promotionScore: input.promotionScore || null,
     productLink,
     storyFile: String(input.storyFile || ''),
     affiliateLink,
     coupon: input.coupon || null,
-    affiliateProcessing: isAmazon ? {
-      ...emptyAffiliateProcessing(),
-      state: AFFILIATE_PROCESSING_STATES.COMPLETED,
-      completedAt: timestamp
-    } : emptyAffiliateProcessing(),
+    priceVerification: null,
+    affiliateProcessing: emptyAffiliateProcessing(),
     reviewReason: null,
     reviewUpdatedStory: false,
     createdAt: timestamp,
     updatedAt: timestamp,
-    readyAt: isAmazon ? timestamp : null,
+    readyAt: null,
     publishedAt: null
   };
   normalized.items.unshift(item);
@@ -282,6 +304,7 @@ function setAffiliateLink(
   item.reviewReason = options.reviewReason || null;
   item.reviewUpdatedStory = options.reviewUpdatedStory === true;
   item.latestPrice = options.latestPrice || null;
+  item.priceVerification = normalizePriceVerification(options.priceVerification);
   if (item.reviewReason) {
     item.status = STATUSES.NEEDS_REVIEW;
     item.readyAt = null;
@@ -469,6 +492,7 @@ function updateItemStatus(queue, itemId, nextStatus, now = new Date()) {
     item.status = STATUSES.READY;
     item.reviewReason = null;
     item.reviewUpdatedStory = false;
+    if (item.latestPrice) item.currentPrice = item.latestPrice;
     item.latestPrice = null;
     item.readyAt = now.toISOString();
   } else {

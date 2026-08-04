@@ -167,10 +167,13 @@ async function scrapeLiveCoupons() {
         if (code && code.length >= 4) {
           scraped.push({
             code,
+            marketplace: 'mercado_livre',
             rules: decodeHtmlEntities(rules).substring(0, 150),
             maxLimit,
             source: 'cuponomia',
+            status: 'discovered',
             verificationStatus: 'unverified',
+            expiresAt: null,
             lastCheckedAt: checkedAt,
             lastConfirmedAt: null
           });

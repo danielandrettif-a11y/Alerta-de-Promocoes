@@ -56,6 +56,10 @@ The normalized deals must keep the common dashboard fields: `title`, `link`,
 `image`, `rating`, `salesInfo`, `discount`, `originalPrice`, `currentPrice`,
 `isFreeShipping`, `dealType` and `timeLeft`.
 
+When present in the official feed, also preserve `salesCount`,
+`commissionRate` and `commissionCheckedAt`. Missing commission and sales data
+remain unknown; do not infer them.
+
 ## Affiliate boundary
 
 - `product_link` is the product URL used by the queue and extension.
