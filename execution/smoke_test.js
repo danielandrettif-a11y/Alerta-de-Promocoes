@@ -10,6 +10,7 @@ const PORT = Number(process.env.SMOKE_TEST_PORT || 3199);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const OUTPUT_DIR = path.join(ROOT, '.tmp', 'smoke-test');
 const SCREENSHOT_PATH = path.join(OUTPUT_DIR, 'dashboard.png');
+const QUEUE_SCREENSHOT_PATH = path.join(OUTPUT_DIR, 'queue.png');
 const WORKER_TOKEN = 'smoke-worker-token';
 
 function findBrowserPath() {
@@ -398,6 +399,10 @@ async function run() {
       '#grid-shopee',
       '#grid-coupons',
       '#grid-queue',
+      '#queue-status-filter',
+      '#queue-platform-filter',
+      '#queue-sort-filter',
+      '#queue-sync-status',
       '#btn-clear-discarded'
     ];
     for (const selector of requiredSelectors) {
@@ -591,6 +596,29 @@ async function run() {
       throw new Error('As duas modalidades de pesquisa não estão claras');
     }
 
+    await page.click('#btn-tab-queue');
+    await page.waitForSelector('#grid-queue .queue-card', { timeout: 5000 });
+    const queueFilters = await page.evaluate(() => {
+      const toolbar = document.querySelector('.queue-toolbar');
+      return {
+        fieldCount: document.querySelectorAll('.queue-filter-field').length,
+        defaultStatus: document.querySelector('#queue-status-filter').value,
+        defaultSort: document.querySelector('#queue-sort-filter').value,
+        fits: toolbar.scrollWidth <= toolbar.clientWidth
+      };
+    });
+    if (
+      queueFilters.fieldCount !== 3 ||
+      queueFilters.defaultStatus !== 'active' ||
+      queueFilters.defaultSort !== 'priority' ||
+      !queueFilters.fits
+    ) {
+      throw new Error(`Filtros da fila invalidos: ${JSON.stringify(queueFilters)}`);
+    }
+    await page.screenshot({ path: QUEUE_SCREENSHOT_PATH, fullPage: true });
+    await page.click('#btn-tab-products');
+    await page.$eval('#btn-tab-ml', button => button.click());
+
     await page.setViewport({ width: 390, height: 844 });
     await page.$eval('#btn-toggle-filters-ml', button => button.click());
     await page.evaluate(() => {
@@ -677,7 +705,13 @@ async function run() {
         cardWidth: card.getBoundingClientRect().width,
         contentFits: content.scrollWidth <= content.clientWidth,
         previewHeight: preview.getBoundingClientRect().height,
-        buttonHeight: button.getBoundingClientRect().height
+        buttonHeight: button.getBoundingClientRect().height,
+        toolbarFits:
+          document.querySelector('.queue-toolbar').scrollWidth <=
+          document.querySelector('.queue-toolbar').clientWidth,
+        filterColumns: getComputedStyle(
+          document.querySelector('.queue-filters')
+        ).gridTemplateColumns.split(' ').length
       };
     });
     if (
@@ -685,7 +719,9 @@ async function run() {
       mobileQueue.cardWidth > 390 ||
       !mobileQueue.contentFits ||
       mobileQueue.previewHeight !== 190 ||
-      mobileQueue.buttonHeight < 44
+      mobileQueue.buttonHeight < 44 ||
+      !mobileQueue.toolbarFits ||
+      mobileQueue.filterColumns !== 1
     ) {
       throw new Error(`Fila mobile invalida: ${JSON.stringify(mobileQueue)}`);
     }
@@ -713,6 +749,7 @@ async function run() {
     console.log(`[smoke] Shopee: ${shopee.deals.length} ofertas`);
     console.log(`[smoke] Cupons: ${deals.coupons.length}`);
     console.log(`[smoke] Screenshot: ${SCREENSHOT_PATH}`);
+    console.log(`[smoke] Fila: ${QUEUE_SCREENSHOT_PATH}`);
   } finally {
     if (browser) await browser.close();
     if (!server.killed) server.kill();

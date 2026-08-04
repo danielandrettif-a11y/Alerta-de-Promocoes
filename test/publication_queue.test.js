@@ -19,7 +19,8 @@ const {
   summarizeQueue,
   removeDiscardedItems,
   removeItems,
-  validateQueueItems
+  validateQueueItems,
+  priceToCents
 } = require('../execution/publication_queue.js');
 
 function sampleOffer(overrides = {}) {
@@ -156,6 +157,7 @@ test('persiste a fila e resume os estados', () => {
   saveQueue(queuePath, created.queue);
 
   const loaded = loadQueue(queuePath);
+  assert.equal(loaded.revision, 1);
   assert.equal(loaded.items.length, 1);
   assert.deepEqual(summarizeQueue(loaded), {
     total: 1,
@@ -171,6 +173,25 @@ test('persiste a fila e resume os estados', () => {
       .some(file => file.endsWith('.tmp')),
     false
   );
+
+  const stale = structuredClone(loaded);
+  loaded.items[0].title = 'Fone atualizado';
+  saveQueue(queuePath, loaded);
+  assert.equal(loadQueue(queuePath).revision, 2);
+  assert.equal(fs.existsSync(`${queuePath}.bak`), true);
+  assert.throws(
+    () => saveQueue(queuePath, stale),
+    /alterada por outra operacao/
+  );
+});
+
+test('arquivo de fila invalido falha sem ser substituido por fila vazia', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'publication-queue-'));
+  const queuePath = path.join(directory, 'queue.json');
+  fs.writeFileSync(queuePath, '{json incompleto', 'utf8');
+
+  assert.throws(() => loadQueue(queuePath), /fila persistida esta invalida/i);
+  assert.equal(fs.readFileSync(queuePath, 'utf8'), '{json incompleto');
 });
 
 test('aceita produto e link afiliado oficiais da Shopee', () => {
@@ -228,7 +249,7 @@ test('remove somente os itens selecionados da fila', () => {
   assert.throws(() => removeItems(second.queue, []), /Selecione/);
 });
 
-test('valida a fila removendo oferta encerrada e separando Story alterado', () => {
+test('valida a fila preservando ausente e separando Story alterado', () => {
   const first = enqueueOffer(emptyQueue(), sampleOffer());
   const second = enqueueOffer(
     first.queue,
@@ -248,7 +269,13 @@ test('valida a fila removendo oferta encerrada e separando Story alterado', () =
   ]]);
   const result = validateQueueItems(ready.queue, catalog);
 
-  assert.deepEqual(result.removed.map(item => item.id), ['queue-2']);
+  assert.deepEqual(result.removed, []);
+  assert.deepEqual(result.missing.map(item => item.id), ['queue-2']);
+  assert.equal(result.queue.items.some(item => item.id === 'queue-2'), true);
+  assert.equal(
+    result.queue.items.find(item => item.id === 'queue-2').validation.state,
+    'not_found'
+  );
   assert.equal(result.updated.length, 1);
   assert.equal(result.updated[0].item.status, STATUSES.NEEDS_REVIEW);
   assert.equal(result.updated[0].item.reviewUpdatedStory, true);
@@ -273,7 +300,24 @@ test('validação parcial preserva plataforma sem catálogo', () => {
 
   assert.equal(result.removed.length, 0);
   assert.equal(result.queue.items.some(item => item.id === 'queue-amazon'), true);
-  assert.equal(result.unchanged, 2);
+  assert.equal(result.unchanged, 1);
+  assert.equal(result.skipped, 1);
+});
+
+test('compara formatos equivalentes de preco em centavos', () => {
+  assert.equal(priceToCents('R$ 1.234,56'), 123456);
+  assert.equal(priceToCents('1234.56'), 123456);
+  assert.equal(priceToCents(1234.56), 123456);
+
+  const created = enqueueOffer(emptyQueue(), sampleOffer({
+    currentPrice: 'R$ 199,90'
+  }));
+  const catalog = new Map([['deal_123', sampleOffer({
+    currentPrice: '199.90'
+  })]]);
+  const result = validateQueueItems(created.queue, catalog);
+  assert.equal(result.updated.length, 0);
+  assert.equal(result.unchanged, 1);
 });
 
 test('reserva exclusiva expira e volta para outro dispositivo', () => {

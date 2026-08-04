@@ -14,7 +14,7 @@
   <!-- CSS Link -->
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css?v=35">
+  <link rel="stylesheet" href="style.css?v=36">
 </head>
 <body>
 
@@ -606,23 +606,45 @@
           </label>
         </div>
         <div class="queue-filters">
-          <label for="queue-status-filter">Mostrar</label>
-          <select id="queue-status-filter" class="select-premium">
-            <option value="active">Pendentes e prontas</option>
-            <option value="all">Todas</option>
-            <option value="awaiting_affiliate">Aguardando link</option>
-            <option value="ready">Prontas</option>
-            <option value="needs_review">Precisam de revisão</option>
-            <option value="published">Publicadas</option>
-            <option value="discarded">Descartadas</option>
-          </select>
-          <label for="queue-platform-filter">Loja</label>
-          <select id="queue-platform-filter" class="select-premium">
-            <option value="all">Todas</option>
-            <option value="mercado_livre">Mercado Livre</option>
-            <option value="amazon">Amazon</option>
-            <option value="shopee">Shopee</option>
-          </select>
+          <div class="queue-filter-field">
+            <label for="queue-status-filter">Status</label>
+            <select id="queue-status-filter" class="select-premium">
+              <option value="active" data-label="Fila ativa">Fila ativa</option>
+              <optgroup label="Ação necessária">
+                <option value="processing_error" data-label="Falha no link">Falha no link</option>
+                <option value="needs_review" data-label="Revisão necessária">Revisão necessária</option>
+                <option value="awaiting_affiliate" data-label="Aguardando link">Aguardando link</option>
+                <option value="processing" data-label="Processando link">Processando link</option>
+              </optgroup>
+              <optgroup label="Prontas">
+                <option value="ready" data-label="Prontas para publicar">Prontas para publicar</option>
+              </optgroup>
+              <optgroup label="Histórico">
+                <option value="published" data-label="Publicadas">Publicadas</option>
+                <option value="discarded" data-label="Descartadas">Descartadas</option>
+                <option value="expired" data-label="Expiradas">Expiradas</option>
+              </optgroup>
+              <option value="all" data-label="Todas as ofertas">Todas as ofertas</option>
+            </select>
+          </div>
+          <div class="queue-filter-field">
+            <label for="queue-platform-filter">Marketplace</label>
+            <select id="queue-platform-filter" class="select-premium">
+              <option value="all">Todas as lojas</option>
+              <option value="mercado_livre">Mercado Livre</option>
+              <option value="shopee">Shopee</option>
+              <option value="amazon">Amazon</option>
+            </select>
+          </div>
+          <div class="queue-filter-field">
+            <label for="queue-sort-filter">Ordenar por</label>
+            <select id="queue-sort-filter" class="select-premium">
+              <option value="priority">Prioridade</option>
+              <option value="newest">Mais recentes</option>
+              <option value="oldest">Mais antigas</option>
+              <option value="discount">Maior desconto</option>
+            </select>
+          </div>
         </div>
         <div class="queue-toolbar-actions">
           <button id="btn-validate-queue" class="queue-action-validate"
@@ -639,7 +661,12 @@
         </div>
       </div>
 
-      <p id="queue-feedback" class="queue-feedback" aria-live="polite"></p>
+      <div class="queue-messages">
+        <p id="queue-feedback" class="queue-feedback" aria-live="polite"></p>
+        <p id="queue-sync-status" class="queue-sync-status" aria-live="polite">
+          Aguardando sincronização.
+        </p>
+      </div>
       <div id="grid-queue" class="queue-grid">
         <div class="empty-state">
           <p>Nenhuma oferta na fila.</p>
@@ -707,6 +734,6 @@
   </footer>
 
   <!-- JS Script -->
-  <script src="app.js?v=35"></script>
+  <script src="app.js?v=36"></script>
 </body>
 </html>

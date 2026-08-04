@@ -16,13 +16,17 @@ test('fila usa uma selecao e valida em segundo plano', () => {
   assert.match(server, /\/api\/publication-queue\/validation/);
   assert.match(server, /res\.status\(202\)\.json\(queueValidationJob\)/);
   assert.match(server, /execFile\(/);
-  assert.match(server, /await Promise\.all\(platforms\.map\(refreshCatalog\)\)/);
+  assert.match(server, /await Promise\.allSettled/);
   assert.match(app, /job\.phase === 'updating_catalogs'/);
   assert.match(server, /applyObservedQueuePrices\(queue, catalog\)/);
   assert.match(server, /item\.status = PUBLICATION_QUEUE_STATUSES\.READY/);
   assert.match(server, /Cache-Control', 'no-store'/);
   assert.match(server, /\?v=\$\{encodeURIComponent\(item\.updatedAt/);
   assert.match(app, /fetch\(item\.storyUrl, \{ cache: 'no-store' \}\)/);
+  assert.match(app, /publication-queue\/validation\/.*encodeURIComponent\(job\.id\)/s);
+  assert.match(app, /publicationQueueRequestSequence/);
+  assert.match(page, /id="queue-sort-filter"/);
+  assert.match(page, /<optgroup label="A.o necess.ria">/);
 });
 
 test('prepara Mercado Livre e Shopee juntos com progresso cancelavel', () => {

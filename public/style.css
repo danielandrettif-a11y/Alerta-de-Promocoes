@@ -3095,7 +3095,6 @@ select:focus-visible {
 }
 
 .queue-selection-actions,
-.queue-filters,
 .queue-toolbar-actions {
   display: flex;
   align-items: center;
@@ -3109,7 +3108,24 @@ select:focus-visible {
 }
 
 .queue-filters {
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.queue-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.queue-filter-field label {
+  padding-inline-start: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .queue-toolbar-actions {
@@ -3117,7 +3133,8 @@ select:focus-visible {
 }
 
 .queue-toolbar select {
-  min-width: 175px;
+  width: 100%;
+  min-width: 0;
 }
 
 .queue-toolbar-actions button {
@@ -3211,11 +3228,35 @@ select:focus-visible {
   opacity: 0.6;
 }
 
-.queue-feedback {
-  min-height: 24px;
+.queue-messages {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
   margin: 8px 0;
+}
+
+.queue-feedback,
+.queue-sync-status {
+  margin: 0;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.queue-feedback {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.queue-sync-status {
+  flex: 0 0 auto;
+  font-size: 12px;
+  text-align: end;
+}
+
+.queue-sync-status.is-error {
+  color: #ff8c98;
 }
 
 .queue-feedback.is-success {
@@ -3453,6 +3494,17 @@ select:focus-visible {
   line-height: 1.45;
 }
 
+.queue-validation-message {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 190, 107, 0.25);
+  border-radius: 12px;
+  color: #ffd38f;
+  background: rgba(255, 190, 107, 0.08);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .queue-secondary-actions {
   margin-top: 14px;
 }
@@ -3641,13 +3693,12 @@ select:focus-visible {
   }
 
   .queue-selection-actions,
-  .queue-filters,
   .queue-toolbar-actions {
     flex-wrap: wrap;
   }
 
   .queue-filters {
-    justify-content: flex-start;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .queue-toolbar-actions {
@@ -3659,9 +3710,14 @@ select:focus-visible {
     width: 100%;
   }
 
-  .queue-toolbar select {
-    flex: 1 1 190px;
-    width: 100%;
+  .queue-messages {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .queue-sync-status {
+    text-align: start;
   }
 
   .queue-card {

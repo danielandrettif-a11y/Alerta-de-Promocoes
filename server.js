@@ -67,6 +67,7 @@ const {
   saveBatches,
   isSafeBatchId
 } = require('./execution/publication_batches.js');
+const { loadJson, saveJsonAtomic } = require('./execution/json_store.js');
 
 // puppeteer-core 25+ is ESM-only. Keep the rest of this server in CommonJS and
 // load Puppeteer lazily only when the price-comparison endpoint needs it.
@@ -116,7 +117,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   maxAge: '1h',
   setHeaders(res, filePath) {
-    if (path.extname(filePath) === '.html') {
+    if (['.html', '.js', '.css'].includes(path.extname(filePath))) {
       res.setHeader('Cache-Control', 'no-cache');
     }
   }
@@ -141,6 +142,10 @@ const publicationQueuePath = path.join(
   APP_RUNTIME_DIR,
   'publication_queue.json'
 );
+const publicationQueueValidationPath = path.join(
+  APP_RUNTIME_DIR,
+  'publication_queue_validation.json'
+);
 const publicationQueueAssetsPath = path.join(
   APP_RUNTIME_DIR,
   'publication_queue_assets'
@@ -161,7 +166,7 @@ const publicationQueueEnabled =
   readEnv().PUBLICATION_QUEUE_ENABLED !== 'false';
 const localAffiliateWorkerEnabled =
   readEnv().LOCAL_AFFILIATE_WORKER_ENABLED === 'true';
-let queueValidationJob = {
+let queueValidationJob = loadJson(publicationQueueValidationPath, {
   state: 'idle',
   phase: null,
   platforms: [],
@@ -170,7 +175,17 @@ let queueValidationJob = {
   total: 0,
   result: null,
   error: null
-};
+});
+if (queueValidationJob.state === 'running') {
+  queueValidationJob = {
+    ...queueValidationJob,
+    state: 'failed',
+    phase: 'interrupted',
+    completedAt: new Date().toISOString(),
+    error: 'A validacao foi interrompida por uma reinicializacao do servidor.'
+  };
+  saveJsonAtomic(publicationQueueValidationPath, queueValidationJob);
+}
 let queueGenerationJob = {
   state: 'idle',
   processed: 0,
@@ -185,6 +200,12 @@ const GROUP_NAME =
   readEnv().WHATSAPP_GROUP_ID ||
   readEnv().WHATSAPP_GROUP_NAME ||
   'Alerta de Descontos';
+
+function updateQueueValidationJob(patch) {
+  queueValidationJob = { ...queueValidationJob, ...patch };
+  saveJsonAtomic(publicationQueueValidationPath, queueValidationJob);
+  return queueValidationJob;
+}
 
 // Liveness do processo + estado informativo das integracoes.
 // A rota sempre responde 200 enquanto o painel estiver vivo para evitar
@@ -713,7 +734,7 @@ function generateStoryBuffer(deal, coupons) {
     APP_RUNTIME_DIR,
     `queue-validation-${runId}.json`
   );
-  const confirmedCoupon = deal.coupon || deal.couponCandidates?.[0] || null;
+  const confirmedCoupon = deal.coupon || null;
   fs.mkdirSync(storiesDir, { recursive: true });
   fs.writeFileSync(selectionPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
@@ -757,46 +778,140 @@ function generateStoryBuffer(deal, coupons) {
 async function runPublicationQueueValidation(jobId) {
   if (queueValidationJob.id !== jobId) return;
   try {
-    const queue = loadPublicationQueue(publicationQueuePath);
-    const platforms = getQueueValidationPlatforms(queue);
-    queueValidationJob.platforms = platforms;
-    queueValidationJob.skippedPlatforms = getActiveQueuePlatforms(queue)
+    const startedQueue = loadPublicationQueue(publicationQueuePath);
+    const platforms = getQueueValidationPlatforms(startedQueue);
+    const skippedPlatforms = getActiveQueuePlatforms(startedQueue)
       .filter(platform => !platforms.includes(platform));
-    await Promise.all(platforms.map(refreshCatalog));
-    queueValidationJob.phase = 'validating';
-    const catalog = loadQueueValidationCatalog(platforms);
-    const validationPlatforms = new Set(platforms);
-    applyObservedQueuePrices(queue, catalog);
+    updateQueueValidationJob({ platforms, skippedPlatforms });
+
+    const refreshResults = await Promise.allSettled(
+      platforms.map(platform => refreshCatalog(platform))
+    );
+    const successfulPlatforms = [];
+    const platformResults = refreshResults.map((result, index) => {
+      const platform = platforms[index];
+      if (result.status === 'fulfilled') {
+        successfulPlatforms.push(platform);
+        return { platform, state: 'updated', error: null };
+      }
+      return {
+        platform,
+        state: 'failed',
+        error: result.reason?.message || 'Falha ao atualizar o catalogo.'
+      };
+    });
+    if (platforms.length > 0 && successfulPlatforms.length === 0) {
+      throw new Error(
+        platformResults.map(result => `${result.platform}: ${result.error}`)
+          .join(' | ')
+      );
+    }
+
+    const catalog = new Map();
+    const validatedPlatforms = [];
+    for (const platform of successfulPlatforms) {
+      try {
+        const platformCatalog = loadQueueValidationCatalog([platform]);
+        if (platformCatalog.size === 0) {
+          throw new Error('O catalogo atualizado esta vazio.');
+        }
+        for (const [dealId, deal] of platformCatalog) {
+          catalog.set(dealId, deal);
+        }
+        validatedPlatforms.push(platform);
+      } catch (error) {
+        const status = platformResults.find(item => item.platform === platform);
+        if (status) {
+          status.state = 'failed';
+          status.error = error.message;
+        }
+      }
+    }
+    if (platforms.length > 0 && validatedPlatforms.length === 0) {
+      throw new Error(
+        platformResults.map(result => `${result.platform}: ${result.error}`)
+          .join(' | ')
+      );
+    }
+    updateQueueValidationJob({
+      phase: 'validating',
+      platformResults
+    });
+    const validationPlatforms = new Set(validatedPlatforms);
+    applyObservedQueuePrices(startedQueue, catalog);
     const coupons = loadAvailableDeals().coupons;
     const preview = validateQueueItems(
-      loadPublicationQueue(publicationQueuePath),
+      startedQueue,
       catalog,
       { platforms: validationPlatforms }
     );
-    queueValidationJob.total = preview.updated.length;
-    queueValidationJob.phase = preview.updated.length > 0
-      ? 'updating_stories'
-      : 'validating';
-    const storiesByDealId = new Map();
+    updateQueueValidationJob({
+      total: preview.updated.length,
+      phase: preview.updated.length > 0
+        ? 'updating_stories'
+        : 'validating'
+    });
+    const storiesByItemId = new Map();
+    const itemResults = [];
 
     for (const { item, current } of preview.updated) {
-      storiesByDealId.set(
-        item.dealId,
-        await generateStoryBuffer(current, coupons)
-      );
-      queueValidationJob.processed += 1;
+      try {
+        storiesByItemId.set(
+          item.id,
+          await generateStoryBuffer(current, coupons)
+        );
+        itemResults.push({
+          itemId: item.id,
+          title: item.title,
+          state: 'story_generated',
+          error: null
+        });
+      } catch (error) {
+        itemResults.push({
+          itemId: item.id,
+          title: item.title,
+          state: 'failed',
+          error: error.message
+        });
+      }
+      updateQueueValidationJob({
+        processed: queueValidationJob.processed + 1,
+        itemResults
+      });
     }
 
+    const latestQueue = loadPublicationQueue(publicationQueuePath);
+    applyObservedQueuePrices(latestQueue, catalog);
     const result = validateQueueItems(
-      loadPublicationQueue(publicationQueuePath),
+      latestQueue,
       catalog,
       { platforms: validationPlatforms }
     );
     fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
-    for (const { item, current } of result.updated) {
-      let story = storiesByDealId.get(item.dealId);
-      if (!story) story = await generateStoryBuffer(current, coupons);
-      if (!item.storyFile) item.storyFile = `${item.id}.jpg`;
+    const previousStories = [];
+    let updatedCount = 0;
+    let failedCount = 0;
+    for (const { item } of result.updated) {
+      const story = storiesByItemId.get(item.id);
+      if (!story) {
+        const source = latestQueue.items.find(entry => entry.id === item.id);
+        const index = result.queue.items.findIndex(entry => entry.id === item.id);
+        if (source && index >= 0) {
+          result.queue.items[index] = {
+            ...source,
+            updatedAt: new Date().toISOString(),
+            validation: {
+              state: 'story_failed',
+              checkedAt: new Date().toISOString(),
+              message: 'O preco mudou, mas nao foi possivel atualizar o Story.'
+            }
+          };
+        }
+        failedCount += 1;
+        continue;
+      }
+      if (item.storyFile) previousStories.push({ storyFile: item.storyFile });
+      item.storyFile = `${item.id}-${Date.now()}-${updatedCount}.jpg`;
       fs.writeFileSync(
         path.join(publicationQueueAssetsPath, item.storyFile),
         story
@@ -808,45 +923,45 @@ async function runPublicationQueueValidation(jobId) {
         item.latestPrice = null;
         item.readyAt = new Date().toISOString();
       }
+      item.validation = {
+        state: 'verified',
+        checkedAt: new Date().toISOString(),
+        message: null
+      };
+      updatedCount += 1;
     }
-    for (const item of result.queue.items) {
-      if (
-        item.status === PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW &&
-        item.reviewUpdatedStory === true &&
-        !item.latestPrice &&
-        item.storyFile &&
-        fs.existsSync(path.join(publicationQueueAssetsPath, item.storyFile))
-      ) {
-        item.status = PUBLICATION_QUEUE_STATUSES.READY;
-        item.reviewReason = null;
-        item.reviewUpdatedStory = false;
-        item.readyAt = new Date().toISOString();
-      }
-    }
-    savePublicationQueue(publicationQueuePath, result.queue);
-    removePublicationQueueAssets(result.removed);
-    queueValidationJob = {
-      ...queueValidationJob,
+    const savedQueue = savePublicationQueue(publicationQueuePath, result.queue);
+    const currentStoryFiles = new Set(
+      savedQueue.items.map(item => item.storyFile).filter(Boolean)
+    );
+    removePublicationQueueAssets(
+      previousStories.filter(item => !currentStoryFiles.has(item.storyFile))
+    );
+    updateQueueValidationJob({
       state: 'completed',
       phase: 'completed',
       completedAt: new Date().toISOString(),
       result: {
-        removed: result.removed.length,
-        updated: result.updated.length,
+        removed: 0,
+        updated: updatedCount,
+        failed: failedCount,
+        missing: result.missing.length,
         unchanged: result.unchanged,
-        skippedPlatforms: queueValidationJob.skippedPlatforms,
-        summary: summarizeQueue(result.queue)
+        skipped: result.skipped,
+        skippedPlatforms,
+        platformResults,
+        itemResults,
+        summary: summarizeQueue(savedQueue)
       }
-    };
+    });
   } catch (error) {
     console.error(`Erro ao validar fila: ${error.message}`);
-    queueValidationJob = {
-      ...queueValidationJob,
+    updateQueueValidationJob({
       state: 'failed',
       phase: 'failed',
       completedAt: new Date().toISOString(),
       error: error.message
-    };
+    });
   }
 }
 
@@ -947,12 +1062,23 @@ app.get('/api/publication-queue', (req, res) => {
       summary: summarizeQueue({ items: [] })
     });
   }
-  const queue = loadPublicationQueue(publicationQueuePath);
-  res.json({
-    enabled: true,
-    items: queue.items.map(queueItemForResponse),
-    summary: summarizeQueue(queue)
-  });
+  try {
+    const queue = loadPublicationQueue(publicationQueuePath);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      enabled: true,
+      revision: queue.revision,
+      syncedAt: new Date().toISOString(),
+      items: queue.items.map(queueItemForResponse),
+      summary: summarizeQueue(queue)
+    });
+  } catch (error) {
+    console.error(`Erro ao ler fila de publicacao: ${error.message}`);
+    res.status(500).json({
+      error: error.message,
+      code: error.code || 'QUEUE_READ_FAILED'
+    });
+  }
 });
 
 function normalizePublicationPlatform(value, link = '') {
@@ -1068,7 +1194,7 @@ function runPublicationQueueGeneration(jobId, entries) {
     const fileName = generatedFile(rank);
     if (!fileName) return;
     try {
-      const currentQueue = loadPublicationQueue(publicationQueuePath);
+      let currentQueue = loadPublicationQueue(publicationQueuePath);
       let queueItem = (currentQueue.items || []).find(it => it.id === item.queueItemId) ||
         (currentQueue.items || []).find(it => it.dealId === generateDealId({ ...item.deal, platform: item.platform }));
 
@@ -1081,6 +1207,7 @@ function runPublicationQueueGeneration(jobId, entries) {
             item.queueItemId
           )
         );
+        currentQueue = result.queue;
         queueItem = result.item;
       }
 
@@ -1392,7 +1519,7 @@ app.post(
   requirePublicationQueue,
   (req, res) => {
     if (queueValidationJob.state !== 'running') {
-      queueValidationJob = {
+      updateQueueValidationJob({
         id: crypto.randomUUID(),
         state: 'running',
         phase: 'updating_catalogs',
@@ -1403,13 +1530,16 @@ app.post(
         processed: 0,
         total: 0,
         result: null,
-        error: null
-      };
+        error: null,
+        platformResults: [],
+        itemResults: []
+      });
       setImmediate(() =>
         runPublicationQueueValidation(queueValidationJob.id)
       );
+      return res.status(202).json(queueValidationJob);
     }
-    res.status(202).json(queueValidationJob);
+    res.status(202).json({ ...queueValidationJob, reused: true });
   }
 );
 
@@ -1417,6 +1547,18 @@ app.get(
   '/api/publication-queue/validation',
   requirePublicationQueue,
   (req, res) => res.json(queueValidationJob)
+);
+
+app.get(
+  '/api/publication-queue/validation/:jobId',
+  requirePublicationQueue,
+  (req, res) => {
+    if (queueValidationJob.id !== req.params.jobId) {
+      return res.status(404).json({ error: 'Validacao nao encontrada.' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(queueValidationJob);
+  }
 );
 
 app.get('/api/local-affiliate-worker/status', (req, res) => {
@@ -1427,10 +1569,11 @@ app.get('/api/local-affiliate-worker/status', (req, res) => {
       queue: getAffiliateProcessingSummary({ items: [] })
     });
   }
-  const queue = releaseExpiredClaims(
-    loadPublicationQueue(publicationQueuePath)
-  );
-  savePublicationQueue(publicationQueuePath, queue);
+  const persistedQueue = loadPublicationQueue(publicationQueuePath);
+  const queue = releaseExpiredClaims(persistedQueue);
+  if (JSON.stringify(queue.items) !== JSON.stringify(persistedQueue.items)) {
+    savePublicationQueue(publicationQueuePath, queue);
+  }
   const workers = listWorkerStatus(loadWorkers(localAffiliateWorkersPath));
   res.json({
     enabled: true,
@@ -1520,6 +1663,37 @@ app.post(
   async (req, res) => {
     try {
       const deviceId = String(req.body?.deviceId || '').trim();
+      const initialQueue = loadPublicationQueue(publicationQueuePath);
+      const initialItem = initialQueue.items.find(
+        entry => entry.id === req.params.itemId
+      );
+      if (!initialItem) {
+        return res.status(404).json({ error: 'Item da fila nao encontrado.' });
+      }
+      assertClaimOwner(initialItem, deviceId, new Date());
+      const preview = applyAffiliateLinkToQueue(
+        initialQueue,
+        initialItem,
+        req.body?.affiliateLink,
+        req.body?.observedPrice
+      );
+      const verifiedCoupon = normalizeVerifiedCoupon(
+        preview.item,
+        req.body?.coupon,
+        loadAvailableDeals().coupons
+      );
+      let generatedStory = null;
+      if (verifiedCoupon) {
+        const currentDeal = findCurrentDealForQueueItem(preview.item) || {};
+        generatedStory = await generateStoryBuffer({
+          ...currentDeal,
+          ...preview.item,
+          currentPrice:
+            preview.item.latestPrice || preview.item.currentPrice,
+          coupon: verifiedCoupon
+        }, []);
+      }
+
       const queue = loadPublicationQueue(publicationQueuePath);
       const item = queue.items.find(entry => entry.id === req.params.itemId);
       if (!item) {
@@ -1532,33 +1706,23 @@ app.post(
         req.body?.affiliateLink,
         req.body?.observedPrice
       );
-      result.item.coupon = normalizeVerifiedCoupon(
-        result.item,
-        req.body?.coupon,
-        loadAvailableDeals().coupons
-      );
-      if (result.item.coupon) {
-        const currentDeal = findCurrentDealForQueueItem(result.item) || {};
-        const story = await generateStoryBuffer({
-          ...currentDeal,
-          ...result.item,
-          currentPrice:
-            result.item.latestPrice || result.item.currentPrice,
-          coupon: result.item.coupon
-        }, []);
-        if (!result.item.storyFile) {
-          result.item.storyFile = `${result.item.id}.jpg`;
-        }
+      result.item.coupon = verifiedCoupon;
+      const previousStory = result.item.storyFile;
+      if (generatedStory) {
+        result.item.storyFile = `${result.item.id}-${Date.now()}.jpg`;
         fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
         fs.writeFileSync(
           path.join(publicationQueueAssetsPath, result.item.storyFile),
-          story
+          generatedStory
         );
         result.item.reviewUpdatedStory =
           result.item.status === PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW;
         result.item.updatedAt = new Date().toISOString();
       }
       savePublicationQueue(publicationQueuePath, result.queue);
+      if (generatedStory && previousStory && previousStory !== result.item.storyFile) {
+        removePublicationQueueAssets([{ storyFile: previousStory }]);
+      }
 
       const workers = loadWorkers(localAffiliateWorkersPath);
       const current = workers.workers.find(worker =>

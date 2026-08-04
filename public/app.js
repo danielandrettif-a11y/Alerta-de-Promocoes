@@ -15,6 +15,9 @@ let freshnessShopee = null;
 let publicationQueueEnabled = false;
 let publicationQueueItems = [];
 let publicationQueueSummary = {};
+let publicationQueueRevision = -1;
+let publicationQueueRequestSequence = 0;
+let publicationQueueAbortController = null;
 let publicationBatches = [];
 const selectedQueueItemIds = new Set();
 let publicationHistorySignature = '';
@@ -153,7 +156,9 @@ const elQueueTabCount = document.getElementById('queue-tab-count');
 const elQueueStatusFilter = document.getElementById('queue-status-filter');
 const elQueuePlatformFilter =
   document.getElementById('queue-platform-filter');
+const elQueueSortFilter = document.getElementById('queue-sort-filter');
 const elQueueFeedback = document.getElementById('queue-feedback');
+const elQueueSyncStatus = document.getElementById('queue-sync-status');
 const elBtnRefreshQueue = document.getElementById('btn-refresh-queue');
 const elBtnClearDiscarded = document.getElementById('btn-clear-discarded');
 const elBtnValidateQueue = document.getElementById('btn-validate-queue');
@@ -1271,11 +1276,27 @@ function setQueueFeedback(message, type = 'info') {
   elQueueFeedback.classList.toggle('is-success', type === 'success');
 }
 
+function setQueueSyncStatus(message, type = 'info') {
+  elQueueSyncStatus.textContent = message || '';
+  elQueueSyncStatus.classList.toggle('is-error', type === 'error');
+}
+
+function getQueueOperationalStatus(item) {
+  const processingState = item.affiliateProcessing?.state;
+  if (processingState === 'error') return 'processing_error';
+  if (processingState === 'claimed') return 'processing';
+  return item.status;
+}
+
 function getQueueStatusMeta(status) {
   const metadata = {
     processing: {
       label: 'Processando',
       className: 'is-processing'
+    },
+    processing_error: {
+      label: 'Falha no link',
+      className: 'is-review'
     },
     awaiting_affiliate: {
       label: 'Aguardando link afiliado',
@@ -1325,6 +1346,28 @@ function updateQueueSummary() {
   elQueueTabCount.textContent = activeCount;
   elHomeQueueCount.textContent =
     `${activeCount} ${activeCount === 1 ? 'item' : 'itens'}`;
+  updateQueueFilterCounts();
+}
+
+function updateQueueFilterCounts() {
+  const counts = new Map();
+  for (const item of publicationQueueItems) {
+    const status = getQueueOperationalStatus(item);
+    counts.set(status, (counts.get(status) || 0) + 1);
+  }
+  const activeCount = publicationQueueItems.filter(item => [
+    'awaiting_affiliate',
+    'ready',
+    'needs_review'
+  ].includes(item.status)).length;
+  for (const option of elQueueStatusFilter.querySelectorAll('option[data-label]')) {
+    const count = option.value === 'all'
+      ? publicationQueueItems.length
+      : option.value === 'active'
+        ? activeCount
+        : counts.get(option.value) || 0;
+    option.textContent = `${option.dataset.label} (${count})`;
+  }
 }
 
 function queueItemMatchesFilter(item) {
@@ -1341,7 +1384,41 @@ function queueItemMatchesFilter(item) {
       'needs_review'
     ].includes(item.status);
   }
-  return item.status === filter;
+  return getQueueOperationalStatus(item) === filter;
+}
+
+function sortQueueItems(items) {
+  const sorted = [...items];
+  const dateValue = item => new Date(
+    item.updatedAt || item.createdAt || 0
+  ).getTime() || 0;
+  const priority = {
+    processing_error: 0,
+    needs_review: 1,
+    awaiting_affiliate: 2,
+    processing: 3,
+    ready: 4,
+    published: 5,
+    discarded: 6,
+    expired: 7
+  };
+  if (elQueueSortFilter.value === 'newest') {
+    return sorted.sort((a, b) => dateValue(b) - dateValue(a));
+  }
+  if (elQueueSortFilter.value === 'oldest') {
+    return sorted.sort((a, b) => dateValue(a) - dateValue(b));
+  }
+  if (elQueueSortFilter.value === 'discount') {
+    return sorted.sort((a, b) =>
+      (Number(b.discount) || 0) - (Number(a.discount) || 0) ||
+      dateValue(b) - dateValue(a)
+    );
+  }
+  return sorted.sort((a, b) =>
+    (priority[getQueueOperationalStatus(a)] ?? 99) -
+      (priority[getQueueOperationalStatus(b)] ?? 99) ||
+    dateValue(b) - dateValue(a)
+  );
 }
 
 function updateQueueSelection(visibleItems = null) {
@@ -1373,10 +1450,7 @@ function getQueueMarketplaceBrand(platform, link = '') {
 }
 
 function buildQueueCardHTML(item) {
-  const processingState = item.affiliateProcessing?.state;
-  const status = getQueueStatusMeta(
-    processingState === 'claimed' ? 'processing' : item.status
-  );
+  const status = getQueueStatusMeta(getQueueOperationalStatus(item));
   const marketplace = getQueueMarketplaceBrand(item.platform, item.productLink);
   const affiliateForm = ['awaiting_affiliate', 'needs_review']
     .includes(item.status)
@@ -1446,6 +1520,15 @@ function buildQueueCardHTML(item) {
           item.affiliateProcessing.lastError.code || 'Erro'
         )}:</strong>
         ${escapeQueueHtml(item.affiliateProcessing.lastError.message || '')}
+      </div>
+    `
+    : '';
+
+  const validationMessage = item.validation?.message
+    ? `
+      <div class="queue-validation-message">
+        <strong>Última validação:</strong>
+        ${escapeQueueHtml(item.validation.message)}
       </div>
     `
     : '';
@@ -1556,6 +1639,7 @@ function buildQueueCardHTML(item) {
         </a>
         ${reviewMessage}
         ${processingMessage}
+        ${validationMessage}
         ${affiliateForm}
         ${readyActions}
         ${completedDetails}
@@ -1565,9 +1649,28 @@ function buildQueueCardHTML(item) {
   };
 }
 
+function getQueueCardSignature(item) {
+  return JSON.stringify({
+    status: item.status,
+    updatedAt: item.updatedAt,
+    affiliateLink: item.affiliateLink,
+    storyUrl: item.storyUrl,
+    originalPrice: item.originalPrice,
+    currentPrice: item.currentPrice,
+    discount: item.discount,
+    reviewReason: item.reviewReason,
+    reviewUpdatedStory: item.reviewUpdatedStory,
+    coupon: item.coupon,
+    validation: item.validation,
+    affiliateProcessing: item.affiliateProcessing
+  });
+}
+
 function renderPublicationQueue() {
   updateQueueSummary();
-  const visibleItems = publicationQueueItems.filter(queueItemMatchesFilter);
+  const visibleItems = sortQueueItems(
+    publicationQueueItems.filter(queueItemMatchesFilter)
+  );
 
   if (visibleItems.length === 0) {
     elGridQueue.replaceChildren();
@@ -1604,19 +1707,17 @@ function renderPublicationQueue() {
   for (const item of visibleItems) {
     let card = existingCards.get(item.id);
     const built = buildQueueCardHTML(item);
+    const renderSignature = getQueueCardSignature(item);
 
     if (card) {
-      const prevStatus = card.dataset.status;
-      const prevAffiliateLink = card.dataset.affiliateLink;
-      const prevStoryFile = card.dataset.storyFile;
-
-      if (prevStatus !== item.status || prevAffiliateLink !== (item.affiliateLink || '') || prevStoryFile !== (item.storyFile || '')) {
+      if (card.dataset.renderSignature !== renderSignature) {
         card.className = `queue-card ${built.status.className} platform-${item.platform} ${
           selectedQueueItemIds.has(item.id) ? 'selected' : ''
         }`;
         card.dataset.status = item.status;
         card.dataset.affiliateLink = item.affiliateLink || '';
         card.dataset.storyFile = item.storyFile || '';
+        card.dataset.renderSignature = renderSignature;
         card.innerHTML = built.innerHTML;
         const queueCheckbox = card.querySelector('[data-queue-select]');
         if (queueCheckbox) {
@@ -1654,6 +1755,7 @@ function renderPublicationQueue() {
       card.dataset.status = item.status;
       card.dataset.affiliateLink = item.affiliateLink || '';
       card.dataset.storyFile = item.storyFile || '';
+      card.dataset.renderSignature = renderSignature;
       card.innerHTML = built.innerHTML;
       const queueCheckbox = card.querySelector('[data-queue-select]');
       if (queueCheckbox) {
@@ -1677,10 +1779,21 @@ function renderPublicationQueue() {
 }
 
 async function fetchPublicationQueue(options = {}) {
+  const requestId = ++publicationQueueRequestSequence;
+  publicationQueueAbortController?.abort();
+  const controller = new AbortController();
+  publicationQueueAbortController = controller;
+  if (!options.silent) setQueueSyncStatus('Sincronizando fila...');
   try {
-    const wasEnabled = publicationQueueEnabled;
-    const response = await fetch('/api/publication-queue');
-    const data = await response.json();
+    const response = await fetch('/api/publication-queue', {
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    const data = await readApiJson(response, 'carregar a fila');
+    if (!response.ok) {
+      throw new Error(data.error || `Falha HTTP ${response.status}.`);
+    }
+    if (requestId !== publicationQueueRequestSequence) return false;
     publicationQueueEnabled = data.enabled === true;
     elTabQueue.hidden = !publicationQueueEnabled;
     elBtnQueueML.hidden = !publicationQueueEnabled;
@@ -1693,31 +1806,59 @@ async function fetchPublicationQueue(options = {}) {
     if (!publicationQueueEnabled) {
       publicationQueueItems = [];
       publicationQueueSummary = {};
-      return;
+      publicationQueueRevision = -1;
+      setQueueSyncStatus('Fila desativada.');
+      return true;
     }
 
-    publicationQueueItems = data.items || [];
-    publicationQueueSummary = data.summary || {};
+    if (!Array.isArray(data.items)) {
+      throw new Error('O servidor retornou uma fila em formato inválido.');
+    }
+    const nextRevision = Number.isFinite(Number(data.revision))
+      ? Number(data.revision)
+      : requestId;
+    const changed = nextRevision !== publicationQueueRevision;
+    if (changed) {
+      publicationQueueItems = data.items;
+      publicationQueueSummary = data.summary || {};
+      publicationQueueRevision = nextRevision;
+    }
     const shouldRender =
       options.render === true ||
       (
         options.render !== false &&
         elPanelQueue.classList.contains('active')
       );
-    if (shouldRender) {
+    if (shouldRender && (changed || options.render === true)) {
       renderPublicationQueue();
-    } else {
+    } else if (changed) {
       updateQueueSummary();
     }
-    if (allMLDeals.length) renderMLDeals(allMLDeals);
-    if (allAmazonDeals.length) renderAmazonDeals(allAmazonDeals);
-    if (allShopeeDeals.length) renderShopeeDeals(allShopeeDeals);
+    const syncedAt = new Date(data.syncedAt || Date.now());
+    setQueueSyncStatus(
+      `Atualizada às ${syncedAt.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })}`
+    );
     if (options.feedback) {
       setQueueFeedback(options.feedback, options.type || 'success');
     }
+    return true;
   } catch (err) {
+    if (err.name === 'AbortError') return false;
+    if (requestId !== publicationQueueRequestSequence) return false;
     console.error('Erro ao carregar fila de publicação:', err);
-    setQueueFeedback('Não foi possível carregar a fila.', 'error');
+    setQueueSyncStatus(
+      `Fila desatualizada: ${err.message} Tente atualizar novamente.`,
+      'error'
+    );
+    return false;
+  } finally {
+    if (publicationQueueAbortController === controller) {
+      publicationQueueAbortController = null;
+    }
   }
 }
 
@@ -1764,6 +1905,8 @@ async function validateEntireQueue() {
       throw new Error(data.error || 'Não foi possível validar a fila.');
     }
     let job = data;
+    if (!job.id) throw new Error('O servidor não identificou a validação.');
+    let pollFailures = 0;
     while (job.state === 'running') {
       const progress = job.total > 0
         ? ` (${job.processed}/${job.total} Stories)`
@@ -1784,12 +1927,22 @@ async function validateEntireQueue() {
         setQueueFeedback('Verificando preços e promoções...');
       }
       await new Promise(resolve => setTimeout(resolve, 1500));
-      const statusResponse = await fetch(
-        '/api/publication-queue/validation'
-      );
-      job = await readApiJson(statusResponse, 'consultar a validação');
-      if (!statusResponse.ok) {
-        throw new Error(job.error || 'Falha ao consultar a validação.');
+      try {
+        const statusResponse = await fetch(
+          '/api/publication-queue/validation/' + encodeURIComponent(job.id),
+          { cache: 'no-store' }
+        );
+        job = await readApiJson(statusResponse, 'consultar a validação');
+        if (!statusResponse.ok) {
+          throw new Error(job.error || 'Falha ao consultar a validação.');
+        }
+        pollFailures = 0;
+      } catch (error) {
+        pollFailures += 1;
+        if (pollFailures >= 3) throw error;
+        setQueueFeedback(
+          `Conexão instável. Retomando a validação (${pollFailures}/3)...`
+        );
       }
     }
     if (job.state === 'failed') {
@@ -1802,13 +1955,22 @@ async function validateEntireQueue() {
     const skippedMessage = skippedStores
       ? ` ${skippedStores} não foi alterada porque ainda não possui validação de catálogo.`
       : '';
+    const platformFailures = (result.platformResults || [])
+      .filter(platform => platform.state === 'failed')
+      .map(platform => getQueueMarketplaceBrand(platform.platform).name)
+      .join(' e ');
+    const failureMessage = platformFailures
+      ? ` Não foi possível atualizar ${platformFailures}; seus itens foram preservados.`
+      : '';
+    const hasFailures = (result.failed || 0) > 0 || Boolean(platformFailures);
     await fetchPublicationQueue({
       render: true,
       feedback:
-        `${result.removed || 0} removida(s), ` +
-        `${result.updated || 0} atualizada(s) e ` +
-        `${result.unchanged || 0} sem alterações.${skippedMessage}`,
-      type: 'success'
+        `${result.updated || 0} atualizada(s), ` +
+        `${result.unchanged || 0} sem alterações, ` +
+        `${result.missing || 0} não localizada(s) e ` +
+        `${result.failed || 0} com falha.${skippedMessage}${failureMessage}`,
+      type: hasFailures ? 'error' : 'success'
     });
   } catch (error) {
     setQueueFeedback(error.message, 'error');
@@ -3469,6 +3631,7 @@ function init() {
   };
   elQueueStatusFilter.addEventListener('change', applyQueueFilter);
   elQueuePlatformFilter.addEventListener('change', applyQueueFilter);
+  elQueueSortFilter.addEventListener('change', renderPublicationQueue);
   elChkSelectVisibleQueue.addEventListener('change', () => {
     const visible = publicationQueueItems.filter(queueItemMatchesFilter);
     visible.forEach(item => {
@@ -3640,10 +3803,13 @@ function init() {
       publicationQueueEnabled &&
       elPanelQueue.classList.contains('active')
     ) {
-      fetchPublicationQueue({
-        render: !document.activeElement?.classList
-          .contains('queue-affiliate-input')
-      });
+      if (!publicationQueueAbortController) {
+        fetchPublicationQueue({
+          render: !document.activeElement?.classList
+            .contains('queue-affiliate-input'),
+          silent: true
+        });
+      }
       fetchLocalWorkerStatus();
     }
   }, 3000);

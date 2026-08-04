@@ -3,6 +3,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { saveJsonAtomic } = require('./json_store.js');
 
+const QUEUE_VERSION = 2;
+
 const STATUSES = Object.freeze({
   AWAITING_AFFILIATE: 'awaiting_affiliate',
   READY: 'ready',
@@ -59,14 +61,16 @@ function normalizeAffiliateProcessing(item) {
 
 function emptyQueue() {
   return {
-    version: 1,
+    version: QUEUE_VERSION,
+    revision: 0,
     items: []
   };
 }
 
 function normalizeQueue(queue) {
   return {
-    version: 1,
+    version: QUEUE_VERSION,
+    revision: Math.max(0, Number(queue?.revision) || 0),
     items: Array.isArray(queue?.items)
       ? queue.items.map(item => ({
         ...item,
@@ -79,16 +83,61 @@ function normalizeQueue(queue) {
 function loadQueue(queuePath) {
   if (!fs.existsSync(queuePath)) return emptyQueue();
   try {
-    return normalizeQueue(
-      JSON.parse(fs.readFileSync(queuePath, 'utf-8'))
+    const parsed = JSON.parse(fs.readFileSync(queuePath, 'utf-8'));
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.items)) {
+      throw new Error('estrutura sem uma lista de itens');
+    }
+    return normalizeQueue(parsed);
+  } catch (error) {
+    const queueError = new Error(
+      `A fila persistida esta invalida e foi preservada sem alteracoes: ${error.message}`
     );
-  } catch {
-    return emptyQueue();
+    queueError.code = 'QUEUE_READ_FAILED';
+    throw queueError;
   }
 }
 
 function saveQueue(queuePath, queue) {
-  saveJsonAtomic(queuePath, normalizeQueue(queue));
+  const normalized = normalizeQueue(queue);
+  const persisted = fs.existsSync(queuePath)
+    ? loadQueue(queuePath)
+    : emptyQueue();
+  if (normalized.revision !== persisted.revision) {
+    const conflict = new Error(
+      'A fila foi alterada por outra operacao. Atualize os dados e tente novamente.'
+    );
+    conflict.code = 'QUEUE_REVISION_CONFLICT';
+    throw conflict;
+  }
+  if (fs.existsSync(queuePath)) {
+    fs.copyFileSync(queuePath, `${queuePath}.bak`);
+  }
+  normalized.revision = persisted.revision + 1;
+  saveJsonAtomic(queuePath, normalized);
+  queue.version = normalized.version;
+  queue.revision = normalized.revision;
+  return normalized;
+}
+
+function priceToCents(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.round(value * 100) : 0;
+  }
+  let normalized = String(value || '')
+    .replace(/[^\d,.-]/g, '')
+    .trim();
+  if (!normalized) return 0;
+  const comma = normalized.lastIndexOf(',');
+  const dot = normalized.lastIndexOf('.');
+  const decimalIndex = Math.max(comma, dot);
+  if (decimalIndex >= 0 && normalized.length - decimalIndex - 1 === 2) {
+    normalized = `${normalized.slice(0, decimalIndex).replace(/[.,]/g, '')}.` +
+      normalized.slice(decimalIndex + 1);
+  } else {
+    normalized = normalized.replace(/[.,]/g, '');
+  }
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
 }
 
 function normalizeHttpsUrl(rawValue, fieldName) {
@@ -476,40 +525,62 @@ function removeItems(queue, itemIds) {
   return { queue: normalized, removed };
 }
 
-function validateQueueItems(queue, catalog, { platforms = null } = {}) {
+function validateQueueItems(
+  queue,
+  catalog,
+  { platforms = null, now = new Date() } = {}
+) {
   const normalized = normalizeQueue(queue);
   const activeStatuses = new Set([
     STATUSES.AWAITING_AFFILIATE,
     STATUSES.READY,
     STATUSES.NEEDS_REVIEW
   ]);
-  const removed = [];
+  const missing = [];
   const updated = [];
   let unchanged = 0;
-  normalized.items = normalized.items.filter(item => {
-    if (!activeStatuses.has(item.status)) return true;
+  let skipped = 0;
+  for (const item of normalized.items) {
+    if (!activeStatuses.has(item.status)) continue;
     if (platforms && !platforms.has(item.platform)) {
-      unchanged += 1;
-      return true;
+      skipped += 1;
+      continue;
     }
     const current = catalog.get(item.dealId);
     if (!current) {
-      removed.push(item);
-      return false;
+      item.validation = {
+        state: 'not_found',
+        checkedAt: now.toISOString(),
+        message:
+          'Produto nao localizado no catalogo atual. A oferta foi preservada.'
+      };
+      item.updatedAt = now.toISOString();
+      missing.push(item);
+      continue;
     }
     if (
-      String(current.currentPrice) === String(item.currentPrice) &&
+      priceToCents(current.currentPrice) === priceToCents(item.currentPrice) &&
       Number(current.discount) === Number(item.discount)
     ) {
+      item.validation = {
+        state: 'verified',
+        checkedAt: now.toISOString(),
+        message: null
+      };
       unchanged += 1;
-      return true;
+      continue;
     }
     item.originalPrice = String(current.originalPrice || item.originalPrice);
     item.currentPrice = String(current.currentPrice || item.currentPrice);
     item.discount = Number(current.discount) || 0;
     item.image = String(current.image || item.image);
     item.coupon = null;
-    item.updatedAt = new Date().toISOString();
+    item.updatedAt = now.toISOString();
+    item.validation = {
+      state: 'changed',
+      checkedAt: now.toISOString(),
+      message: 'Preco ou desconto alterado no catalogo.'
+    };
     if (item.affiliateLink) {
       item.status = STATUSES.NEEDS_REVIEW;
       item.reviewReason =
@@ -518,9 +589,15 @@ function validateQueueItems(queue, catalog, { platforms = null } = {}) {
       item.readyAt = null;
     }
     updated.push({ item, current });
-    return true;
-  });
-  return { queue: normalized, removed, updated, unchanged };
+  }
+  return {
+    queue: normalized,
+    removed: [],
+    missing,
+    updated,
+    unchanged,
+    skipped
+  };
 }
 
 module.exports = {
@@ -542,5 +619,6 @@ module.exports = {
   summarizeQueue,
   removeDiscardedItems,
   removeItems,
-  validateQueueItems
+  validateQueueItems,
+  priceToCents
 };
