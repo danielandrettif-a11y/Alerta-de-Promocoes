@@ -12,8 +12,9 @@ test('renderiza ofertas em lotes de 20 sem blur por card', () => {
   const cardRule = css.match(/\.deal-card\s*\{([^}]+)\}/)?.[1] || '';
 
   assert.match(app, /const DEALS_PAGE_SIZE = 20/);
-  assert.match(app, /filteredEntries\.slice\(0, visibleMLLimit\)/);
-  assert.match(app, /filteredEntries\.slice\(0, visibleAmazonLimit\)/);
+  assert.match(app, /visibleLimit: visibleMLLimit/);
+  assert.match(app, /visibleLimit: visibleAmazonLimit/);
+  assert.match(app, /filteredEntries\.slice\(0, visibleLimit\)/);
   assert.match(html, /id="btn-load-more-ml"/);
   assert.match(html, /id="btn-load-more-amazon"/);
   assert.doesNotMatch(html, /id="btn-tab-amazon"[^>]*hidden/);

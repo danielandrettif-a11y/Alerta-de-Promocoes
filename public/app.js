@@ -2428,16 +2428,19 @@ async function preparePublicationBatch() {
 // Rendering Methods (Cards & UI)
 // ==========================================
 function applyMLFilters() {
+  visibleMLLimit = DEALS_PAGE_SIZE;
   renderMLDeals(allMLDeals);
   updateActiveFilterChip('ml');
 }
 
 function applyAmazonFilters() {
+  visibleAmazonLimit = DEALS_PAGE_SIZE;
   renderAmazonDeals(allAmazonDeals);
   updateActiveFilterChip('amazon');
 }
 
 function applyShopeeFilters() {
+  visibleShopeeLimit = DEALS_PAGE_SIZE;
   renderShopeeDeals(allShopeeDeals);
   updateActiveFilterChip('shopee');
 }
@@ -2565,347 +2568,173 @@ function updateDealPagination(platform, visibleCount, totalCount) {
   button.hidden = visibleCount >= totalCount;
 }
 
-function renderMLDeals(deals) {
-  elGridML.innerHTML = '';
-  
+function getDealRenderConfig(platform) {
+  if (platform === 'amazon') {
+    return {
+      grid: elGridAmazon,
+      pagination: elPaginationAmazon,
+      selected: selectedAmazonIndices,
+      visibleLimit: visibleAmazonLimit,
+      theme: 'amazon-theme',
+      sourceCta: 'Ver Produto na Amazon 🔗',
+      emptyMessage: 'Nenhuma oferta da Amazon carregada. Clique em "Atualizar Amazon".',
+      supportsPublished: true,
+      showCoupon: false,
+      showRecurring: false,
+      updateSelection: updateAmazonSelectionUI
+    };
+  }
+  if (platform === 'shopee') {
+    return {
+      grid: elGridShopee,
+      pagination: elPaginationShopee,
+      selected: selectedShopeeIndices,
+      visibleLimit: visibleShopeeLimit,
+      theme: 'shopee-theme',
+      sourceCta: 'Ver produto na Shopee 🔗',
+      emptyMessage: 'Nenhuma oferta da Shopee carregada.',
+      supportsPublished: false,
+      showCoupon: false,
+      showRecurring: true,
+      updateSelection: updateShopeeSelectionUI
+    };
+  }
+  return {
+    grid: elGridML,
+    pagination: elPaginationML,
+    selected: selectedMLIndices,
+    visibleLimit: visibleMLLimit,
+    theme: '',
+    sourceCta: 'Ver Produto no ML 🔗',
+    emptyMessage: 'Nenhuma oferta do Mercado Livre carregada. Clique em "Atualizar Mercado Livre".',
+    supportsPublished: true,
+    showCoupon: true,
+    showRecurring: true,
+    updateSelection: updateMLSelectionUI
+  };
+}
+
+function renderDeals(deals, platform) {
+  const config = getDealRenderConfig(platform);
+  const {
+    grid,
+    pagination,
+    selected,
+    visibleLimit,
+    theme,
+    sourceCta,
+    emptyMessage,
+    supportsPublished,
+    showCoupon,
+    showRecurring,
+    updateSelection
+  } = config;
+  grid.innerHTML = '';
+
   if (deals.length === 0) {
-    elPaginationML.hidden = true;
-    elGridML.innerHTML = `
+    pagination.hidden = true;
+    grid.innerHTML = `
       <div class="empty-state">
-        <p>Nenhuma oferta do Mercado Livre carregada. Clique em "Atualizar Mercado Livre".</p>
+        <p>${emptyMessage}</p>
       </div>
     `;
     return;
   }
 
-  const filteredEntries = getFilteredDealEntries(deals, 'ml');
+  const filteredEntries = getFilteredDealEntries(deals, platform);
   if (filteredEntries.length === 0) {
-    elPaginationML.hidden = true;
-    elGridML.innerHTML = `
+    pagination.hidden = true;
+    grid.innerHTML = `
       <div class="empty-state">
         <p>Nenhuma oferta corresponde aos filtros selecionados.</p>
       </div>
     `;
-    updateMLSelectionUI();
+    updateSelection();
     return;
   }
 
-  const visibleEntries = filteredEntries.slice(0, visibleMLLimit);
-  visibleEntries.forEach(({ deal, index }) => {
-    const isSelected = selectedMLIndices.has(index);
-    const isPublished = !!deal.publishedMsgId;
-    const wasRemoved = !!deal.removedFromWhatsAppAt;
+  const visibleEntries = filteredEntries.slice(0, visibleLimit);
+  for (const { deal, index } of visibleEntries) {
+    const isSelected = selected.has(index);
+    const isPublished = supportsPublished && Boolean(deal.publishedMsgId);
+    const wasRemoved = supportsPublished && Boolean(deal.removedFromWhatsAppAt);
+    const title = escapeQueueHtml(deal.title);
+    const link = escapeQueueHtml(deal.link);
+    const rating = Number(deal.rating);
     const card = document.createElement('article');
-    card.className = `deal-card ${isSelected ? 'selected' : ''} ${isPublished ? 'published-card' : ''}`;
+    card.className = [
+      'deal-card',
+      theme,
+      isSelected ? 'selected' : '',
+      isPublished ? 'published-card' : ''
+    ].filter(Boolean).join(' ');
     card.dataset.index = index;
-    
-    const displayTitle = deal.title;
-    const ratingText = deal.rating ? `⭐ ${deal.rating.toFixed(1)}` : 'Sem avaliação';
+    card.dataset.platform = platform;
 
-    let couponBadgeHtml = '';
-    const bestCoupon = deal.couponCandidates?.[0];
-    if (bestCoupon) {
-      couponBadgeHtml = `
-        <div class="deal-coupon-badge" title="${escapeQueueHtml(
-          bestCoupon.rules
-        )}">
+    const checkboxHtml = isPublished
+      ? `
+        <div class="card-checkbox published-tick" title="Já publicado hoje">
+          ✅
+        </div>
+      `
+      : `
+        <div class="card-checkbox">
+          <label class="checkbox-container">
+            <input type="checkbox" class="deal-chk" data-index="${index}"
+              ${isSelected ? 'checked' : ''}>
+            <span class="checkmark"></span>
+          </label>
+        </div>
+      `;
+
+    let publicationHtml = '';
+    if (wasRemoved) {
+      publicationHtml = `
+        <div class="card-published-area">
+          <span class="published-badge removed-by-reaction">
+            Encerrado por reação ${escapeQueueHtml(deal.removalReaction || '✅')}
+          </span>
+        </div>
+      `;
+    } else if (isPublished) {
+      publicationHtml = `
+        <div class="card-published-area">
+          <span class="published-badge">WhatsApp Ativo ✅</span>
+          <button type="button" class="btn-delete-wpp"
+            data-msg-id="${escapeQueueHtml(deal.publishedMsgId)}"
+            data-platform="${platform}" data-index="${index}">
+            🗑️ Excluir do WhatsApp
+          </button>
+        </div>
+      `;
+    }
+
+    const bestCoupon = showCoupon ? deal.couponCandidates?.[0] : null;
+    const couponHtml = bestCoupon
+      ? `
+        <div class="deal-coupon-badge" title="${escapeQueueHtml(bestCoupon.rules)}">
           <span class="coupon-icon">🎟️</span>
           Candidato: <strong>${escapeQueueHtml(bestCoupon.code)}</strong>
           <small>A extensão verificará no produto</small>
         </div>
-      `;
-    }
-
-    let checkboxHtml = '';
-    if (!isPublished) {
-      checkboxHtml = `
-        <div class="card-checkbox">
-          <label class="checkbox-container">
-            <input type="checkbox" class="deal-chk" data-index="${index}" ${isSelected ? 'checked' : ''}>
-            <span class="checkmark"></span>
-          </label>
-        </div>
-      `;
-    } else {
-      checkboxHtml = `
-        <div class="card-checkbox published-tick" title="Já publicado hoje">
-          ✅
-        </div>
-      `;
-    }
-
-    let deleteBtnHtml = '';
-    if (wasRemoved) {
-      deleteBtnHtml = `
-        <div class="card-published-area">
-          <span class="published-badge removed-by-reaction">
-            Encerrado por reação ${deal.removalReaction || '✅'}
-          </span>
-        </div>
-      `;
-    } else if (isPublished) {
-      deleteBtnHtml = `
-        <div class="card-published-area">
-          <span class="published-badge">WhatsApp Ativo ✅</span>
-          <button type="button" class="btn-delete-wpp" data-msg-id="${deal.publishedMsgId}" data-platform="ml" data-index="${index}">
-            🗑️ Excluir do WhatsApp
-          </button>
-        </div>
-      `;
-    }
-    
-    card.innerHTML = `
-      ${checkboxHtml}
-      <div class="card-image-box">
-        <img class="card-image" src="${getDealImageUrl(deal.image)}" alt="${displayTitle}" loading="lazy" decoding="async" width="240" height="240">
-        <span class="card-discount-badge">${deal.discount}% OFF</span>
-      </div>
-      <div class="card-details">
-        <a href="${deal.link}" target="_blank" rel="noopener noreferrer" class="card-link-product">Ver Produto no ML 🔗</a>
-        <div class="card-meta">
-          <span class="card-rating">${ratingText}</span>
-          <span class="card-sales">${deal.salesInfo || ''}</span>
-        </div>
-        <h3 class="card-title" title="${displayTitle}">${displayTitle}</h3>
-        <div class="card-price-box">
-          <span class="card-orig-price">De: ${deal.originalPrice}</span>
-          <span class="card-promo-price">Por: ${deal.currentPrice}</span>
-        </div>
-        ${renderPromotionScore(deal)}
-        ${deal.recurringPurchase
-          ? `<span class="recurring-badge">🔁 ${escapeQueueHtml(
-            deal.recurringPurchaseCategory || 'Compra recorrente'
-          )}</span>`
-          : ''}
-        ${couponBadgeHtml}
-        <button
-          type="button"
-          class="btn-add-queue-card"
-          data-index="${index}"
-          ${publicationQueueEnabled ? '' : 'hidden'}
-        >
-          Preparar para Instagram
-        </button>
-        <div class="price-comparison-area">
-          <button type="button" class="btn-compare-buscape">
-            ${deal.comparison ? '↻ Atualizar Comparação' : '🔍 Comparar Preços'}
-          </button>
-          <div class="comparison-results ${deal.comparison ? '' : 'hidden'}">
-            ${deal.comparison ? renderPriceComparison(deal.comparison, displayTitle) : ''}
-          </div>
-        </div>
-        ${deleteBtnHtml}
-      </div>
-    `;
-    
-    card.addEventListener('click', (e) => {
-      if (isPublished) return;
-      if (e.target.closest('.checkbox-container') || e.target.closest('a') || e.target.closest('button')) return;
-      toggleMLSelectIndex(index);
-    });
-    
-    if (!isPublished) {
-      card.querySelector('.deal-chk').addEventListener('change', () => {
-        toggleMLSelectIndex(index);
-      });
-    }
-    
-    elGridML.appendChild(card);
-  });
-
-  updateDealPagination('ml', visibleEntries.length, filteredEntries.length);
-  updateMLSelectionUI();
-}
-
-function renderAmazonDeals(deals) {
-  elGridAmazon.innerHTML = '';
-  
-  if (deals.length === 0) {
-    elPaginationAmazon.hidden = true;
-    elGridAmazon.innerHTML = `
-      <div class="empty-state">
-        <p>Nenhuma oferta da Amazon carregada. Clique em "Atualizar Amazon".</p>
-      </div>
-    `;
-    return;
-  }
-
-  const filteredEntries = getFilteredDealEntries(deals, 'amazon');
-  if (filteredEntries.length === 0) {
-    elPaginationAmazon.hidden = true;
-    elGridAmazon.innerHTML = `
-      <div class="empty-state">
-        <p>Nenhuma oferta corresponde aos filtros selecionados.</p>
-      </div>
-    `;
-    updateAmazonSelectionUI();
-    return;
-  }
-
-  const visibleEntries = filteredEntries.slice(0, visibleAmazonLimit);
-  visibleEntries.forEach(({ deal, index }) => {
-    const isSelected = selectedAmazonIndices.has(index);
-    const isPublished = !!deal.publishedMsgId;
-    const wasRemoved = !!deal.removedFromWhatsAppAt;
-    const card = document.createElement('article');
-    card.className = `deal-card amazon-theme ${isSelected ? 'selected' : ''} ${isPublished ? 'published-card' : ''}`;
-    card.dataset.index = index;
-    
-    const displayTitle = deal.title;
-    const ratingText = deal.rating ? `⭐ ${deal.rating.toFixed(1)}` : 'Sem avaliação';
-    
-    let checkboxHtml = '';
-    if (!isPublished) {
-      checkboxHtml = `
-        <div class="card-checkbox">
-          <label class="checkbox-container">
-            <input type="checkbox" class="deal-chk" data-index="${index}" ${isSelected ? 'checked' : ''}>
-            <span class="checkmark"></span>
-          </label>
-        </div>
-      `;
-    } else {
-      checkboxHtml = `
-        <div class="card-checkbox published-tick" title="Já publicado hoje">
-          ✅
-        </div>
-      `;
-    }
-
-    let deleteBtnHtml = '';
-    if (wasRemoved) {
-      deleteBtnHtml = `
-        <div class="card-published-area">
-          <span class="published-badge removed-by-reaction">
-            Encerrado por reação ${deal.removalReaction || '✅'}
-          </span>
-        </div>
-      `;
-    } else if (isPublished) {
-      deleteBtnHtml = `
-        <div class="card-published-area">
-          <span class="published-badge">WhatsApp Ativo ✅</span>
-          <button type="button" class="btn-delete-wpp" data-msg-id="${deal.publishedMsgId}" data-platform="amazon" data-index="${index}">
-            🗑️ Excluir do WhatsApp
-          </button>
-        </div>
-      `;
-    }
+      `
+      : '';
+    const recurringHtml = showRecurring && deal.recurringPurchase
+      ? `<span class="recurring-badge">🔁 ${escapeQueueHtml(
+        deal.recurringPurchaseCategory || 'Compra recorrente'
+      )}</span>`
+      : '';
 
     card.innerHTML = `
       ${checkboxHtml}
-      <div class="card-image-box">
-        <img class="card-image" src="${getDealImageUrl(deal.image)}" alt="${displayTitle}" loading="lazy" decoding="async" width="240" height="240">
-        <span class="card-discount-badge">${deal.discount}% OFF</span>
-      </div>
-      <div class="card-details">
-        <a href="${deal.link}" target="_blank" rel="noopener noreferrer" class="card-link-product">Ver Produto na Amazon 🔗</a>
-        <div class="card-meta">
-          <span class="card-rating">${ratingText}</span>
-          <span class="card-sales">${deal.salesInfo || ''}</span>
-        </div>
-        <h3 class="card-title" title="${displayTitle}">${displayTitle}</h3>
-        <div class="card-price-box">
-          <span class="card-orig-price">De: ${deal.originalPrice}</span>
-          <span class="card-promo-price">Por: ${deal.currentPrice}</span>
-        </div>
-        ${renderPromotionScore(deal)}
-        <button
-          type="button"
-          class="btn-add-queue-card"
-          data-platform="amazon"
-          data-index="${index}"
-          ${publicationQueueEnabled ? '' : 'hidden'}
-        >
-          Preparar para Instagram
-        </button>
-        <div class="price-comparison-area">
-          <button type="button" class="btn-compare-buscape">
-            ${deal.comparison ? '↻ Atualizar Comparação' : '🔍 Comparar Preços'}
-          </button>
-          <div class="comparison-results ${deal.comparison ? '' : 'hidden'}">
-            ${deal.comparison ? renderPriceComparison(deal.comparison, displayTitle) : ''}
-          </div>
-        </div>
-        ${deleteBtnHtml}
-      </div>
-    `;
-    
-    card.addEventListener('click', (e) => {
-      if (isPublished) return;
-      if (e.target.closest('.checkbox-container') || e.target.closest('a') || e.target.closest('button')) return;
-      toggleAmazonSelectIndex(index);
-    });
-    
-    if (!isPublished) {
-      card.querySelector('.deal-chk').addEventListener('change', () => {
-        toggleAmazonSelectIndex(index);
-      });
-    }
-    
-    elGridAmazon.appendChild(card);
-  });
-
-  updateDealPagination(
-    'amazon',
-    visibleEntries.length,
-    filteredEntries.length
-  );
-  updateAmazonSelectionUI();
-}
-
-function renderShopeeDeals(deals) {
-  elGridShopee.innerHTML = '';
-  if (deals.length === 0) {
-    elPaginationShopee.hidden = true;
-    elGridShopee.innerHTML = `
-      <div class="empty-state">
-        <p>Nenhuma oferta da Shopee carregada.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const filteredEntries = getFilteredDealEntries(deals, 'shopee');
-  if (filteredEntries.length === 0) {
-    elPaginationShopee.hidden = true;
-    elGridShopee.innerHTML = `
-      <div class="empty-state">
-        <p>Nenhuma oferta corresponde aos filtros selecionados.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const visibleEntries = filteredEntries.slice(0, visibleShopeeLimit);
-  for (const { deal, index } of visibleEntries) {
-    const isSelected = selectedShopeeIndices.has(index);
-    const title = escapeQueueHtml(deal.title);
-    const rating = Number(deal.rating);
-    const card = document.createElement('article');
-    card.className = `deal-card shopee-theme ${
-      isSelected ? 'selected' : ''
-    }`;
-    card.dataset.index = index;
-    card.dataset.platform = 'shopee';
-    card.innerHTML = `
-      <div class="card-checkbox">
-        <label class="checkbox-container">
-          <input type="checkbox" class="deal-chk" data-index="${index}"
-            ${isSelected ? 'checked' : ''}>
-          <span class="checkmark"></span>
-        </label>
-      </div>
       <div class="card-image-box">
         <img class="card-image" src="${getDealImageUrl(deal.image)}"
           alt="${title}" loading="lazy" decoding="async" width="240" height="240">
         <span class="card-discount-badge">${Number(deal.discount) || 0}% OFF</span>
       </div>
       <div class="card-details">
-        <a href="${escapeQueueHtml(deal.link)}" target="_blank"
-          rel="noopener noreferrer" class="card-link-product">
-          Ver produto na Shopee 🔗
-        </a>
+        <a href="${link}" target="_blank" rel="noopener noreferrer"
+          class="card-link-product">${sourceCta}</a>
         <div class="card-meta">
           <span class="card-rating">
             ${rating ? `⭐ ${rating.toFixed(1)}` : 'Sem avaliação'}
@@ -2918,50 +2747,56 @@ function renderShopeeDeals(deals) {
           <span class="card-promo-price">Por: ${escapeQueueHtml(deal.currentPrice)}</span>
         </div>
         ${renderPromotionScore(deal)}
-        ${deal.recurringPurchase
-          ? `<span class="recurring-badge">🔁 ${escapeQueueHtml(
-            deal.recurringPurchaseCategory || 'Compra recorrente'
-          )}</span>`
-          : ''}
+        ${recurringHtml}
+        ${couponHtml}
+        <button type="button" class="btn-add-queue-card"
+          data-index="${index}" data-platform="${platform}"
+          ${publicationQueueEnabled ? '' : 'hidden'}>
+          Preparar para Instagram
+        </button>
         <div class="price-comparison-area">
           <button type="button" class="btn-compare-buscape">
-            ${deal.comparison ? '↻ Atualizar comparação' : '🔍 Comparar preços'}
+            ${deal.comparison ? '↻ Atualizar Comparação' : '🔍 Comparar Preços'}
           </button>
           <div class="comparison-results ${deal.comparison ? '' : 'hidden'}">
             ${deal.comparison ? renderPriceComparison(deal.comparison, deal.title) : ''}
           </div>
         </div>
-        <button
-          type="button"
-          class="btn-add-queue-card"
-          data-index="${index}"
-          data-platform="shopee"
-          ${publicationQueueEnabled ? '' : 'hidden'}
-        >
-          Preparar para Instagram
-        </button>
+        ${publicationHtml}
       </div>
     `;
+
     card.addEventListener('click', event => {
+      if (isPublished) return;
       if (
         event.target.closest('.checkbox-container') ||
         event.target.closest('a') ||
         event.target.closest('button')
       ) return;
-      toggleShopeeSelectIndex(index);
+      toggleDealSelectIndex(platform, index);
     });
-    card.querySelector('.deal-chk').addEventListener('change', () =>
-      toggleShopeeSelectIndex(index)
-    );
-    elGridShopee.appendChild(card);
+    if (!isPublished) {
+      card.querySelector('.deal-chk').addEventListener('change', () =>
+        toggleDealSelectIndex(platform, index)
+      );
+    }
+    grid.appendChild(card);
   }
 
-  updateDealPagination(
-    'shopee',
-    visibleEntries.length,
-    filteredEntries.length
-  );
-  updateShopeeSelectionUI();
+  updateDealPagination(platform, visibleEntries.length, filteredEntries.length);
+  updateSelection();
+}
+
+function renderMLDeals(deals) {
+  renderDeals(deals, 'ml');
+}
+
+function renderAmazonDeals(deals) {
+  renderDeals(deals, 'amazon');
+}
+
+function renderShopeeDeals(deals) {
+  renderDeals(deals, 'shopee');
 }
 
 let activeCouponMarketplace = 'all';
@@ -3295,51 +3130,56 @@ function findCompatibleDealsForCoupon(coupon, deals) {
 }
 
 // ==========================================
-// Filters Logic
-// ==========================================
-function applyMLFilters() {
-  visibleMLLimit = DEALS_PAGE_SIZE;
-  renderMLDeals(allMLDeals);
-}
-
-function applyAmazonFilters() {
-  visibleAmazonLimit = DEALS_PAGE_SIZE;
-  renderAmazonDeals(allAmazonDeals);
-}
-
-function applyShopeeFilters() {
-  visibleShopeeLimit = DEALS_PAGE_SIZE;
-  renderShopeeDeals(allShopeeDeals);
-}
-
-// ==========================================
 // Selection Management
 // ==========================================
-function toggleMLSelectIndex(index) {
-  if (selectedMLIndices.has(index)) {
-    selectedMLIndices.delete(index);
-  } else {
-    selectedMLIndices.add(index);
+function getDealSelectionConfig(platform) {
+  if (platform === 'amazon') {
+    return {
+      grid: elGridAmazon,
+      selected: selectedAmazonIndices,
+      selectAll: elChkSelectAllAmazon,
+      clearButton: elBtnClearSelectionAmazon,
+      generateButton: elBtnGenerateAmazon,
+      countElement: elTxtSelectedCountAmazon
+    };
   }
-  updateMLSelectionUI();
+  if (platform === 'shopee') {
+    return {
+      grid: elGridShopee,
+      selected: selectedShopeeIndices,
+      selectAll: elChkSelectAllShopee,
+      clearButton: elBtnClearSelectionShopee,
+      generateButton: null,
+      countElement: null
+    };
+  }
+  return {
+    grid: elGridML,
+    selected: selectedMLIndices,
+    selectAll: elChkSelectAllML,
+    clearButton: elBtnClearSelectionML,
+    generateButton: elBtnGenerateML,
+    countElement: elTxtSelectedCountML
+  };
+}
+
+function toggleDealSelectIndex(platform, index) {
+  const { selected } = getDealSelectionConfig(platform);
+  if (selected.has(index)) selected.delete(index);
+  else selected.add(index);
+  updateDealSelectionUI(platform);
+}
+
+function toggleMLSelectIndex(index) {
+  toggleDealSelectIndex('ml', index);
 }
 
 function toggleAmazonSelectIndex(index) {
-  if (selectedAmazonIndices.has(index)) {
-    selectedAmazonIndices.delete(index);
-  } else {
-    selectedAmazonIndices.add(index);
-  }
-  updateAmazonSelectionUI();
+  toggleDealSelectIndex('amazon', index);
 }
 
 function toggleShopeeSelectIndex(index) {
-  if (selectedShopeeIndices.has(index)) {
-    selectedShopeeIndices.delete(index);
-  } else {
-    selectedShopeeIndices.add(index);
-  }
-  updateShopeeSelectionUI();
+  toggleDealSelectIndex('shopee', index);
 }
 
 function updateMobileSelectionBar() {
@@ -3366,106 +3206,54 @@ function updateMobileSelectionBar() {
     : 'WhatsApp desconectado';
 }
 
-function updateMLSelectionUI() {
+function updateDealSelectionUI(platform) {
   try {
-    const cards = elGridML ? elGridML.querySelectorAll('.deal-card') : [];
+    const {
+      grid,
+      selected,
+      selectAll,
+      clearButton,
+      generateButton,
+      countElement
+    } = getDealSelectionConfig(platform);
+    const cards = grid ? grid.querySelectorAll('.deal-card') : [];
     cards.forEach(card => {
-      const idx = parseInt(card.dataset.index, 10);
-      const chk = card.querySelector('.deal-chk');
-      if (selectedMLIndices.has(idx)) {
-        card.classList.add('selected');
-        if (chk) chk.checked = true;
-      } else {
-        card.classList.remove('selected');
-        if (chk) chk.checked = false;
-      }
+      const index = Number(card.dataset.index);
+      const isSelected = selected.has(index);
+      card.classList.toggle('selected', isSelected);
+      const checkbox = card.querySelector('.deal-chk');
+      if (checkbox) checkbox.checked = isSelected;
     });
 
-    const count = selectedMLIndices.size;
-    if (elTxtSelectedCountML) elTxtSelectedCountML.textContent = count;
-    if (elBtnGenerateML) elBtnGenerateML.disabled = count === 0 || !whatsappReady;
-    if (elBtnClearSelectionML) elBtnClearSelectionML.disabled = count === 0;
-
-    if (elChkSelectAllML && elGridML) {
-      const visibleCards = elGridML.querySelectorAll('.deal-card:not(.hidden-filter)');
-      if (visibleCards.length > 0) {
-        let allSelected = true;
-        visibleCards.forEach(card => {
-          if (!selectedMLIndices.has(parseInt(card.dataset.index, 10))) allSelected = false;
-        });
-        elChkSelectAllML.checked = allSelected;
-      } else {
-        elChkSelectAllML.checked = false;
-      }
+    const count = selected.size;
+    if (countElement) countElement.textContent = count;
+    if (generateButton) {
+      generateButton.disabled = count === 0 || !whatsappReady;
+    }
+    if (clearButton) clearButton.disabled = count === 0;
+    if (selectAll && grid) {
+      const visibleCards = grid.querySelectorAll(
+        '.deal-card:not(.hidden-filter)'
+      );
+      selectAll.checked = visibleCards.length > 0 &&
+        [...visibleCards].every(card => selected.has(Number(card.dataset.index)));
     }
   } catch (err) {
-    console.error('Erro em updateMLSelectionUI:', err);
+    console.error(`Erro ao atualizar selecao de ${platform}:`, err);
   }
   updatePublicationQueueSelectionUI();
+}
+
+function updateMLSelectionUI() {
+  updateDealSelectionUI('ml');
 }
 
 function updateAmazonSelectionUI() {
-  try {
-    const cards = elGridAmazon ? elGridAmazon.querySelectorAll('.deal-card') : [];
-    cards.forEach(card => {
-      const idx = parseInt(card.dataset.index, 10);
-      const chk = card.querySelector('.deal-chk');
-      if (selectedAmazonIndices.has(idx)) {
-        card.classList.add('selected');
-        if (chk) chk.checked = true;
-      } else {
-        card.classList.remove('selected');
-        if (chk) chk.checked = false;
-      }
-    });
-
-    const count = selectedAmazonIndices.size;
-    if (elTxtSelectedCountAmazon) elTxtSelectedCountAmazon.textContent = count;
-    if (elBtnGenerateAmazon) elBtnGenerateAmazon.disabled = count === 0 || !whatsappReady;
-    if (elBtnClearSelectionAmazon) elBtnClearSelectionAmazon.disabled = count === 0;
-
-    if (elChkSelectAllAmazon && elGridAmazon) {
-      const visibleCards = elGridAmazon.querySelectorAll('.deal-card:not(.hidden-filter)');
-      if (visibleCards.length > 0) {
-        let allSelected = true;
-        visibleCards.forEach(card => {
-          if (!selectedAmazonIndices.has(parseInt(card.dataset.index, 10))) allSelected = false;
-        });
-        elChkSelectAllAmazon.checked = allSelected;
-      } else {
-        elChkSelectAllAmazon.checked = false;
-      }
-    }
-  } catch (err) {
-    console.error('Erro em updateAmazonSelectionUI:', err);
-  }
-  updatePublicationQueueSelectionUI();
+  updateDealSelectionUI('amazon');
 }
 
 function updateShopeeSelectionUI() {
-  try {
-    const cards = elGridShopee ? elGridShopee.querySelectorAll('.deal-card') : [];
-    cards.forEach(card => {
-      const index = Number(card.dataset.index);
-      const selected = selectedShopeeIndices.has(index);
-      card.classList.toggle('selected', selected);
-      const checkbox = card.querySelector('.deal-chk');
-      if (checkbox) checkbox.checked = selected;
-    });
-
-    const count = selectedShopeeIndices.size;
-    if (elBtnClearSelectionShopee) elBtnClearSelectionShopee.disabled = count === 0;
-    if (elChkSelectAllShopee && elGridShopee) {
-      const visibleCards = elGridShopee.querySelectorAll('.deal-card:not(.hidden-filter)');
-      elChkSelectAllShopee.checked = visibleCards.length > 0 &&
-        [...visibleCards].every(card =>
-          selectedShopeeIndices.has(Number(card.dataset.index))
-        );
-    }
-  } catch (err) {
-    console.error('Erro em updateShopeeSelectionUI:', err);
-  }
-  updatePublicationQueueSelectionUI();
+  updateDealSelectionUI('shopee');
 }
 
 function updatePublicationQueueSelectionUI() {

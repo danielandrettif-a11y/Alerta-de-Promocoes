@@ -4,7 +4,7 @@ const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
 const archiver = require('archiver');
-const { exec, execFile, execSync, spawn } = require('child_process');
+const { exec, execFile, execFileSync, execSync, spawn } = require('child_process');
 const { TAXONOMY, inferCategoryAndSub } = require('./execution/category_helper.js');
 const {
   printSessionStatus,
@@ -505,7 +505,7 @@ app.post('/api/generate-coupon-story', async (req, res) => {
       ...deal,
       coupon: coupon || deal.coupon
     };
-    const { buffer } = await generateStoryBuffer(dealWithCoupon, []);
+    const buffer = await generateStoryBuffer(dealWithCoupon);
     const base64Image = `data:image/jpeg;base64,${buffer.toString('base64')}`;
     res.json({
       success: true,
@@ -767,16 +767,8 @@ function applyObservedQueuePrices(queue, catalog) {
   }
 }
 
-function generateStoryBuffer(deal, coupons) {
-  const runId = crypto.randomUUID();
-  const storiesDir = path.join(
-    APP_RUNTIME_DIR,
-    `queue-validation-${runId}`
-  );
-  const selectionPath = path.join(
-    APP_RUNTIME_DIR,
-    `queue-validation-${runId}.json`
-  );
+function prepareStoryGeneration(deal, storiesDir, selectionName) {
+  const selectionPath = path.join(APP_RUNTIME_DIR, `${selectionName}.json`);
   const confirmedCoupon = isVerifiedCoupon(deal.coupon) ? deal.coupon : null;
   fs.mkdirSync(storiesDir, { recursive: true });
   fs.writeFileSync(selectionPath, JSON.stringify({
@@ -784,6 +776,36 @@ function generateStoryBuffer(deal, coupons) {
     deals: [{ ...deal, coupon: confirmedCoupon }],
     selectedCoupon: confirmedCoupon
   }, null, 2), 'utf-8');
+  return selectionPath;
+}
+
+function findGeneratedStory(storiesDir) {
+  const generated = fs.readdirSync(storiesDir)
+    .find(file => file.endsWith('.jpg'));
+  if (!generated) throw new Error('Nenhum arquivo de Story foi gerado.');
+  return path.join(storiesDir, generated);
+}
+
+function clearGeneratedStories(storiesDir) {
+  if (!fs.existsSync(storiesDir)) return;
+  fs.readdirSync(storiesDir)
+    .filter(file => file.endsWith('.jpg'))
+    .forEach(file => {
+      try { fs.unlinkSync(path.join(storiesDir, file)); } catch {}
+    });
+}
+
+function generateStoryBuffer(deal) {
+  const runId = crypto.randomUUID();
+  const storiesDir = path.join(
+    APP_RUNTIME_DIR,
+    `queue-validation-${runId}`
+  );
+  const selectionPath = prepareStoryGeneration(
+    deal,
+    storiesDir,
+    `queue-validation-${runId}`
+  );
 
   return new Promise((resolve, reject) => {
     execFile(
@@ -801,12 +823,7 @@ function generateStoryBuffer(deal, coupons) {
       error => {
         try {
           if (error) throw error;
-          const generated = fs.readdirSync(storiesDir)
-            .find(file => file.endsWith('.jpg'));
-          if (!generated) {
-            throw new Error('Nenhum arquivo de Story foi gerado.');
-          }
-          resolve(fs.readFileSync(path.join(storiesDir, generated)));
+          resolve(fs.readFileSync(findGeneratedStory(storiesDir)));
         } catch (generationError) {
           reject(generationError);
         } finally {
@@ -882,7 +899,6 @@ async function runPublicationQueueValidation(jobId) {
     });
     const validationPlatforms = new Set(validatedPlatforms);
     applyObservedQueuePrices(startedQueue, catalog);
-    const coupons = loadAvailableDeals().coupons;
     const preview = validateQueueItems(
       startedQueue,
       catalog,
@@ -901,7 +917,7 @@ async function runPublicationQueueValidation(jobId) {
       try {
         storiesByItemId.set(
           item.id,
-          await generateStoryBuffer(current, coupons)
+          await generateStoryBuffer(current)
         );
         itemResults.push({
           itemId: item.id,
@@ -1395,11 +1411,10 @@ app.post(
       );
 
       if (result.created) {
-        const { coupons } = loadAvailableDeals();
-        const storyImagePath = generateStory(
-          { ...deal, platform: normalizedPlatform },
-          coupons
-        );
+        const storyImagePath = generateStory({
+          ...deal,
+          platform: normalizedPlatform
+        });
         fs.mkdirSync(publicationQueueAssetsPath, { recursive: true });
         result.item.storyFile = `${result.item.id}.jpg`;
         fs.copyFileSync(
@@ -1741,7 +1756,7 @@ app.post(
           currentPrice:
             formatPrice(observedPrice),
           coupon: verifiedCoupon
-        }, []);
+        });
       }
 
       const queue = loadPublicationQueue(publicationQueuePath);
@@ -2515,7 +2530,6 @@ app.post('/api/generate', async (req, res) => {
   console.log(`\n📤 [Painel Web] Gerando e enviando ${selectedDeals.length} ofertas para o WhatsApp...`);
 
   const results = [];
-  const { coupons } = loadAvailableDeals();
 
   try {
     for (let i = 0; i < selectedDeals.length; i++) {
@@ -2524,7 +2538,7 @@ app.post('/api/generate', async (req, res) => {
 
       let storyImagePath;
       try {
-        storyImagePath = generateStory(deal, coupons);
+        storyImagePath = generateStory(deal);
       } catch (err) {
         console.error(`   ❌ Falha ao gerar Story: ${err.message}`);
         results.push({
@@ -2841,29 +2855,20 @@ function loadAvailableDeals() {
   return { deals, coupons };
 }
 
-function generateStory(deal, coupons) {
+function generateStory(deal) {
   const storiesDir = path.join(APP_RUNTIME_DIR, 'automatic_stories');
-  const selectionPath = path.join(
-    APP_RUNTIME_DIR,
-    `automatic_story_${process.pid}.json`
+  clearGeneratedStories(storiesDir);
+  const selectionPath = prepareStoryGeneration(
+    deal,
+    storiesDir,
+    `automatic_story_${process.pid}`
   );
-  const confirmedCoupon = isVerifiedCoupon(deal.coupon) ? deal.coupon : null;
-
-  fs.writeFileSync(selectionPath, JSON.stringify({
-    generatedAt: new Date().toISOString(),
-    deals: [{ ...deal, coupon: confirmedCoupon }],
-    selectedCoupon: confirmedCoupon
-  }, null, 2), 'utf-8');
 
   try {
-    if (fs.existsSync(storiesDir)) {
-      fs.readdirSync(storiesDir)
-        .filter(file => file.endsWith('.jpg'))
-        .forEach(file => {
-          try { fs.unlinkSync(path.join(storiesDir, file)); } catch {}
-        });
-    }
-    execSync(`node execution/generate_stories.js "${selectionPath}"`, {
+    execFileSync(process.execPath, [
+      path.join(__dirname, 'execution', 'generate_stories.js'),
+      selectionPath
+    ], {
       cwd: __dirname,
       env: {
         ...process.env,
@@ -2872,12 +2877,7 @@ function generateStory(deal, coupons) {
       stdio: 'ignore',
       timeout: 120000
     });
-    const generated = fs.readdirSync(storiesDir)
-      .filter(file => file.endsWith('.jpg'));
-    if (generated.length === 0) {
-      throw new Error('Nenhum arquivo de Story foi gerado.');
-    }
-    return path.join(storiesDir, generated[0]);
+    return findGeneratedStory(storiesDir);
   } finally {
     try { fs.unlinkSync(selectionPath); } catch {}
   }
@@ -2906,14 +2906,14 @@ async function publishNextAutomaticOffer() {
     );
     if (postsLastHour >= targetPerHour) return;
 
-    const { deals, coupons } = loadAvailableDeals();
+    const { deals } = loadAvailableDeals();
     const [deal] = selectBestUnpublished(deals, history, 1);
     if (!deal) {
       console.warn('⏸️ Nenhuma oferta inédita disponível para hoje.');
       return;
     }
 
-    const storyImagePath = generateStory(deal, coupons);
+    const storyImagePath = generateStory(deal);
     const platformTag = getPlatformTag(deal.platform);
     const category = inferCategory(deal.title);
     const wppMessage = `🔥 *OFERTA ENCONTRADA!*\n\n*${deal.title}*\n\n🔥 *${deal.discount}% OFF*\nDe: ~~${deal.originalPrice}~~\nPor: *${deal.currentPrice}*\n\n👉 *Compre pelo link:* ${deal.link}\n\n📌 _Categoria: ${category}_\nPlataforma: ${platformTag}`;

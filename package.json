@@ -19,10 +19,8 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "express": "^5.2.1",
-    "ffmpeg-static": "^5.3.0",
     "puppeteer-core": "^25.3.0",
     "qrcode-terminal": "^0.12.0",
-    "sharp": "^0.35.3",
     "whatsapp-web.js": "https://github.com/wwebjs/whatsapp-web.js/archive/f4ea1e3cf4076e44e36dfe5f81ea57048d2f7761.tar.gz"
   }
 }

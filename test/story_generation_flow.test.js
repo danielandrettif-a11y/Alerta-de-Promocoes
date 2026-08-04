@@ -22,7 +22,8 @@ test('todos os fluxos usam o template compartilhado de Stories', () => {
     server.match(/(?<!function )generateStory\(/g)?.length,
     3
   );
-  assert.match(server, /generateStoryBuffer\(current, coupons\)/);
+  assert.match(server, /generateStoryBuffer\(current\)/);
+  assert.match(server, /function prepareStoryGeneration/);
   assert.match(template, /class="watermark-layer"/);
   assert.equal(
     template.match(/fill="url\(#brand-watermarks\)"/g)?.length,

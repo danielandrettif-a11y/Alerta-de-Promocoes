@@ -11,7 +11,7 @@ Retrieve the list of public GitHub repositories for a specific username, sort th
 - `OUTPUT_PATH` (string): The path where the markdown report should be saved. E.g., `github_report.md`.
 
 ## Execution Tools
-- Script: `execution/fetch_github_repos.py` or `execution/fetch_github_repos.js` (for JS/Node environments)
+- Script: `execution/fetch_github_repos.js`
 - Environment Variables:
   - `GITHUB_TOKEN` (optional): To avoid API rate limiting.
 
