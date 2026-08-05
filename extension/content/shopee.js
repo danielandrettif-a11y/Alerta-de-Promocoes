@@ -207,7 +207,15 @@
         diagnostic: collectDiagnostic(root)
       };
     }
-    setTimeout(() => element.click(), 0);
+    const collapsedMenuToggle = kind === 'offer'
+      ? root.querySelector?.('#aff-sider .sider-links.collapsed > div')
+      : null;
+    if (collapsedMenuToggle) {
+      collapsedMenuToggle.click();
+      setTimeout(() => findOfferControl(root)?.click(), 0);
+    } else {
+      setTimeout(() => element.click(), 0);
+    }
     return {
       success: true,
       control,

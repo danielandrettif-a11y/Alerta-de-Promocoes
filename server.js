@@ -39,6 +39,7 @@ const {
   normalizeVerifiedCoupon
 } = require('./execution/coupon_rules.js');
 const {
+  MISSING_PRICE_REVIEW,
   STATUSES: PUBLICATION_QUEUE_STATUSES,
   loadQueue: loadPublicationQueue,
   saveQueue: savePublicationQueue,
@@ -673,11 +674,18 @@ function applyAffiliateLinkToQueue(
 ) {
   let reviewReason = null;
   let latestPrice = null;
-  const verifiedPrice = parsePrice(observedPrice);
   const storyPrice = parsePrice(item.currentPrice);
+  const observedVerifiedPrice = parsePrice(observedPrice);
+  const catalogPrice = item.platform === 'shopee'
+    ? parsePrice(findCurrentDealForQueueItem(item)?.currentPrice)
+    : null;
+  const catalogMatchesStory = catalogPrice && storyPrice &&
+    Math.abs(catalogPrice - storyPrice) < 0.01;
+  const verifiedPrice = observedVerifiedPrice ||
+    (catalogMatchesStory ? catalogPrice : null);
+  const verificationSource = observedVerifiedPrice ? 'extension' : 'catalog';
   if (!verifiedPrice && item.platform !== 'amazon') {
-    reviewReason =
-      'O link foi gerado, mas a extensao nao confirmou o preco do produto.';
+    reviewReason = MISSING_PRICE_REVIEW;
   } else if (
     verifiedPrice &&
     storyPrice &&
@@ -698,7 +706,7 @@ function applyAffiliateLinkToQueue(
       priceVerification: verifiedPrice ? {
         regularPrice: verifiedPrice,
         finalPrice: verifiedPrice,
-        source: 'extension',
+        source: verificationSource,
         verifiedAt: new Date().toISOString(),
         productId: productId || item.dealId
       } : null
@@ -750,26 +758,6 @@ function getQueueValidationPlatforms(queue) {
   return getActiveQueuePlatforms(queue).filter(platform =>
     platform === 'mercado_livre' || platform === 'shopee'
   );
-}
-
-function applyObservedQueuePrices(queue, catalog) {
-  for (const item of queue.items) {
-    if (
-      item.status !== PUBLICATION_QUEUE_STATUSES.NEEDS_REVIEW ||
-      !item.latestPrice
-    ) continue;
-    const current = catalog.get(item.dealId);
-    const latestPrice = parsePrice(item.latestPrice);
-    if (!current || !latestPrice) continue;
-    const originalPrice = parsePrice(current.originalPrice);
-    catalog.set(item.dealId, {
-      ...current,
-      currentPrice: formatPrice(latestPrice),
-      discount: originalPrice > latestPrice
-        ? Math.round((1 - latestPrice / originalPrice) * 100)
-        : Number(current.discount) || 0
-    });
-  }
 }
 
 function prepareStoryGeneration(deal, storiesDir, selectionName) {
@@ -903,7 +891,6 @@ async function runPublicationQueueValidation(jobId) {
       platformResults
     });
     const validationPlatforms = new Set(validatedPlatforms);
-    applyObservedQueuePrices(startedQueue, catalog);
     const preview = validateQueueItems(
       startedQueue,
       catalog,
@@ -945,7 +932,6 @@ async function runPublicationQueueValidation(jobId) {
     }
 
     const latestQueue = loadPublicationQueue(publicationQueuePath);
-    applyObservedQueuePrices(latestQueue, catalog);
     const result = validateQueueItems(
       latestQueue,
       catalog,

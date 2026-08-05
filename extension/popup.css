@@ -8,6 +8,9 @@
 * { box-sizing: border-box; }
 body { width: 360px; margin: 0; padding: 18px; }
 header { margin-bottom: 16px; }
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.title-row h1 { flex: 1; }
+#reload { width: auto; min-height: 32px; margin: 0; padding: 5px 9px; font-size: 12px; }
 .eyebrow { color: #6fffd1; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; }
 h1 { margin: 5px 0; font-size: 22px; }
 header p { margin: 0; color: #aaa2b8; }

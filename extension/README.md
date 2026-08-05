@@ -51,18 +51,18 @@ Faça o deploy e confirme que o painel abre normalmente por HTTPS.
 1. No painel, adicione ofertas à fila.
 2. No popup, escolha 5, 10, 20, 30 ou 40 itens.
 3. Clique em **Processar fila**.
-4. A janela que já estava aberta fica à esquerda e a extensão abre a janela de
-   trabalho diretamente no primeiro produto, à direita. No Mercado Livre, ela
-   abre a aba seguinte antes de fechar a anterior. Na Shopee, reutiliza uma
+4. A janela que já estava aberta permanece intacta e a extensão abre maximizada
+   uma janela de trabalho independente no primeiro produto. No Mercado Livre,
+   ela abre a aba seguinte antes de fechar a anterior. Na Shopee, reutiliza uma
    única aba do gerador durante o lote.
 5. No Mercado Livre, ela também captura cupons exibidos no próprio produto.
 6. Ao concluir, ela fecha diretamente a janela auxiliar, sem deixar o Opera GX
-   criar uma aba substituta, e restaura a janela original.
+   criar uma aba substituta.
 7. Use **Parar** para cancelar a ação atual, fechar a janela auxiliar e liberar
    a oferta sem consumir uma tentativa.
 
-Se aparecer login, CAPTCHA ou segundo fator, a extensão pausa, restaura e
-ativa a janela de trabalho.
+Se aparecer login, CAPTCHA ou segundo fator, a extensão pausa e ativa a janela
+de trabalho.
 Conclua a autenticação manualmente e clique em **Continuar processamento**.
 Ela não tenta contornar verificações de segurança.
 

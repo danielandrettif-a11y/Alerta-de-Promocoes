@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 
 const {
+  MISSING_PRICE_REVIEW,
   STATUSES,
   emptyQueue,
   loadQueue,
@@ -333,6 +334,28 @@ test('valida a fila preservando ausente e separando Story alterado', () => {
   assert.equal(result.updated[0].item.status, STATUSES.NEEDS_REVIEW);
   assert.equal(result.updated[0].item.reviewUpdatedStory, true);
   assert.equal(result.updated[0].item.currentPrice, 'R$ 179,90');
+});
+
+test('catálogo confirmado libera revisão de preço ausente da Shopee', () => {
+  const created = enqueueOffer(emptyQueue(), sampleOffer({
+    platform: 'shopee',
+    productLink: 'https://shopee.com.br/product/1/2'
+  }));
+  const review = setAffiliateLink(
+    created.queue,
+    created.item.id,
+    'https://s.shopee.com.br/ABC123',
+    { reviewReason: MISSING_PRICE_REVIEW }
+  );
+  const catalog = new Map([['deal_123', sampleOffer({
+    platform: 'shopee',
+    productLink: 'https://shopee.com.br/product/1/2'
+  })]]);
+  const result = validateQueueItems(review.queue, catalog);
+
+  assert.equal(result.queue.items[0].status, STATUSES.READY);
+  assert.equal(result.queue.items[0].reviewReason, null);
+  assert.equal(result.queue.items[0].priceVerification.source, 'catalog');
 });
 
 test('validação parcial preserva plataforma sem catálogo', () => {

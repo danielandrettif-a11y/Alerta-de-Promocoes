@@ -149,34 +149,28 @@
     );
   }
 
+  function isPrimaryPriceElement(element) {
+    return Boolean(element) &&
+      !element.matches?.('.andes-money-amount--previous') &&
+      !element.closest?.(
+        's, del, .ui-pdp-price__original-value, ' +
+        '.ui-pdp-price__subtitles, .ui-pdp-price__installments, ' +
+        '[class*="previous"]'
+      );
+  }
+
   function findCurrentPrice(root = document) {
     const selectors = [
-      '.ui-pdp-price__second-line .andes-money-amount:not(.andes-money-amount--previous)',
-      '.ui-pdp-price__main-container .andes-money-amount:not(.andes-money-amount--previous)',
-      '[data-testid="price-part"] .andes-money-amount:not(.andes-money-amount--previous)',
-      '[itemprop="price"]'
+      '.ui-pdp-price__second-line .andes-money-amount',
+      '.ui-pdp-price__main-container .andes-money-amount',
+      '[data-testid="price-part"] .andes-money-amount'
     ];
     for (const selector of selectors) {
-      const price = readMoneyElement(root.querySelector(selector));
-      if (price) return price;
-    }
-    for (const script of root.querySelectorAll('script[type="application/ld+json"]')) {
-      try {
-        const entries = JSON.parse(script.textContent);
-        for (const entry of Array.isArray(entries) ? entries : [entries]) {
-          const type = Array.isArray(entry?.['@type'])
-            ? entry['@type']
-            : [entry?.['@type']];
-          if (!type.includes('Product')) continue;
-          const offers = Array.isArray(entry.offers)
-            ? entry.offers
-            : [entry.offers];
-          for (const offer of offers) {
-            const price = parsePriceText(offer?.price);
-            if (price) return price;
-          }
-        }
-      } catch {}
+      for (const element of root.querySelectorAll(selector)) {
+        if (!isPrimaryPriceElement(element)) continue;
+        const price = readMoneyElement(element);
+        if (price) return price;
+      }
     }
     return null;
   }
@@ -443,6 +437,7 @@
       findLabelOption,
       findAffiliateLink,
       parsePriceText,
+      isPrimaryPriceElement,
       findCurrentPrice,
       findProductCoupon,
       detectProductCoupon,

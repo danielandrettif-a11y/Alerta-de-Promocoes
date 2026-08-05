@@ -162,33 +162,15 @@ async function getWorkerWindow() {
   }
 }
 
-const MAIN_WINDOW_STATE_KEY = 'mainWindowOriginalState';
-
-async function restoreMainWindowState() {
+async function maximizeWindow(windowId, focused) {
   try {
-    const stored = await chrome.storage.session.get(MAIN_WINDOW_STATE_KEY);
-    const original = stored[MAIN_WINDOW_STATE_KEY];
-    if (original?.windowId) {
-      const targetState = (original.state === 'maximized' || original.state === 'fullscreen')
-        ? original.state
-        : 'maximized';
-      await chrome.windows.update(original.windowId, {
-        state: targetState,
-        focused: true
-      }).catch(() => {});
-    } else {
-      const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
-      if (windows[0]?.id) {
-        await chrome.windows.update(windows[0].id, {
-          state: 'maximized',
-          focused: true
-        }).catch(() => {});
-      }
-    }
-  } catch (err) {
-    console.error('Erro ao restaurar janela principal:', err);
-  } finally {
-    await chrome.storage.session.remove(MAIN_WINDOW_STATE_KEY);
+    return await chrome.windows.update(windowId, {
+      state: 'maximized',
+      focused
+    });
+  } catch (error) {
+    console.warn('O Opera não permitiu maximizar a janela:', error);
+    return chrome.windows.update(windowId, { focused }).catch(() => null);
   }
 }
 
@@ -243,91 +225,6 @@ function cancellableDelay(ms, generation) {
   });
 }
 
-async function getMainWindow(workerWindowId) {
-  const stored = await chrome.storage.session.get(MAIN_WINDOW_STATE_KEY);
-  const savedId = stored[MAIN_WINDOW_STATE_KEY]?.windowId;
-  if (Number.isInteger(savedId) && savedId !== workerWindowId) {
-    const savedWindow = await chrome.windows.get(savedId).catch(() => null);
-    if (savedWindow) return savedWindow;
-  }
-  const lastFocused = await chrome.windows.getLastFocused({
-    windowTypes: ['normal']
-  }).catch(() => null);
-  if (lastFocused?.id && lastFocused.id !== workerWindowId) return lastFocused;
-  const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
-  return windows.find(window => window.id !== workerWindowId) || null;
-}
-
-async function setWindowBounds(windowId, bounds) {
-  await chrome.windows.update(windowId, { state: 'normal' });
-  return chrome.windows.update(windowId, bounds);
-}
-
-async function positionSplitWindows(workerWindowId) {
-  try {
-    let screenWidth = 1920;
-    let screenHeight = 1040;
-    let screenLeft = 0;
-    let screenTop = 0;
-
-    if (chrome.system?.display?.getInfo) {
-      const displays = await new Promise(resolve => {
-        try {
-          chrome.system.display.getInfo(info => resolve(info || []));
-        } catch {
-          resolve([]);
-        }
-      });
-      if (displays && displays.length > 0) {
-        const primary = displays.find(d => d.isPrimary) || displays[0];
-        const area = primary.workArea || primary.bounds;
-        if (area && area.width) {
-          screenWidth = area.width;
-          screenHeight = area.height;
-          screenLeft = area.left || 0;
-          screenTop = area.top || 0;
-        }
-      }
-    }
-
-    const halfWidth = Math.floor(screenWidth / 2);
-    const mainWindow = await getMainWindow(workerWindowId);
-
-    if (mainWindow?.id) {
-      const stored = await chrome.storage.session.get(MAIN_WINDOW_STATE_KEY);
-      if (!stored[MAIN_WINDOW_STATE_KEY]) {
-        await chrome.storage.session.set({
-          [MAIN_WINDOW_STATE_KEY]: {
-            windowId: mainWindow.id,
-            state: mainWindow.state || 'maximized'
-          }
-        });
-      }
-    }
-
-    if (workerWindowId) {
-      await setWindowBounds(workerWindowId, {
-        left: screenLeft + halfWidth,
-        top: screenTop,
-        width: halfWidth,
-        height: screenHeight,
-        focused: false
-      }).catch(() => {});
-    }
-    if (mainWindow?.id) {
-      await setWindowBounds(mainWindow.id, {
-        left: screenLeft,
-        top: screenTop,
-        width: halfWidth,
-        height: screenHeight,
-        focused: true
-      }).catch(() => {});
-    }
-  } catch (err) {
-    console.error('Erro ao posicionar janelas divididas:', err);
-  }
-}
-
 async function getOrCreateWorkerTab(platform, productUrl) {
   const url = platform === 'shopee'
     ? SHOPEE_CONVERTER_URL
@@ -335,31 +232,18 @@ async function getOrCreateWorkerTab(platform, productUrl) {
   let workerWindow = await getWorkerWindow();
   const createdWindow = !workerWindow;
   if (!workerWindow) {
-    await chrome.storage.session.remove(MAIN_WINDOW_STATE_KEY);
-    const mainWindow = await getMainWindow(null);
-    if (mainWindow?.id) {
-      await chrome.storage.session.set({
-        [MAIN_WINDOW_STATE_KEY]: {
-          windowId: mainWindow.id,
-          state: mainWindow.state || 'maximized'
-        }
-      });
-    }
     workerWindow = await chrome.windows.create({
       url,
       type: 'normal',
       focused: false,
-      state: 'normal',
-      width: 900,
-      height: 900
+      state: 'normal'
     });
+    await maximizeWindow(workerWindow.id, false);
     await chrome.storage.session.set({
       [WORKER_WINDOW_KEY]: workerWindow.id
     });
   }
   activeWorkerWindowId = workerWindow.id;
-  
-  await positionSplitWindows(workerWindow.id);
 
   const previousTabs = workerWindow.tabs ||
     await chrome.tabs.query({ windowId: workerWindow.id });
@@ -398,7 +282,6 @@ async function closeWorkerWindow(windowId = activeWorkerWindowId) {
   } finally {
     activeWorkerWindowId = null;
     await chrome.storage.session.remove(WORKER_WINDOW_KEY);
-    await restoreMainWindowState();
   }
   if (!closed) {
     throw new Error('O navegador impediu o fechamento da janela de trabalho.');
@@ -751,10 +634,7 @@ async function processMercadoLivreJob(job, settings, tab) {
     };
   }
   await chrome.tabs.update(tab.id, { active: true });
-  await chrome.windows.update(loadedTab.windowId, {
-    state: 'normal',
-    focused: false
-  });
+  await maximizeWindow(loadedTab.windowId, false);
   await new Promise(resolve => setTimeout(resolve, 200));
   const couponResult = await sendContentMessage(tab.id, {
     type: 'DETECT_PRODUCT_COUPON',
@@ -897,10 +777,7 @@ async function processQueue() {
           await reportFailure(job, code, message);
           if (USER_ACTION_CODES.has(code)) {
             stopRequested = true;
-            await chrome.windows.update(tab.windowId, {
-              state: 'normal',
-              focused: true
-            });
+            await maximizeWindow(tab.windowId, true);
             await chrome.tabs.update(tab.id, { active: true });
             await persistState({
               status: 'auth_required',
@@ -1034,19 +911,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.type === 'OPEN_MERCADO_LIVRE') {
       const tab = await findOrCreateMercadoLivreTab();
-      await chrome.windows.update(tab.windowId, {
-        state: 'normal',
-        focused: true
-      });
+      await maximizeWindow(tab.windowId, true);
       await chrome.tabs.update(tab.id, { active: true });
       return { success: true };
     }
     if (message.type === 'OPEN_SHOPEE') {
       const tab = await findOrCreateShopeeTab();
-      await chrome.windows.update(tab.windowId, {
-        state: 'normal',
-        focused: true
-      });
+      await maximizeWindow(tab.windowId, true);
       await chrome.tabs.update(tab.id, { active: true });
       return { success: true };
     }

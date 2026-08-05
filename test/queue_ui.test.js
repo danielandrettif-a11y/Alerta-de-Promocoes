@@ -18,7 +18,8 @@ test('fila usa uma selecao e valida em segundo plano', () => {
   assert.match(server, /execFile\(/);
   assert.match(server, /await Promise\.allSettled/);
   assert.match(app, /job\.phase === 'updating_catalogs'/);
-  assert.match(server, /applyObservedQueuePrices\(queue, catalog\)/);
+  assert.doesNotMatch(server, /applyObservedQueuePrices/);
+  assert.match(server, /catalogMatchesStory/);
   assert.match(server, /item\.status = PUBLICATION_QUEUE_STATUSES\.READY/);
   assert.match(server, /Cache-Control', 'no-store'/);
   assert.match(server, /\?v=\$\{encodeURIComponent\(item\.updatedAt/);

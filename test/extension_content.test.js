@@ -8,7 +8,8 @@ const {
   normalizedText,
   isShareLabel,
   isUsableLabelOption,
-  parsePriceText
+  parsePriceText,
+  findCurrentPrice
 } = require('../extension/content/mercado_livre.js');
 const shopee = require('../extension/content/shopee.js');
 
@@ -31,6 +32,27 @@ test('content script normaliza texto e aceita somente link meli.la esperado', ()
   assert.equal(parsePriceText('Preço indisponível'), null);
 });
 
+test('Mercado Livre ignora preço antigo ao confirmar a oferta', () => {
+  const money = (whole, previous = false) => ({
+    matches: () => false,
+    closest: selector => previous && selector.includes('original-value')
+      ? {}
+      : null,
+    querySelector: selector => selector.includes('__fraction')
+      ? { textContent: String(whole) }
+      : null,
+    getAttribute: () => null,
+    textContent: `R$ ${whole}`
+  });
+  const root = {
+    querySelectorAll: selector => selector.includes('second-line')
+      ? [money(52, true), money(21)]
+      : []
+  };
+
+  assert.equal(findCurrentPrice(root), 21);
+});
+
 test('fluxo preserva Mercado Livre e isola a automação da Shopee', () => {
   const root = path.join(__dirname, '..', 'extension');
   const manifest = JSON.parse(
@@ -47,13 +69,22 @@ test('fluxo preserva Mercado Livre e isola a automação da Shopee', () => {
   const popup = fs.readFileSync(path.join(root, 'popup.js'), 'utf8');
   const popupPage = fs.readFileSync(path.join(root, 'popup.html'), 'utf8');
   assert.equal(manifest.permissions.includes('debugger'), true);
+  assert.equal(manifest.permissions.includes('system.display'), false);
   assert.match(background, /Input\.dispatchMouseEvent/);
   assert.match(background, /chrome\.tabs\.update\(tab\.id, \{ active: true \}\)/);
   assert.match(background, /chrome\.debugger\.detach/);
   assert.match(background, /focused: false,\s+state: 'normal'/);
+  assert.match(
+    background,
+    /await maximizeWindow\(workerWindow\.id, false\)/
+  );
+  assert.match(background, /async function maximizeWindow[\s\S]*state: 'maximized'/);
   assert.match(background, /intervalMs: 1000/);
   assert.match(background, /setTimeout\(resolve, 200\)/);
-  assert.match(background, /chrome\.windows\.getLastFocused/);
+  assert.doesNotMatch(
+    background,
+    /positionSplitWindows|setWindowBounds|MAIN_WINDOW_STATE_KEY|system\.display|getLastFocused/
+  );
   assert.match(background, /getOrCreateWorkerTab\(\s*platform,\s*job\.productLink/);
   assert.match(background, /for \(const previousTab of previousTabs\)/);
   assert.match(background, /previousTab\.id === tab\.id/);
@@ -70,7 +101,7 @@ test('fluxo preserva Mercado Livre e isola a automação da Shopee', () => {
   assert.match(background, /await closeWorkerWindow\(workerWindowId\)/);
   assert.match(background,
     /!workerState\.authRequired && workerState\.status !== 'error' &&/);
-  assert.match(background, /setWindowBounds\(mainWindow\.id,[\s\S]*focused: true/);
+  assert.doesNotMatch(background, /width: 900|height: 900/);
   assert.match(mercadoLivre, /if \(!candidates\.length\) return/);
   assert.match(background, /chrome\.windows\.remove\(targetId\)/);
   const closeWorkerWindow = background.slice(
@@ -78,10 +109,11 @@ test('fluxo preserva Mercado Livre e isola a automação da Shopee', () => {
     background.indexOf('function samePageUrl')
   );
   assert.doesNotMatch(closeWorkerWindow, /chrome\.tabs\.remove/);
-  assert.match(background, /state: 'normal',\s+focused: true/);
   assert.doesNotMatch(background, /Network\.|Storage\.|Cookies\./);
   assert.match(background, /title: job\.title, platform: job\.platform/);
   assert.match(popupPage, /id="marketplace-label">Marketplace/);
+  assert.match(popupPage, /id="reload"[^>]*>↻ Atualizar/);
+  assert.match(popup, /elements\.reload\.addEventListener\('click'/);
   assert.match(popup, /state\.currentItem\?\.platform === 'shopee'/);
   assert.match(popup, /state\.lastError \|\| ''/);
 });
@@ -136,7 +168,13 @@ test('content script aceita somente link curto oficial da Shopee', async () => {
     }),
     click() { this.clicked = true; }
   };
+  const collapsedMenuToggle = {
+    click() { this.clicked = true; }
+  };
   const collapsedMenu = {
+    querySelector: selector => selector.includes('sider-links.collapsed')
+      ? collapsedMenuToggle
+      : null,
     querySelectorAll: selector => selector.includes('submenu-title')
       ? [offerSubmenu]
       : []
@@ -146,6 +184,7 @@ test('content script aceita somente link curto oficial da Shopee', async () => {
   assert.equal(offerActivation.success, true);
   assert.deepEqual(offerActivation.control.clickPoint, { x: 20, y: 30 });
   await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(collapsedMenuToggle.clicked, true);
   assert.equal(offerSubmenu.clicked, true);
   const root = path.join(__dirname, '..', 'extension');
   const manifest = JSON.parse(
@@ -262,6 +301,8 @@ test('Shopee distingue painel, gerador pronto e ação de conta', () => {
 test('detecta somente cupom candidato com preço menor no produto', () => {
   const mercadoLivre = require('../extension/content/mercado_livre.js');
   const priceElement = {
+    matches: () => false,
+    closest: () => null,
     querySelector: () => null,
     getAttribute: name => name === 'content' ? '199.99' : null,
     textContent: 'R$ 199,99'
@@ -271,9 +312,9 @@ test('detecta somente cupom candidato com preço menor no produto', () => {
       innerText: 'Use o cupom MODA10 e pague R$ 179,99 com Cupom',
       textContent: 'Use o cupom MODA10 e pague R$ 179,99 com Cupom'
     },
-    querySelector: selector =>
-      selector === '[itemprop="price"]' ? priceElement : null,
-    querySelectorAll: () => []
+    querySelectorAll: selector => selector.includes('second-line')
+      ? [priceElement]
+      : []
   };
   assert.deepEqual(
     mercadoLivre.findProductCoupon([{ code: 'MODA10' }], root),

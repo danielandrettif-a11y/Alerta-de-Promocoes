@@ -4,6 +4,8 @@ const crypto = require('crypto');
 const { saveJsonAtomic } = require('./json_store.js');
 
 const QUEUE_VERSION = 3;
+const MISSING_PRICE_REVIEW =
+  'O link foi gerado, mas a extensao nao confirmou o preco do produto.';
 
 const STATUSES = Object.freeze({
   AWAITING_AFFILIATE: 'awaiting_affiliate',
@@ -586,6 +588,23 @@ function validateQueueItems(
       priceToCents(current.currentPrice) === priceToCents(item.currentPrice) &&
       Number(current.discount) === Number(item.discount)
     ) {
+      if (
+        item.platform === 'shopee' &&
+        item.status === STATUSES.NEEDS_REVIEW &&
+        item.affiliateLink &&
+        item.reviewReason === MISSING_PRICE_REVIEW
+      ) {
+        item.status = STATUSES.READY;
+        item.reviewReason = null;
+        item.readyAt = now.toISOString();
+        item.priceVerification = normalizePriceVerification({
+          regularPrice: current.currentPrice,
+          finalPrice: current.currentPrice,
+          source: 'catalog',
+          verifiedAt: now.toISOString(),
+          productId: item.dealId
+        });
+      }
       item.validation = {
         state: 'verified',
         checkedAt: now.toISOString(),
@@ -625,6 +644,7 @@ function validateQueueItems(
 }
 
 module.exports = {
+  MISSING_PRICE_REVIEW,
   STATUSES,
   AFFILIATE_PROCESSING_STATES,
   emptyQueue,

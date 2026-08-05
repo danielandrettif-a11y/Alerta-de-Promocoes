@@ -13,6 +13,7 @@ const elements = {
   diagnosticCard: document.getElementById('diagnostic-card'),
   diagnostic: document.getElementById('diagnostic'),
   copyDiagnostic: document.getElementById('copy-diagnostic'),
+  reload: document.getElementById('reload'),
   batchSize: document.getElementById('batch-size'),
   start: document.getElementById('start'),
   continue: document.getElementById('continue'),
@@ -104,6 +105,11 @@ async function runAction(button, type) {
 
 elements.batchSize.addEventListener('change', () => {
   chrome.storage.local.set({ batchSize: Number(elements.batchSize.value) });
+});
+elements.reload.addEventListener('click', async () => {
+  elements.reload.disabled = true;
+  await refresh();
+  elements.reload.disabled = false;
 });
 elements.start.addEventListener('click', () =>
   runAction(elements.start, 'START_PROCESSING')

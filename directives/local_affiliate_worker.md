@@ -18,9 +18,9 @@ servidor.
 
 1. O painel adiciona ofertas à fila e gera os Stories existentes.
 2. A extensão envia heartbeat e reserva até o tamanho de lote escolhido.
-3. A extensão mantém a janela que o usuário já estava usando na metade esquerda
-   e abre a janela de trabalho diretamente no primeiro produto, na metade
-   direita. No Mercado Livre, abre a aba seguinte antes de fechar a anterior.
+3. A extensão mantém intacta a janela que o usuário já estava usando e abre
+   uma janela de trabalho independente maximizada no primeiro produto. No
+   Mercado Livre, abre a aba seguinte antes de fechar a anterior.
    Na Shopee, reutiliza a mesma aba do gerador durante o lote.
 4. Para Mercado Livre, a aba do produto usa o controle
    `Compartilhar`, extrai o link `meli.la`, lê o preço exibido e procura um
@@ -33,7 +33,7 @@ servidor.
    com o preço normal, o preço com cupom e o código.
 9. Itens prontos podem formar um lote e um ZIP persistente.
 10. Ao terminar, a extensão fecha diretamente a janela auxiliar para o navegador
-    não criar uma aba substituta e restaura a janela original.
+    não criar uma aba substituta.
 
 ## Segurança e falhas
 
