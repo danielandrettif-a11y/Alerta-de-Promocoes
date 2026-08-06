@@ -481,6 +481,7 @@ async function fetchDataStatus() {
     const previousMLUpdate = lastUpdateML;
     const previousAmazonUpdate = lastUpdateAmazon;
     const previousShopeeUpdate = lastUpdateShopee;
+    const previousFutFanaticsUpdate = lastUpdateFutFanatics;
     freshnessML = status.mercadoLivre || freshnessML;
     freshnessAmazon = status.amazon || freshnessAmazon;
     freshnessShopee = status.shopee || freshnessShopee;
@@ -509,6 +510,16 @@ async function fetchDataStatus() {
         fetchShopeeDeals();
       } else {
         shopeeDealsLoaded = false;
+      }
+    }
+    if (previousFutFanaticsUpdate && lastUpdateFutFanatics !== previousFutFanaticsUpdate) {
+      if (
+        elTabProducts.classList.contains('active') &&
+        activeDealPlatform === 'futfanatics'
+      ) {
+        fetchFutFanaticsDeals();
+      } else {
+        futFanaticsDealsLoaded = false;
       }
     }
 
@@ -4055,16 +4066,19 @@ function init() {
   }, true);
 
   // Initial loads
-  fetchCategories().then(async () => {
-    await fetchPublicationQueue();
-    await Promise.all([
-      fetchLocalWorkerStatus(),
-      fetchPublicationBatches()
-    ]);
-    fetchMLDeals();
-    fetchDataStatus();
-    fetchWhatsAppStatus();
-  });
+  fetchDataStatus();
+  fetchWhatsAppStatus();
+
+  fetchCategories()
+    .then(async () => {
+      await fetchPublicationQueue();
+      await Promise.all([
+        fetchLocalWorkerStatus(),
+        fetchPublicationBatches()
+      ]);
+      fetchMLDeals();
+    })
+    .catch(err => console.error('Erro no carregamento inicial:', err));
   setInterval(fetchDataStatus, 60000);
   setInterval(fetchWhatsAppStatus, 30000);
   setInterval(syncPublicationHistory, 30000);

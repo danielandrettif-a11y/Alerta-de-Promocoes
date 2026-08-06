@@ -2837,7 +2837,8 @@ async function refreshDealsData() {
     const results = await Promise.allSettled([
       refreshCatalog('mercado_livre'),
       refreshCatalog('amazon'),
-      refreshCatalog('shopee')
+      refreshCatalog('shopee'),
+      refreshCatalog('futfanatics')
     ]);
     const failed = results.filter(result => result.status === 'rejected');
     if (failed.length > 0) {
