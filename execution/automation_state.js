@@ -43,7 +43,10 @@ function generateDealId(deal) {
     : ['amz', 'amazon'].includes(rawPlatform)
       ? 'amazon'
       : rawPlatform;
-  const normalizedLink = normalizeDealLink(deal.link || deal.productLink);
+      
+  // Use rawLink if available (crucial for FutFanatics/Awin links so they don't all resolve to cread.php)
+  const rawLink = deal.rawLink || deal.link || deal.productLink || '';
+  const normalizedLink = normalizeDealLink(rawLink);
   const itemId = normalizedLink.match(/\b(MLB\d+|B0[A-Z0-9]+)\b/i)?.[1];
   const identity = itemId || normalizedLink || String(deal.title || '').trim().toLowerCase();
   return `deal_${hashText(`${platform}:${identity}`)}`;
