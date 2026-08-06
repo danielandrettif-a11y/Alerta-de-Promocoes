@@ -2148,7 +2148,9 @@ app.get('/api/proxy-image', (req, res) => {
     'mlstatic.com',
     'media-amazon.com',
     'ssl-images-amazon.com',
-    'cf.shopee.com.br'
+    'cf.shopee.com.br',
+    'tcdn.com.br',
+    'futfanatics.com.br'
   ];
   const parseAllowedUrl = value => {
     try {
