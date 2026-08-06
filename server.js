@@ -1459,6 +1459,38 @@ function runPublicationQueueGeneration(jobId, entries) {
   if (queueGenerationJob.cancelRequested) queueGenerationJob.cancel();
 }
 
+function schedulePublicationQueueGeneration(jobId, entries) {
+  const deadline = Date.now() + 10 * 60 * 1000;
+  const start = () => {
+    if (queueGenerationJob.id !== jobId) return;
+    if (dealsRefreshInProgress || automaticPublishInProgress) {
+      if (Date.now() < deadline) {
+        setTimeout(start, 1000);
+        return;
+      }
+      queueGenerationJob = {
+        ...queueGenerationJob,
+        state: 'failed',
+        completedAt: new Date().toISOString(),
+        error: 'O servidor permaneceu ocupado atualizando os catálogos.'
+      };
+      return;
+    }
+    try {
+      runPublicationQueueGeneration(jobId, entries);
+    } catch (error) {
+      queueGenerationJob = {
+        ...queueGenerationJob,
+        state: 'failed',
+        current: null,
+        completedAt: new Date().toISOString(),
+        error: error.message
+      };
+    }
+  };
+  setTimeout(start, 250);
+}
+
 app.post(
   '/api/publication-queue',
   requirePublicationQueue,
@@ -1596,20 +1628,9 @@ app.post(
       cancel: null,
       error: null
     };
-    setImmediate(() => {
-      try {
-        runPublicationQueueGeneration(queueGenerationJob.id, entries);
-      } catch (error) {
-        queueGenerationJob = {
-          ...queueGenerationJob,
-          state: 'failed',
-          current: null,
-          completedAt: new Date().toISOString(),
-          error: error.message
-        };
-      }
-    });
+    const jobId = queueGenerationJob.id;
     res.status(202).json(queueGenerationJob);
+    schedulePublicationQueueGeneration(jobId, entries);
   }
 );
 
@@ -2844,21 +2865,32 @@ function refreshCatalog(platform) {
 
 async function refreshDealsData() {
   const env = readEnv();
-  if (env.DEALS_REFRESH_ENABLED === 'false' || dealsRefreshInProgress) return;
+  if (
+    env.DEALS_REFRESH_ENABLED === 'false' ||
+    dealsRefreshInProgress ||
+    automaticPublishInProgress ||
+    queueGenerationJob.state === 'running'
+  ) return;
 
   dealsRefreshInProgress = true;
   console.log(`\n🔄 [${new Date().toLocaleTimeString('pt-BR')}] Atualizando bases de ofertas...`);
   try {
-    const results = await Promise.allSettled([
-      refreshCatalog('mercado_livre'),
-      refreshCatalog('amazon'),
-      refreshCatalog('shopee'),
-      refreshCatalog('futfanatics')
-    ]);
-    const failed = results.filter(result => result.status === 'rejected');
+    const failed = [];
+    for (const platform of [
+      'mercado_livre',
+      'amazon',
+      'shopee',
+      'futfanatics'
+    ]) {
+      try {
+        await refreshCatalog(platform);
+      } catch (error) {
+        failed.push(error);
+      }
+    }
     if (failed.length > 0) {
-      failed.forEach(result => {
-        console.error(`⚠️ Falha em uma fonte de ofertas: ${result.reason.message}`);
+      failed.forEach(error => {
+        console.error(`⚠️ Falha em uma fonte de ofertas: ${error.message}`);
       });
     } else {
       console.log('✅ Mercado Livre, Amazon, Shopee e FutFanatics atualizados com sucesso.');
@@ -2962,7 +2994,12 @@ function generateStory(deal) {
 
 async function publishNextAutomaticOffer() {
   const env = readEnv();
-  if (env.AUTO_RUN_ENABLED !== 'true' || automaticPublishInProgress) return;
+  if (
+    env.AUTO_RUN_ENABLED !== 'true' ||
+    automaticPublishInProgress ||
+    dealsRefreshInProgress ||
+    queueGenerationJob.state === 'running'
+  ) return;
 
   const targetPerHour = Math.min(
     20,

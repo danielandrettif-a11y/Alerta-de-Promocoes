@@ -52,6 +52,7 @@ function escapeHtml(value) {
 // Encontra o executável do navegador Chrome ou Edge no Windows
 function findBrowserPath() {
   const possiblePaths = [
+    process.env.BROWSER_EXECUTABLE_PATH,
     // Windows
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -65,7 +66,7 @@ function findBrowserPath() {
     '/usr/bin/chromium-browser'
   ];
 
-  for (const executablePath of possiblePaths) {
+  for (const executablePath of possiblePaths.filter(Boolean)) {
     if (fs.existsSync(executablePath)) {
       return executablePath;
     }
@@ -130,10 +131,22 @@ async function main() {
   const browser = await puppeteer.launch({
     executablePath: browserPath,
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-background-networking'
+    ]
   });
 
   try {
+    const page = await browser.newPage();
+    await page.setViewport({
+      width: 1080,
+      height: 1920,
+      deviceScaleFactor: 1
+    });
     let failureCount = 0;
     for (let i = 0; i < deals.length; i++) {
       if (
@@ -241,14 +254,8 @@ async function main() {
       fs.writeFileSync(tempHtmlPath, htmlContent, 'utf-8');
 
       // Abre a página no browser
-      const page = await browser.newPage();
       const filename = `story_${rank}_discount_${deal.discount}.jpg`;
       const outputImagePath = path.join(storiesDir, filename);
-      await page.setViewport({
-        width: 1080,
-        height: 1920,
-        deviceScaleFactor: 1 // Escala padrão
-      });
 
       // Abre o arquivo local no Chrome
       const fileUrl = `file:///${tempHtmlPath.replace(/\\/g, '/')}`;
@@ -299,8 +306,6 @@ async function main() {
       } catch (pageErr) {
         failureCount++;
         console.error(`  ❌ Erro ao capturar imagem do Story para o item ${rank}: ${pageErr.message}`);
-      } finally {
-        await page.close();
       }
 
       // Deleta arquivo HTML temporário

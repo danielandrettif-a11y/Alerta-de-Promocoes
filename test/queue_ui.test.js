@@ -50,9 +50,21 @@ test('prepara Mercado Livre e Shopee juntos com progresso cancelavel', () => {
   assert.match(app, /stopQueueGenerationRequested/);
   assert.match(app, /\/api\/publication-queue\/generation/);
   assert.match(server, /spawn\(\s*process\.execPath/);
+  const generationRoute = server.slice(
+    server.indexOf("'/api/publication-queue/generation'"),
+    server.indexOf("'/api/publication-queue/generation/:jobId'"),
+  );
+  assert.ok(
+    generationRoute.indexOf('res.status(202).json(queueGenerationJob)') <
+      generationRoute.indexOf('schedulePublicationQueueGeneration(jobId, entries)'),
+  );
+  assert.match(server, /for \(const platform of \[/);
   assert.match(server, /entries\.length > 40/);
   assert.match(server, /STORY_CANCEL_FILE/);
   assert.match(generator, /process\.env\.STORY_CANCEL_FILE/);
+  assert.match(generator, /process\.env\.BROWSER_EXECUTABLE_PATH/);
+  assert.equal(generator.match(/await browser\.newPage\(\)/g)?.length, 1);
+  assert.match(generator, /--disable-dev-shm-usage/);
   assert.match(generator, /temp_story_\$\{process\.pid\}_\$\{rank\}/);
   assert.match(page, /id="btn-stop-progress"/);
 });

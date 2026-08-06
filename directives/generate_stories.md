@@ -16,6 +16,11 @@ Convert JSON product promotions data into visually appealing, professional Insta
 - Native requirements: Google Chrome or Microsoft Edge installed on the local system (detected automatically).
 - NPM library dependencies: `puppeteer-core`
 
+## Reliability
+- Reuse one browser page for the entire batch instead of opening one page per Story.
+- Do not run Story generation at the same time as catalog refresh or automatic publication.
+- Refresh marketplace catalogs sequentially to keep Chromium memory usage bounded on small servers.
+
 ## Output
 A set of vertical JPEG images (format: `story_[RANK]_discount_[PERCENT].jpg`) generated inside the `/stories/` folder, configured at 1080x1920px. Each image displays:
 - Super Discount Badge (e.g. 70% OFF)
