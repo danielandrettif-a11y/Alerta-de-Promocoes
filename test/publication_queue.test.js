@@ -171,6 +171,38 @@ test('aceita Amazon somente no dominio brasileiro com tag de afiliado', () => {
   );
 });
 
+test('FutFanatics aceita somente deep link Awin do programa oficial', () => {
+  const productLink =
+    'https://www.futfanatics.com.br/camisa-palmeiras-i-2026';
+  const affiliateLink =
+    'https://www.awin1.com/cread.php?awinmid=17893&awinaffid=123456&ued=' +
+    encodeURIComponent(productLink);
+
+  assert.equal(
+    validateAffiliateLink(affiliateLink, 'futfanatics'),
+    affiliateLink
+  );
+  assert.throws(
+    () => validateAffiliateLink(productLink, 'futfanatics'),
+    /deep link afiliado da Awin/
+  );
+  assert.throws(
+    () => validateAffiliateLink(
+      affiliateLink.replace('awinmid=17893', 'awinmid=20084'),
+      'futfanatics'
+    ),
+    /17893/
+  );
+
+  const created = enqueueOffer(emptyQueue(), sampleOffer({
+    platform: 'futfanatics',
+    productLink,
+    affiliateLink
+  }));
+  assert.equal(created.item.affiliateLink, affiliateLink);
+  assert.equal(created.item.status, STATUSES.AWAITING_AFFILIATE);
+});
+
 test('preserva a prova de preco recebida da extensao', () => {
   const now = new Date('2026-08-04T12:00:00Z');
   const created = enqueueOffer(emptyQueue(), sampleOffer(), now);

@@ -8,7 +8,6 @@ Automate the extraction of FutFanatics promotional deals (`https://www.futfanati
 ## Inputs
 - `FUTFANATICS_MIN_DISCOUNT` (integer, optional): Minimum discount percentage. Default: `20`.
 - `FUTFANATICS_MAX_PRODUCTS` (integer, optional): Maximum number of products to collect. Default: `400`.
-- `FUTFANATICS_AWIN_MID` (string, optional in `.env`): Awin Advertiser ID for FutFanatics (default: `20084`).
 - `FUTFANATICS_AWIN_PUBLISHER_ID` (string, optional in `.env`): Your Awin Publisher ID.
 
 ## Execution Tools
@@ -39,3 +38,14 @@ Automate the extraction of FutFanatics promotional deals (`https://www.futfanati
 - Sets standard browser User-Agent headers to ensure reliable page rendering on Tray platform.
 - Never invents a default discount when the reference price is absent. Discards products with less than 20% discount.
 - Preserves atomic write of `futfanatics_deals_report.json`.
+- A failed or empty scrape exits with an error and preserves the previous valid report.
+
+## Affiliate links
+
+- Fut Fanatics BR runs on Awin under advertiser ID `17893`.
+- After the publisher joins and is approved for the program, set
+  `FUTFANATICS_AWIN_PUBLISHER_ID` in the server environment.
+- Deep links are deterministic Awin URLs (`cread.php`) and are generated for
+  every collected product without opening the Awin panel product by product.
+- The browser extension only opens the clean product URL to confirm its current
+  price before the queued offer becomes ready.

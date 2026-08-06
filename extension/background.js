@@ -143,6 +143,10 @@ function tabMatchesPlatform(tab, platform) {
     if (platform === 'amazon') {
       return hostname === 'amazon.com.br' || hostname === 'www.amazon.com.br';
     }
+    if (platform === 'futfanatics') {
+      return hostname === 'futfanatics.com.br' ||
+        hostname === 'www.futfanatics.com.br';
+    }
     return hostname === 'www.mercadolivre.com.br' ||
       hostname === 'produto.mercadolivre.com.br';
   } catch {
@@ -693,6 +697,37 @@ async function processAmazonJob(job) {
   };
 }
 
+async function processFutFanaticsJob(job, settings, tab) {
+  if (!job.affiliateLink || !job.affiliateLink.includes('awin1.com')) {
+    return {
+      success: false,
+      code: 'FUTFANATICS_AWIN_NOT_CONFIGURED',
+      message: 'Configure o Publisher ID da Awin no servidor e atualize a FutFanatics.'
+    };
+  }
+  await setStage('futfanatics_price_check');
+  const loadedTab = await navigateTab(
+    tab.id,
+    job.productLink,
+    settings.pageTimeoutMs
+  );
+  const hostname = new URL(loadedTab.url || job.productLink).hostname;
+  if (!['futfanatics.com.br', 'www.futfanatics.com.br'].includes(hostname)) {
+    return {
+      success: false,
+      code: 'FUTFANATICS_PRODUCT_NOT_READY',
+      message: 'A página do produto FutFanatics não ficou disponível.'
+    };
+  }
+  const price = await sendContentMessage(tab.id, {
+    type: 'READ_PRODUCT_PRICE'
+  }, 'content/product_price.js');
+  return {
+    ...price,
+    affiliateLink: job.affiliateLink
+  };
+}
+
 async function processJob(job, settings, tab, generation) {
   await persistState({
     status: 'processing',
@@ -705,6 +740,9 @@ async function processJob(job, settings, tab, generation) {
   }
   if (job.platform === 'amazon') {
     return processAmazonJob(job);
+  }
+  if (job.platform === 'futfanatics') {
+    return processFutFanaticsJob(job, settings, tab);
   }
   await setStage('mercado_livre_processing');
   return processMercadoLivreJob(job, settings, tab);
@@ -761,7 +799,7 @@ async function processQueue() {
       }
       attemptedItemIds.push(job.id);
       try {
-        const platform = ['shopee', 'amazon'].includes(job.platform)
+        const platform = ['shopee', 'amazon', 'futfanatics'].includes(job.platform)
           ? job.platform
           : 'mercado_livre';
         const tab = platform === 'amazon' ? null : await getOrCreateWorkerTab(

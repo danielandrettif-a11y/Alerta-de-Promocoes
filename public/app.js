@@ -138,6 +138,7 @@ const elBtnClearSelectionFutFanatics = document.getElementById('btn-clear-select
 const elTxtSelectedCountFutFanatics = document.getElementById('txt-selected-count-futfanatics');
 const elBtnQueueFutFanatics = document.getElementById('btn-queue-futfanatics');
 const elTxtQueueCountFutFanatics = document.getElementById('txt-queue-count-futfanatics');
+const elTxtFutFanaticsAffiliate = document.getElementById('txt-futfanatics-affiliate');
 
 // DOM elements - Filters ML
 const elFilterNameML = document.getElementById('ipt-filter-name-ml');
@@ -171,6 +172,8 @@ const elFilterSubcategoryFutFanatics = document.getElementById('sel-filter-subca
 const elFilterDiscountFutFanatics = document.getElementById('sel-filter-discount-futfanatics');
 const elFilterTeamFutFanatics = document.getElementById('sel-filter-team-futfanatics');
 const elSortFutFanatics = document.getElementById('sel-sort-futfanatics');
+const elBtnToggleFiltersFutFanatics = document.getElementById('btn-toggle-filters-futfanatics');
+const elFiltersFutFanatics = document.getElementById('filters-futfanatics');
 
 const DEFAULT_TAXONOMY_FALLBACK = {
   'Futebol e Mantos Esportivos': {
@@ -467,10 +470,14 @@ function updateLastUpdateUI(platform) {
   }
 }
 
-function updateShopeeCatalogUpdate(value) {
+function updateShopeeCatalogUpdate(value, checkedAt = null) {
   const date = parseBackendDate(value);
-  elTxtShopeeCatalogUpdate.textContent = date
-    ? `atualizado em ${date.toLocaleString('pt-BR')}`
+  const checkedDate = parseBackendDate(checkedAt);
+  elTxtShopeeCatalogUpdate.textContent = checkedDate
+    ? `verificado em ${checkedDate.toLocaleString('pt-BR')}` +
+      (date ? ` · catálogo de ${date.toLocaleString('pt-BR')}` : '')
+    : date
+      ? `atualizado em ${date.toLocaleString('pt-BR')}`
     : 'nenhuma atualização registrada';
 }
 
@@ -490,7 +497,7 @@ async function fetchDataStatus() {
     lastUpdateAmazon = status.amazon?.generatedAt || lastUpdateAmazon;
     lastUpdateShopee = status.shopee?.generatedAt || lastUpdateShopee;
     lastUpdateFutFanatics = status.futfanatics?.generatedAt || lastUpdateFutFanatics;
-    updateShopeeCatalogUpdate(lastUpdateShopee);
+    updateShopeeCatalogUpdate(lastUpdateShopee, status.shopee?.checkedAt);
     if (previousMLUpdate && lastUpdateML !== previousMLUpdate) fetchMLDeals();
     if (previousAmazonUpdate && lastUpdateAmazon !== previousAmazonUpdate) {
       if (
@@ -519,7 +526,7 @@ async function fetchDataStatus() {
       ) {
         fetchFutFanaticsDeals();
       } else {
-        futFanaticsDealsLoaded = false;
+        futfanaticsDealsLoaded = false;
       }
     }
 
@@ -1079,6 +1086,7 @@ async function fetchFutFanaticsDeals() {
 
     const response = await fetch('/api/futfanatics-deals');
     const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Falha ao carregar a FutFanatics.');
 
     allFutFanaticsDeals = (data.deals || []).map(deal =>
       addPublicationState(deal, 'futfanatics', publishedEntries)
@@ -1087,6 +1095,15 @@ async function fetchFutFanaticsDeals() {
     freshnessFutFanatics = data.freshness || null;
     visibleFutFanaticsLimit = DEALS_PAGE_SIZE;
     renderFutFanaticsDeals(allFutFanaticsDeals);
+    if (elTxtFutFanaticsAffiliate) {
+      elTxtFutFanaticsAffiliate.textContent = data.affiliateConfigured
+        ? 'links Awin automáticos ativos'
+        : 'configure o Publisher ID da Awin para monetizar os links';
+      elTxtFutFanaticsAffiliate.classList.toggle(
+        'is-warning',
+        !data.affiliateConfigured
+      );
+    }
 
     if (data.generatedAt) {
       lastUpdateFutFanatics = data.generatedAt;
@@ -1111,6 +1128,7 @@ async function fetchFutFanaticsDeals() {
 
 async function triggerFutFanaticsScraper() {
   showLoading('Varrendo ofertas da FutFanatics... Por favor aguarde.');
+  elBtnUpdateFutFanatics.disabled = true;
   try {
     const response = await fetch('/api/refresh-futfanatics-deals', { method: 'POST' });
     const data = await response.json();
@@ -1124,6 +1142,7 @@ async function triggerFutFanaticsScraper() {
     console.error('Erro ao atualizar FutFanatics:', err);
     alert('Erro ao atualizar ofertas da FutFanatics.');
   } finally {
+    elBtnUpdateFutFanatics.disabled = false;
     hideLoading();
   }
 }
@@ -1207,8 +1226,8 @@ async function triggerAmazonScraper() {
 // ==========================================
 async function postSelectedDeals(platform) {
   if (platform === 'shopee') return;
-  const indices = Array.from(platform === 'ml' ? selectedMLIndices : selectedAmazonIndices);
-  const deals = platform === 'ml' ? allMLDeals : allAmazonDeals;
+  const { selected, deals } = getDealSelectionConfig(platform);
+  const indices = Array.from(selected);
   const targetDeals = deals.filter((_, idx) => indices.includes(idx));
 
   if (targetDeals.length === 0) return;
@@ -1671,6 +1690,9 @@ function getQueueMarketplaceBrand(platform, link = '') {
   if (norm === 'shopee' || norm === 'shp' || url.includes('shopee.com')) {
     return { name: 'Shopee', className: 'shopee', affiliateHost: 's.shopee.com.br' };
   }
+  if (norm === 'futfanatics' || url.includes('futfanatics.com.br') || url.includes('awin1.com')) {
+    return { name: 'FutFanatics', className: 'futfanatics', affiliateHost: 'awin1.com' };
+  }
   return { name: 'Mercado Livre', className: 'mercado_livre', affiliateHost: 'meli.la' };
 }
 
@@ -2029,9 +2051,10 @@ async function fetchPublicationQueue(options = {}) {
     elBtnQueueML.hidden = !publicationQueueEnabled;
     if (elBtnQueueAmazon) elBtnQueueAmazon.hidden = !publicationQueueEnabled;
     elBtnQueueShopee.hidden = !publicationQueueEnabled;
+    elBtnQueueFutFanatics.hidden = !publicationQueueEnabled;
     elBtnMobileQueue.hidden =
       !publicationQueueEnabled ||
-      !['ml', 'amazon', 'shopee'].includes(activeDealPlatform);
+      !['ml', 'amazon', 'shopee', 'futfanatics'].includes(activeDealPlatform);
 
     if (!publicationQueueEnabled) {
       publicationQueueItems = [];
@@ -2241,6 +2264,11 @@ function getSelectedPublicationDeals() {
       deal: allShopeeDeals[index],
       index,
       platform: 'shopee'
+    })),
+    ...Array.from(selectedFutFanaticsIndices, index => ({
+      deal: allFutFanaticsDeals[index],
+      index,
+      platform: 'futfanatics'
     }))
   ].filter(item => item.deal);
 }
@@ -2798,7 +2826,9 @@ function getFilteredDealEntries(deals, platform) {
     ? elSortAmazon
     : platform === 'shopee'
       ? elSortShopee
-      : elSortML;
+      : platform === 'futfanatics'
+        ? elSortFutFanatics
+        : elSortML;
   const value = deal => {
     switch (sortControl?.value || 'score') {
       case 'demand':
@@ -3478,6 +3508,7 @@ function findCompatibleDealsForCoupon(coupon, deals) {
 function getDealSelectionConfig(platform) {
   if (platform === 'amazon') {
     return {
+      deals: allAmazonDeals,
       grid: elGridAmazon,
       selected: selectedAmazonIndices,
       selectAll: elChkSelectAllAmazon,
@@ -3488,6 +3519,7 @@ function getDealSelectionConfig(platform) {
   }
   if (platform === 'shopee') {
     return {
+      deals: allShopeeDeals,
       grid: elGridShopee,
       selected: selectedShopeeIndices,
       selectAll: elChkSelectAllShopee,
@@ -3496,7 +3528,19 @@ function getDealSelectionConfig(platform) {
       countElement: null
     };
   }
+  if (platform === 'futfanatics') {
+    return {
+      deals: allFutFanaticsDeals,
+      grid: elGridFutFanatics,
+      selected: selectedFutFanaticsIndices,
+      selectAll: elChkSelectAllFutFanatics,
+      clearButton: elBtnClearSelectionFutFanatics,
+      generateButton: elBtnGenerateFutFanatics,
+      countElement: elTxtSelectedCountFutFanatics
+    };
+  }
   return {
+    deals: allMLDeals,
     grid: elGridML,
     selected: selectedMLIndices,
     selectAll: elChkSelectAllML,
@@ -3527,12 +3571,15 @@ function toggleShopeeSelectIndex(index) {
 
 function updateMobileSelectionBar() {
   const onDealTab = elTabProducts.classList.contains('active');
-  const totalQueueCount = selectedMLIndices.size + selectedAmazonIndices.size + selectedShopeeIndices.size;
+  const totalQueueCount = selectedMLIndices.size + selectedAmazonIndices.size +
+    selectedShopeeIndices.size + selectedFutFanaticsIndices.size;
   const currentPlatformCount = activeDealPlatform === 'amazon'
     ? selectedAmazonIndices.size
     : activeDealPlatform === 'shopee'
       ? selectedShopeeIndices.size
-      : selectedMLIndices.size;
+      : activeDealPlatform === 'futfanatics'
+        ? selectedFutFanaticsIndices.size
+        : selectedMLIndices.size;
 
   elMobileSelectionCount.textContent = totalQueueCount;
   elMobileSelectionBar.classList.toggle(
@@ -3601,13 +3648,16 @@ function updateShopeeSelectionUI() {
 
 function updatePublicationQueueSelectionUI() {
   try {
-    const count = selectedMLIndices.size + selectedAmazonIndices.size + selectedShopeeIndices.size;
+    const count = selectedMLIndices.size + selectedAmazonIndices.size +
+      selectedShopeeIndices.size + selectedFutFanaticsIndices.size;
     if (elTxtQueueCountML) elTxtQueueCountML.textContent = count;
     if (elTxtQueueCountAmazon) elTxtQueueCountAmazon.textContent = count;
     if (elTxtQueueCountShopee) elTxtQueueCountShopee.textContent = count;
+    if (elTxtQueueCountFutFanatics) elTxtQueueCountFutFanatics.textContent = count;
     if (elBtnQueueML) elBtnQueueML.disabled = count === 0;
     if (elBtnQueueAmazon) elBtnQueueAmazon.disabled = count === 0;
     if (elBtnQueueShopee) elBtnQueueShopee.disabled = count === 0;
+    if (elBtnQueueFutFanatics) elBtnQueueFutFanatics.disabled = count === 0;
     updateMobileSelectionBar();
   } catch (err) {
     console.error('Erro em updatePublicationQueueSelectionUI:', err);
@@ -3662,25 +3712,8 @@ function switchDealSource(activeBtn, activePanel) {
 }
 
 
-function applyFutFanaticsFilters() {
-  selectedFutFanaticsIndices.clear();
-  visibleFutFanaticsLimit = DEALS_PAGE_SIZE;
-  renderFutFanaticsDeals(allFutFanaticsDeals);
-}
-
 function updateFutFanaticsSelectionUI() {
-  if (!elGridFutFanatics) return;
-  const visibleCards = elGridFutFanatics.querySelectorAll('.deal-card:not(.hidden-filter)');
-  const count = selectedFutFanaticsIndices.size;
-  if (elTxtSelectedCountFutFanatics) elTxtSelectedCountFutFanatics.textContent = count;
-  if (elTxtQueueCountFutFanatics) elTxtQueueCountFutFanatics.textContent = count;
-  if (elBtnGenerateFutFanatics) elBtnGenerateFutFanatics.disabled = count === 0;
-  if (elBtnQueueFutFanatics) elBtnQueueFutFanatics.disabled = count === 0;
-  if (elBtnClearSelectionFutFanatics) elBtnClearSelectionFutFanatics.disabled = count === 0;
-  if (elChkSelectAllFutFanatics) {
-    elChkSelectAllFutFanatics.checked = visibleCards.length > 0 && Array.from(visibleCards).every(card => selectedFutFanaticsIndices.has(Number(card.dataset.index)));
-  }
-  updateMobileSelectionBar();
+  updateDealSelectionUI('futfanatics');
 }
 
 // ==========================================
@@ -3778,6 +3811,9 @@ function init() {
   // Generate / Post Triggers
   elBtnGenerateML.addEventListener('click', () => postSelectedDeals('ml'));
   elBtnGenerateAmazon.addEventListener('click', () => postSelectedDeals('amazon'));
+  elBtnGenerateFutFanatics.addEventListener('click', () =>
+    postSelectedDeals('futfanatics')
+  );
   elBtnMobileSend.addEventListener('click', () =>
     postSelectedDeals(activeDealPlatform)
   );
@@ -3793,6 +3829,9 @@ function init() {
     );
   }
   elBtnQueueShopee.addEventListener('click', () =>
+    enqueueDealsForPublication()
+  );
+  elBtnQueueFutFanatics.addEventListener('click', () =>
     enqueueDealsForPublication()
   );
   elBtnRefreshQueue.addEventListener('click', async () => {

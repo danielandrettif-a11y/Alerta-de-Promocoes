@@ -17,6 +17,8 @@ test('renderiza ofertas em lotes de 20 sem blur por card', () => {
   assert.match(app, /filteredEntries\.slice\(0, visibleLimit\)/);
   assert.match(html, /id="btn-load-more-ml"/);
   assert.match(html, /id="btn-load-more-amazon"/);
+  assert.match(html, /id="btn-load-more-futfanatics"/);
+  assert.match(app, /visibleLimit: visibleFutFanaticsLimit/);
   assert.doesNotMatch(html, /id="btn-tab-amazon"[^>]*hidden/);
   assert.match(html, /id="txt-shopee-catalog-update"/);
   assert.match(html, /id="chk-select-all-shopee"/);

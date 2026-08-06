@@ -13,8 +13,26 @@ const path = require('path');
 const puppeteer = require('puppeteer-core');
 const { inferCategoryAndSub } = require('./category_helper.js');
 
-function findBrowserPath() {
+const ROOT_DIR = path.resolve(__dirname, '..');
+
+function readEnv() {
+  const env = { ...process.env };
+  const envPath = path.join(ROOT_DIR, '.env');
+  if (!fs.existsSync(envPath)) return env;
+  for (const rawLine of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const separator = line.indexOf('=');
+    if (separator > 0) {
+      env[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+    }
+  }
+  return env;
+}
+
+function findBrowserPath(env = process.env) {
   const possiblePaths = [
+    env.BROWSER_EXECUTABLE_PATH,
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     path.join(process.env.USERPROFILE || 'C:\\Users\\danie', 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
@@ -26,7 +44,7 @@ function findBrowserPath() {
     '/usr/bin/chromium-browser'
   ];
 
-  for (const executablePath of possiblePaths) {
+  for (const executablePath of possiblePaths.filter(Boolean)) {
     if (fs.existsSync(executablePath)) {
       return executablePath;
     }
@@ -50,20 +68,25 @@ function parseNumericPrice(priceStr) {
   return isNaN(num) ? 0 : num;
 }
 
-function buildAffiliateLink(productUrl) {
-  const publisherId = process.env.FUTFANATICS_AWIN_PUBLISHER_ID || process.env.AWIN_PUBLISHER_ID;
-  const merchantId = process.env.FUTFANATICS_AWIN_MID || '20084';
+function buildAffiliateLink(productUrl, env = process.env) {
+  const publisherId = env.FUTFANATICS_AWIN_PUBLISHER_ID || env.AWIN_PUBLISHER_ID;
 
   if (!publisherId) {
     return productUrl;
   }
-
-  const encodedUrl = encodeURIComponent(productUrl);
-  return `https://www.awin1.com/cread.php?awinmid=${merchantId}&awinaffid=${publisherId}&ued=${encodedUrl}`;
+  if (!/^\d+$/.test(publisherId)) {
+    throw new Error('O Publisher ID Awin da FutFanatics precisa ser numérico.');
+  }
+  const params = new URLSearchParams({
+    awinmid: '17893',
+    awinaffid: publisherId,
+    ued: productUrl
+  });
+  return `https://www.awin1.com/cread.php?${params}`;
 }
 
-function selectVerifiedDeals(deals, limit = 400) {
-  const minDiscount = Number(process.env.FUTFANATICS_MIN_DISCOUNT || 20);
+function selectVerifiedDeals(deals, limit = 400, env = process.env) {
+  const minDiscount = Number(env.FUTFANATICS_MIN_DISCOUNT || 20);
   return deals
     .filter(deal => {
       const discountVal = Number(deal.discount) || 0;
@@ -162,26 +185,25 @@ async function scrapeDealsFromPage(page, pageNum = 1) {
 
     return rawDeals;
   } catch (err) {
-    console.error(`[FutFanatics] Erro ao raspar página ${pageNum}:`, err.message);
-    return [];
+    throw new Error(`Falha ao raspar a página ${pageNum}: ${err.message}`);
   }
 }
 
-async function fetchFutFanaticsDeals() {
-  const browserPath = findBrowserPath();
+async function fetchFutFanaticsDeals(options = {}) {
+  const env = options.env || readEnv();
+  const browserPath = findBrowserPath(env);
   if (!browserPath) {
-    console.error('[FutFanatics] Navegador Chrome/Edge não encontrado!');
-    return { generatedAt: new Date().toISOString(), deals: [], totalFound: 0 };
+    throw new Error('Navegador Chrome/Edge não encontrado.');
   }
 
-  const isWin = process.platform === 'win32';
-  console.log(`[FutFanatics] Iniciando coleta de ofertas (headless: ${!isWin})...`);
+  const headless = env.FUTFANATICS_HEADLESS !== 'false';
+  console.log(`[FutFanatics] Iniciando coleta de ofertas (headless: ${headless})...`);
 
   let browser;
   try {
     browser = await puppeteer.launch({
       executablePath: browserPath,
-      headless: isWin ? false : true,
+      headless,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -231,7 +253,7 @@ async function fetchFutFanaticsDeals() {
 
       return {
         title: raw.title,
-        link: buildAffiliateLink(raw.rawLink),
+        link: buildAffiliateLink(raw.rawLink, env),
         rawLink: raw.rawLink,
         image: raw.image,
         originalPrice: formattedOrig,
@@ -247,19 +269,30 @@ async function fetchFutFanaticsDeals() {
       };
     });
 
-    const finalDeals = selectVerifiedDeals(processedDeals);
+    const maxProducts = Math.max(
+      1,
+      Number(env.FUTFANATICS_MAX_PRODUCTS) || 400
+    );
+    const finalDeals = selectVerifiedDeals(processedDeals, maxProducts, env);
+    if (finalDeals.length === 0) {
+      throw new Error('A coleta não encontrou ofertas válidas; o relatório anterior foi preservado.');
+    }
 
     const report = {
       generatedAt: new Date().toISOString(),
       totalFound: finalDeals.length,
+      affiliateConfigured: Boolean(
+        env.FUTFANATICS_AWIN_PUBLISHER_ID || env.AWIN_PUBLISHER_ID
+      ),
+      catalog: finalDeals,
       deals: finalDeals
     };
 
     return report;
 
   } catch (err) {
-    console.error('[FutFanatics] Falha crítica durante execução:', err);
-    return { generatedAt: new Date().toISOString(), totalFound: 0, deals: [] };
+    console.error('[FutFanatics] Falha crítica durante execução:', err.message);
+    throw err;
   } finally {
     if (browser) {
       await browser.close().catch(() => {});
@@ -268,9 +301,10 @@ async function fetchFutFanaticsDeals() {
 }
 
 async function run() {
-  const report = await fetchFutFanaticsDeals();
+  const env = readEnv();
+  const report = await fetchFutFanaticsDeals({ env });
 
-  const runtimeDir = process.env.APP_RUNTIME_DIR || path.join(__dirname, '..');
+  const runtimeDir = env.APP_RUNTIME_DIR || ROOT_DIR;
   const outputPath = path.join(runtimeDir, 'futfanatics_deals_report.json');
 
   const tmpPath = `${outputPath}.tmp`;

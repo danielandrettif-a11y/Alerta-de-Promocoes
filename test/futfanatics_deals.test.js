@@ -29,13 +29,16 @@ test('FutFanatics seleciona somente ofertas com desconto real acima do mínimo',
 
 test('FutFanatics gera links Awin quando o publisher ID está presente', () => {
   process.env.FUTFANATICS_AWIN_PUBLISHER_ID = '123456';
-  process.env.FUTFANATICS_AWIN_MID = '20084';
   const url = 'https://www.futfanatics.com.br/camisa-flamengo-i-2026';
   const affiliateLink = buildAffiliateLink(url);
 
   assert.ok(affiliateLink.includes('awin1.com'));
   assert.ok(affiliateLink.includes('awinaffid=123456'));
-  assert.ok(affiliateLink.includes('awinmid=20084'));
+  assert.ok(affiliateLink.includes('awinmid=17893'));
+  assert.equal(
+    new URL(affiliateLink).searchParams.get('ued'),
+    url
+  );
 
   delete process.env.FUTFANATICS_AWIN_PUBLISHER_ID;
   const cleanLink = buildAffiliateLink(url);

@@ -192,8 +192,22 @@ function validateAffiliateLink(rawValue, platform = 'mercado_livre') {
   }
   if (platform === 'futfanatics') {
     const host = parsed.hostname.toLowerCase();
-    if (!['futfanatics.com.br', 'www.futfanatics.com.br', 'awin1.com', 'www.awin1.com'].includes(host)) {
-      throw new Error('Use um link valido da FutFanatics ou Awin.');
+    if (!['awin1.com', 'www.awin1.com'].includes(host)) {
+      throw new Error('Use o deep link afiliado da Awin para a FutFanatics.');
+    }
+    if (parsed.searchParams.get('awinmid') !== '17893') {
+      throw new Error('O link Awin precisa usar o programa Fut Fanatics BR (17893).');
+    }
+    if (!/^\d+$/.test(parsed.searchParams.get('awinaffid') || '')) {
+      throw new Error('O link Awin precisa conter seu Publisher ID.');
+    }
+    const destination = normalizeHttpsUrl(
+      parsed.searchParams.get('ued'),
+      'Destino do link Awin'
+    );
+    if (!['futfanatics.com.br', 'www.futfanatics.com.br']
+      .includes(destination.hostname.toLowerCase())) {
+      throw new Error('O link Awin precisa apontar para a FutFanatics.');
     }
     return parsed.toString();
   }
@@ -218,7 +232,7 @@ function normalizeProductLink(rawValue, platform) {
     : platform === 'amazon'
       ? ['amazon.com.br', 'www.amazon.com.br'].includes(hostname)
       : platform === 'futfanatics'
-        ? ['futfanatics.com.br', 'www.futfanatics.com.br', 'awin1.com', 'www.awin1.com'].includes(hostname)
+        ? ['futfanatics.com.br', 'www.futfanatics.com.br'].includes(hostname)
         : hostname === 'mercadolivre.com.br' ||
           hostname.endsWith('.mercadolivre.com.br');
   if (!valid) {
@@ -262,7 +276,11 @@ function enqueueOffer(queue, input, now = new Date()) {
   // Se for Amazon, já é afiliado automaticamente com a tag
   const isAmazon = platform === 'amazon';
   const status = STATUSES.AWAITING_AFFILIATE;
-  const affiliateLink = isAmazon ? productLink : null;
+  const affiliateLink = isAmazon
+    ? productLink
+    : platform === 'futfanatics' && input.affiliateLink
+      ? validateAffiliateLink(input.affiliateLink, platform)
+      : null;
 
   const item = {
     id: String(input.id || crypto.randomUUID()),

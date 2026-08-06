@@ -73,7 +73,15 @@
   function productIdentity(url = location.href) {
     const asin = String(url).match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i)?.[1];
     if (asin) return asin.toUpperCase();
-    return String(url).match(/-i\.(\d+)\.(\d+)/)?.[2] || null;
+    const shopeeId = String(url).match(/-i\.(\d+)\.(\d+)/)?.[2];
+    if (shopeeId) return shopeeId;
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes('futfanatics.com.br')) {
+        return parsed.pathname.split('/').filter(Boolean).pop() || null;
+      }
+    } catch {}
+    return null;
   }
 
   function readProduct(root = document, url = location.href) {

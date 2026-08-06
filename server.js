@@ -271,6 +271,15 @@ app.get('/api/data-status', (req, res) => {
     .filter(dealId => !todayPublishedIds.has(dealId))
     .length;
 
+  const shopeeState = loadJson(
+    path.join(APP_RUNTIME_DIR, 'shopee_feed_state.json'),
+    null
+  );
+  const shopeeFreshness = getFreshness(
+    readGeneratedAt(shopeeDealsReportPath),
+    Number(readEnv().SHOPEE_STALE_AFTER_MINUTES) || 1560
+  );
+
   res.json({
     mercadoLivre: getFreshness(
       readGeneratedAt(mlDealsReportPath),
@@ -280,10 +289,7 @@ app.get('/api/data-status', (req, res) => {
       readGeneratedAt(amazonDealsReportPath),
       staleAfterMinutes
     ),
-    shopee: getFreshness(
-      readGeneratedAt(shopeeDealsReportPath),
-      Number(readEnv().SHOPEE_STALE_AFTER_MINUTES) || 1560
-    ),
+    shopee: { ...shopeeFreshness, checkedAt: shopeeState?.checkedAt || null },
     futfanatics: getFreshness(
       readGeneratedAt(getFutFanaticsReportPath()),
       staleAfterMinutes
@@ -682,9 +688,13 @@ app.get('/api/futfanatics-deals', (req, res) => {
     }
   }
   deals = enrichDeals(deals, 'futfanatics', generatedAt);
+  const env = readEnv();
   res.json({
     deals,
     generatedAt,
+    affiliateConfigured: Boolean(
+      env.FUTFANATICS_AWIN_PUBLISHER_ID || env.AWIN_PUBLISHER_ID
+    ),
     freshness: getFreshness(
       generatedAt,
       Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
@@ -693,18 +703,16 @@ app.get('/api/futfanatics-deals', (req, res) => {
 });
 
 // POST /api/refresh-futfanatics-deals - Dispara atualização das ofertas da FutFanatics
-app.post('/api/refresh-futfanatics-deals', (req, res) => {
+app.post('/api/refresh-futfanatics-deals', async (req, res) => {
   console.log('[API] Disparando atualização das ofertas da FutFanatics...');
-  const scriptPath = path.join(__dirname, 'execution', 'futfanatics_deals.js');
-  
-  execFile(process.execPath, [scriptPath], { cwd: __dirname }, (error, stdout, stderr) => {
-    if (error) {
-      console.error('Erro ao atualizar FutFanatics:', error.message);
-      return res.status(500).json({ success: false, error: error.message });
-    }
+  try {
+    await refreshCatalog('futfanatics');
     console.log('[API] Ofertas da FutFanatics atualizadas com sucesso.');
     res.json({ success: true, message: 'Ofertas da FutFanatics atualizadas.' });
-  });
+  } catch (error) {
+    console.error('Erro ao atualizar FutFanatics:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 function findCurrentDealForQueueItem(item) {
@@ -1190,11 +1198,18 @@ function normalizePublicationPlatform(value, link = '') {
   const url = String(link || '').toLowerCase();
   if (['amazon', 'amz'].includes(platform) || url.includes('amazon.com')) return 'amazon';
   if (['shopee', 'shp'].includes(platform) || url.includes('shopee.com')) return 'shopee';
+  if (platform === 'futfanatics' || url.includes('futfanatics.com.br')) return 'futfanatics';
   return 'mercado_livre';
 }
 
 function publicationQueueInput(deal, platform, id) {
-  const normPlatform = normalizePublicationPlatform(platform || deal.platform, deal.link || deal.productLink);
+  const normPlatform = normalizePublicationPlatform(
+    platform || deal.platform,
+    deal.rawLink || deal.link || deal.productLink
+  );
+  const productLink = normPlatform === 'futfanatics'
+    ? deal.rawLink || deal.productLink || deal.link
+    : deal.link || deal.productLink;
   return {
     id,
     dealId: generateDealId({ ...deal, platform: normPlatform }),
@@ -1204,7 +1219,11 @@ function publicationQueueInput(deal, platform, id) {
     currentPrice: deal.currentPrice,
     discount: deal.discount,
     image: deal.image,
-    productLink: deal.link || deal.productLink,
+    productLink,
+    affiliateLink: normPlatform === 'futfanatics' &&
+      /^https:\/\/(?:www\.)?awin1\.com\//i.test(String(deal.link || ''))
+      ? deal.link
+      : null,
     rating: deal.rating || null,
     salesCount: deal.salesCount || null,
     salesInfo: deal.salesInfo || '',
@@ -2791,10 +2810,14 @@ let dealsRefreshInProgress = false;
 let automaticPublishInProgress = false;
 
 function runExecutionScript(scriptName) {
+  const timeout = Math.max(
+    60000,
+    Number(readEnv().DEALS_REFRESH_TIMEOUT_MS) || 10 * 60 * 1000
+  );
   return new Promise((resolve, reject) => {
     exec(
       `node execution/${scriptName}`,
-      { cwd: __dirname, maxBuffer: 10 * 1024 * 1024 },
+      { cwd: __dirname, maxBuffer: 10 * 1024 * 1024, timeout },
       (error, stdout, stderr) => {
         if (error) {
           error.stdout = stdout;

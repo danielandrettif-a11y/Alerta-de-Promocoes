@@ -40,7 +40,11 @@ test('prepara Mercado Livre e Shopee juntos com progresso cancelavel', () => {
   );
 
   assert.match(app, /function getSelectedPublicationDeals\(\)/);
-  assert.match(app, /selectedMLIndices\.size \+ selectedAmazonIndices\.size \+ selectedShopeeIndices\.size/);
+  assert.match(app, /selectedShopeeIndices\.size \+ selectedFutFanaticsIndices\.size/);
+  assert.match(app, /platform: 'futfanatics'/);
+  assert.match(page, /<option value="futfanatics">FutFanatics<\/option>/);
+  assert.match(app, /const elBtnToggleFiltersFutFanatics/);
+  assert.doesNotMatch(app, /futFanaticsDealsLoaded/);
   assert.match(app, /logEl\.scrollTop = logEl\.scrollHeight/);
   assert.match(app, /Todos os Stories foram gerados\./);
   assert.match(app, /stopQueueGenerationRequested/);

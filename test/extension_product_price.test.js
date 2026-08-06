@@ -39,6 +39,23 @@ test('le preco Amazon e Shopee e identifica o produto', () => {
     productPrice.productIdentity('https://shopee.com.br/produto-i.123.456'),
     '456'
   );
+
+  const futfanaticsRoot = rootWith({
+    '.preco-por': {
+      textContent: 'Por R$ 149,90',
+      getAttribute: () => null
+    }
+  });
+  assert.equal(
+    productPrice.readPrice(futfanaticsRoot, 'www.futfanatics.com.br'),
+    149.9
+  );
+  assert.equal(
+    productPrice.productIdentity(
+      'https://www.futfanatics.com.br/camisa-palmeiras-i-2026'
+    ),
+    'camisa-palmeiras-i-2026'
+  );
 });
 
 test('Amazon usa a tag afiliada sem abrir a pagina do produto', () => {
@@ -49,6 +66,7 @@ test('Amazon usa a tag afiliada sem abrir a pagina do produto', () => {
   ));
   assert.ok(manifest.host_permissions.includes('https://www.amazon.com.br/*'));
   assert.ok(manifest.host_permissions.includes('https://shopee.com.br/*'));
+  assert.ok(manifest.host_permissions.includes('https://www.futfanatics.com.br/*'));
   assert.ok(manifest.content_scripts.some(entry =>
     entry.js.includes('content/product_price.js')
   ));
@@ -58,8 +76,10 @@ test('Amazon usa a tag afiliada sem abrir a pagina do produto', () => {
   );
   const amazonProcess = background.slice(
     background.indexOf('async function processAmazonJob'),
-    background.indexOf('async function processJob')
+    background.indexOf('async function processFutFanaticsJob')
   );
   assert.doesNotMatch(amazonProcess, /navigateTab|READ_PRODUCT_PRICE/);
   assert.match(background, /platform === 'amazon' \? null/);
+  assert.match(background, /async function processFutFanaticsJob/);
+  assert.match(background, /type: 'READ_PRODUCT_PRICE'/);
 });

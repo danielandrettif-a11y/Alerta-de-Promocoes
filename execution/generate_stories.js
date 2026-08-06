@@ -19,6 +19,13 @@ function getMarketplaceBrand(platform, link = '') {
       cta: 'Compre na Shopee'
     };
   }
+  if (norm === 'futfanatics' || url.includes('futfanatics.com.br') || url.includes('awin1.com')) {
+    return {
+      className: 'futfanatics',
+      name: 'FutFanatics',
+      cta: 'Compre na FutFanatics'
+    };
+  }
   return {
     className: 'mercado-livre',
     name: 'Mercado Livre',

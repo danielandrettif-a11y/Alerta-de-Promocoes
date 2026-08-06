@@ -4638,5 +4638,9 @@ select:focus-visible {
   border: 1px solid rgba(0, 166, 80, 0.3);
 }
 
+#txt-futfanatics-affiliate.is-warning {
+  color: #9a3412;
+}
+
 
 

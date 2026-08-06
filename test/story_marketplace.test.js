@@ -13,6 +13,10 @@ test('identifica o marketplace no Story e limita as variantes', () => {
     'Compre no Mercado Livre'
   );
   assert.equal(getMarketplaceBrand('amazon').name, 'Amazon');
+  assert.equal(
+    getMarketplaceBrand('futfanatics').cta,
+    'Compre na FutFanatics'
+  );
   assert.equal(getStoryVariant('C'), 'c');
   assert.equal(getStoryVariant('D'), 'd');
   assert.equal(getStoryVariant('invalida'), 'd');
