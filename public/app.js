@@ -676,20 +676,31 @@ async function runMarketplaceSearch(event) {
 // ==========================================
 // Category Inference Helper (Taxonomia Dinâmica)
 // ==========================================
-function getProductCategoryAndSub(title) {
+function getProductCategoryAndSub(dealOrTitle) {
+  if (dealOrTitle && typeof dealOrTitle === 'object') {
+    if (dealOrTitle.category && dealOrTitle.subcategory) {
+      return {
+        category: dealOrTitle.category,
+        subcategory: dealOrTitle.subcategory,
+        icon: dealOrTitle.categoryIcon || '🛍️'
+      };
+    }
+    dealOrTitle = dealOrTitle.title || '';
+  }
+
+  const title = String(dealOrTitle || '').trim();
   if (!title) return { category: 'Ofertas Gerais', subcategory: 'Outros', icon: '🛍️' };
   const cleanTitle = title.toLowerCase();
-  
+
   for (const [catName, catData] of Object.entries(globalTaxonomy)) {
-    for (const [subName, keywords] of Object.entries(catData.subcategories)) {
+    for (const [subName, keywords] of Object.entries(catData.subcategories || {})) {
       for (const keyword of keywords) {
-        if (cleanTitle.includes(keyword)) {
-          // Trata exceções do helper
+        if (cleanTitle.includes(keyword.toLowerCase())) {
           if (keyword === 'cola' && cleanTitle.includes('colageno')) continue;
           if (keyword === 'cabo' && cleanTitle.includes('cabernet')) continue;
           if (keyword === 'barra' && cleanTitle.includes('barra de cereal')) continue;
           if (keyword === 'game' && cleanTitle.includes('cadeira gamer')) continue;
-          
+
           return {
             category: catName,
             subcategory: subName,
@@ -699,7 +710,7 @@ function getProductCategoryAndSub(title) {
       }
     }
   }
-  
+
   return {
     category: 'Ofertas Gerais',
     subcategory: 'Outros',
@@ -779,7 +790,7 @@ function handleCategoryChange(categorySelectEl, subcategorySelectEl, platform = 
   
   subcategories.forEach(sub => {
     const count = deals.filter(deal => {
-      const catInfo = getProductCategoryAndSub(deal.title);
+      const catInfo = getProductCategoryAndSub(deal);
       return catInfo.category === selectedCat && catInfo.subcategory === sub;
     }).length;
 
@@ -2555,22 +2566,48 @@ async function preparePublicationBatch() {
 // ==========================================
 // Rendering Methods (Cards & UI)
 // ==========================================
-function applyMLFilters() {
-  visibleMLLimit = DEALS_PAGE_SIZE;
-  renderMLDeals(allMLDeals);
+function renderMLDeals(deals) {
+  renderDeals(deals, 'ml');
   updateActiveFilterChip('ml');
 }
 
-function applyAmazonFilters() {
-  visibleAmazonLimit = DEALS_PAGE_SIZE;
-  renderAmazonDeals(allAmazonDeals);
+function renderAmazonDeals(deals) {
+  renderDeals(deals, 'amazon');
   updateActiveFilterChip('amazon');
 }
 
+function renderShopeeDeals(deals) {
+  renderDeals(deals, 'shopee');
+  updateActiveFilterChip('shopee');
+}
+
+function renderFutFanaticsDeals(deals) {
+  renderDeals(deals, 'futfanatics');
+  updateActiveFilterChip('futfanatics');
+}
+
+function applyMLFilters() {
+  selectedMLIndices.clear();
+  visibleMLLimit = DEALS_PAGE_SIZE;
+  renderMLDeals(allMLDeals);
+}
+
+function applyAmazonFilters() {
+  selectedAmazonIndices.clear();
+  visibleAmazonLimit = DEALS_PAGE_SIZE;
+  renderAmazonDeals(allAmazonDeals);
+}
+
 function applyShopeeFilters() {
+  selectedShopeeIndices.clear();
   visibleShopeeLimit = DEALS_PAGE_SIZE;
   renderShopeeDeals(allShopeeDeals);
-  updateActiveFilterChip('shopee');
+}
+
+function applyFutFanaticsFilters() {
+  selectedFutFanaticsIndices.clear();
+  visibleFutFanaticsLimit = DEALS_PAGE_SIZE;
+  renderFutFanaticsDeals(allFutFanaticsDeals);
 }
 
 function getFilteredDealEntries(deals, platform) {
@@ -2584,22 +2621,30 @@ function getFilteredDealEntries(deals, platform) {
     : platform === 'shopee'
       ? [
         elFilterNameShopee,
-      elFilterCategoryShopee,
-      elFilterSubcategoryShopee,
-      elFilterDiscountShopee,
-      elFilterRecurringShopee
+        elFilterCategoryShopee,
+        elFilterSubcategoryShopee,
+        elFilterDiscountShopee,
+        elFilterRecurringShopee
       ]
-      : [
-        elFilterNameML,
-        elFilterCategoryML,
-        elFilterSubcategoryML,
-        elFilterDiscountML,
-        elFilterRecurringML
-      ];
-  const searchTerm = filters[0].value.toLowerCase().trim();
-  const selectedCategory = filters[1].value;
-  const selectedSubcategory = filters[2].value;
-  const selectedDiscount = filters[3].value;
+      : platform === 'futfanatics'
+        ? [
+          elFilterNameFutFanatics,
+          elFilterCategoryFutFanatics,
+          elFilterSubcategoryFutFanatics,
+          elFilterDiscountFutFanatics
+        ]
+        : [
+          elFilterNameML,
+          elFilterCategoryML,
+          elFilterSubcategoryML,
+          elFilterDiscountML,
+          elFilterRecurringML
+        ];
+
+  const searchTerm = (filters[0]?.value || '').toLowerCase().trim();
+  const selectedCategory = filters[1]?.value || '';
+  const selectedSubcategory = filters[2]?.value || '';
+  const selectedDiscount = filters[3]?.value || '';
   const recurringOnly = filters[4]?.value === 'recurring';
 
   const selectedTeamSub = platform === 'futfanatics' ? elFilterTeamFutFanatics?.value : null;
@@ -2609,15 +2654,16 @@ function getFilteredDealEntries(deals, platform) {
     .filter(({ deal }) => {
       if (isDealInActiveQueue(deal, platform)) return false;
 
-      const category = getProductCategoryAndSub(deal.title);
-      return (
-        deal.title.toLowerCase().includes(searchTerm) &&
-        (!selectedTeamSub || category.subcategory === selectedTeamSub) &&
-        (!selectedCategory || category.category === selectedCategory) &&
-        (!selectedSubcategory || category.subcategory === selectedSubcategory) &&
-        (!selectedDiscount || deal.discount >= Number(selectedDiscount)) &&
-        (!recurringOnly || deal.recurringPurchase === true)
-      );
+      const catInfo = getProductCategoryAndSub(deal);
+
+      const matchSearch = !searchTerm || deal.title.toLowerCase().includes(searchTerm);
+      const matchCategory = !selectedCategory || catInfo.category === selectedCategory;
+      const matchSubcategory = !selectedSubcategory || catInfo.subcategory === selectedSubcategory;
+      const matchTeam = !selectedTeamSub || catInfo.subcategory === selectedTeamSub;
+      const matchDiscount = !selectedDiscount || Number(deal.discount) >= Number(selectedDiscount);
+      const matchRecurring = !recurringOnly || deal.recurringPurchase === true;
+
+      return matchSearch && matchCategory && matchSubcategory && matchTeam && matchDiscount && matchRecurring;
     });
   const sortControl = platform === 'amazon'
     ? elSortAmazon
