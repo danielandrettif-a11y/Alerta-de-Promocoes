@@ -27,10 +27,22 @@ const TAXONOMY = {
       'Cama, Mesa, Banho e Decoração': ['lençol', 'toalha', 'travesseiro', 'almofada', 'cortina', 'tapete', 'luminaria', 'quadro', 'espelho', 'organizador', 'manta', 'cobertor']
     }
   },
+  'Futebol e Mantos Esportivos': {
+    icon: '⚽',
+    subcategories: {
+      'Clubes Nacionais 🇧🇷': ['flamengo', 'palmeiras', 'corinthians', 'sao paulo', 'são paulo', 'vasco', 'gremio', 'grêmio', 'internacional', 'atletico', 'atlético', 'cruzeiro', 'botafogo', 'fluminense', 'santos', 'bahia', 'sport', 'vitoria', 'vitória', 'fortaleza', 'ceara', 'ceará', 'juventude', 'bragantino', 'chapecoense', 'criciuma', 'criciúma', 'ousadia fc', 'junpe', 'goianiense', 'coritiba', 'operario', 'operário', 'vila nova', 'figueirense', 'ponte preta', 'guarani', 'avai', 'avaí', 'paysandu', 'remo'],
+      'Clubes Internacionais 🌍': ['real madrid', 'barcelona', 'bayern', 'psg', 'juventus', 'manchester', 'liverpool', 'chelsea', 'arsenal', 'milan', 'inter de milao', 'inter de milão', 'benfica', 'porto', 'sporting', 'borussia', 'dortmund', 'roma', 'napoli', 'ajax', 'boca juniors', 'river plate', 'al-nassr', 'al nassr', 'inter miami'],
+      'Seleções Nacionais 🏆': ['selecao', 'seleção', 'brasil', 'argentina', 'alemanha', 'franca', 'frança', 'italia', 'itália', 'espanha', 'portugal', 'inglaterra', 'uruguai', 'holanda', 'japao', 'japão', 'colombia', 'colômbia'],
+      'Chuteiras e Futsal 👟': ['chuteira', 'society', 'futsal', 'campo', 'indoor', 'fut-5', 'trava'],
+      'Basquete e NBA 🏀': ['nba', 'lakers', 'bulls', 'celtics', 'warriors', 'nets', 'jordan', 'basquete', 'regata nba'],
+      'Vestuário e Agasalhos 👕': ['agasalho', 'jaqueta', 'moletom', 'calca', 'calça', 'bermuda', 'shorts', 'regata', 'polos', 'polo', 'cropped', 'puffer', 'manga longa', 'jaqueta esportiva', 'colete'],
+      'Equipamentos e Acessórios 🎒': ['luva de goleiro', 'bola de futebol', 'bola', 'caneleira', 'meiao', 'meião', 'mochila', 'bolsa', 'bone', 'boné', 'faixa de capitao']
+    }
+  },
   'Saúde, Fitness e Esportes': {
     icon: '💪',
     subcategories: {
-      'Camisas de Futebol e Mantos': ['camisa', 'manto', 'oficial', 'futfanatics', 'flamengo', 'palmeiras', 'corinthians', 'sao paulo', 'vasco', 'gremio', 'internacional', 'atletico', 'cruzeiro', 'botafogo', 'fluminense', 'santos', 'real madrid', 'barcelona', 'bayern', 'psg', 'juventus', 'manchester', 'liverpool', 'chelsea', 'arsenal', 'milan', 'inter de milao', 'selecao', 'brasil', 'argentina', 'reforma', 'retro'],
+      'Camisas de Futebol e Mantos': ['camisa', 'manto', 'oficial', 'futfanatics', 'reforma', 'retro'],
       'Chuteiras e Equipamentos de Futebol': ['chuteira', 'society', 'futsal', 'campo', 'luva de goleiro', 'bola de futebol', 'caneleira futebol', 'meia de futebol'],
       'Suplementos e Creatinas': ['creatina', 'whey', 'proteina', 'suplemento', 'caps', 'omega', 'vitamina', 'colageno', 'termogenico', 'pre treino', 'bcaa', 'glutamina'],
       'Roupas e Calçados Esportivos': ['camisa dry fit', 'shorts academia', 'legging', 'tenis corrida', 'meia esportiva', 'top fitness', 'agasalho', 'jaqueta esportiva', 'regata'],

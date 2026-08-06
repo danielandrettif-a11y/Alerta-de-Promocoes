@@ -169,6 +169,7 @@ const elFilterNameFutFanatics = document.getElementById('ipt-filter-name-futfana
 const elFilterCategoryFutFanatics = document.getElementById('sel-filter-category-futfanatics');
 const elFilterSubcategoryFutFanatics = document.getElementById('sel-filter-subcategory-futfanatics');
 const elFilterDiscountFutFanatics = document.getElementById('sel-filter-discount-futfanatics');
+const elFilterTeamFutFanatics = document.getElementById('sel-filter-team-futfanatics');
 const elSortFutFanatics = document.getElementById('sel-sort-futfanatics');
 
 let globalTaxonomy = {};
@@ -2601,6 +2602,8 @@ function getFilteredDealEntries(deals, platform) {
   const selectedDiscount = filters[3].value;
   const recurringOnly = filters[4]?.value === 'recurring';
 
+  const selectedTeamSub = platform === 'futfanatics' ? elFilterTeamFutFanatics?.value : null;
+
   const entries = deals
     .map((deal, index) => ({ deal, index }))
     .filter(({ deal }) => {
@@ -2609,6 +2612,7 @@ function getFilteredDealEntries(deals, platform) {
       const category = getProductCategoryAndSub(deal.title);
       return (
         deal.title.toLowerCase().includes(searchTerm) &&
+        (!selectedTeamSub || category.subcategory === selectedTeamSub) &&
         (!selectedCategory || category.category === selectedCategory) &&
         (!selectedSubcategory || category.subcategory === selectedSubcategory) &&
         (!selectedDiscount || deal.discount >= Number(selectedDiscount)) &&
@@ -3800,6 +3804,7 @@ function init() {
   // Filters FutFanatics listeners
   if (elFilterNameFutFanatics) elFilterNameFutFanatics.addEventListener('input', applyFutFanaticsFilters);
   if (elFilterDiscountFutFanatics) elFilterDiscountFutFanatics.addEventListener('change', applyFutFanaticsFilters);
+  if (elFilterTeamFutFanatics) elFilterTeamFutFanatics.addEventListener('change', applyFutFanaticsFilters);
   if (elSortFutFanatics) elSortFutFanatics.addEventListener('change', applyFutFanaticsFilters);
   if (elBtnToggleFiltersFutFanatics && elFiltersFutFanatics) {
     elBtnToggleFiltersFutFanatics.addEventListener('click', () => {
