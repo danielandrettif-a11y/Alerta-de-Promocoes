@@ -19,6 +19,14 @@ test('renderiza ofertas em lotes de 20 sem blur por card', () => {
   assert.match(html, /id="btn-load-more-amazon"/);
   assert.match(html, /id="btn-load-more-futfanatics"/);
   assert.match(app, /visibleLimit: visibleFutFanaticsLimit/);
+  assert.match(app, /function getAvailableCategories\(platform\)/);
+  assert.match(app, /SHOPEE_CATEGORY_ALIASES/);
+  assert.match(app, /function getFutFanaticsCategory\(deal\)/);
+  assert.match(app, /requestAnimationFrame/);
+  assert.match(app, /grid\.replaceChildren\(fragment\)/);
+  assert.match(app, /bindCategoryFilters\(elFilterCategoryML/);
+  assert.match(html, /Todos os tipos de produto/);
+  assert.doesNotMatch(html, /id="sel-filter-team-futfanatics"/);
   assert.doesNotMatch(html, /id="btn-tab-amazon"[^>]*hidden/);
   assert.match(html, /id="txt-shopee-catalog-update"/);
   assert.match(html, /id="chk-select-all-shopee"/);

@@ -380,6 +380,7 @@ async function run() {
       '#btn-tab-ml',
       '#btn-tab-amazon',
       '#btn-tab-shopee',
+      '#btn-tab-futfanatics',
       '#btn-tab-coupons',
       '#btn-tab-queue',
       '#btn-tab-search',
@@ -388,6 +389,7 @@ async function run() {
       '#panel-ml',
       '#panel-amazon',
       '#panel-shopee',
+      '#panel-futfanatics',
       '#panel-coupons',
       '#panel-queue',
       '#panel-search',
@@ -397,6 +399,7 @@ async function run() {
       '#grid-ml',
       '#grid-amazon',
       '#grid-shopee',
+      '#grid-futfanatics',
       '#grid-coupons',
       '#grid-queue',
       '#queue-status-filter',
@@ -423,6 +426,13 @@ async function run() {
       ? '#grid-ml .deal-card'
       : '#grid-ml .empty-state';
     await page.waitForSelector(initialDealSelector, { timeout: 5000 });
+    if (deals.deals.length) {
+      await page.waitForFunction(
+        expected => allMLDeals.length === expected,
+        { timeout: 5000 },
+        deals.deals.length
+      );
+    }
     if (await page.evaluate(() => amazonDealsLoaded)) {
       throw new Error('Amazon foi carregada antes de abrir sua aba');
     }
@@ -476,6 +486,41 @@ async function run() {
           `Selecao Shopee invalida: ${JSON.stringify(selection)}`
         );
       }
+    }
+
+    const shopeeCategories = await page.$$eval(
+      '#sel-filter-category-shopee option',
+      options => options.map(option => option.textContent)
+    );
+    if (
+      shopeeCategories.includes('Beauty') ||
+      !shopeeCategories.some(label => label.startsWith('Pets'))
+    ) {
+      throw new Error(`Categorias Shopee invalidas: ${shopeeCategories.join(', ')}`);
+    }
+
+    await page.$eval('#btn-tab-futfanatics', button => button.click());
+    await page.waitForFunction(() => futfanaticsDealsLoaded, { timeout: 5000 });
+    const futFilters = await page.evaluate(() => {
+      const category = document.querySelector('#sel-filter-category-futfanatics');
+      const subcategory = document.querySelector('#sel-filter-subcategory-futfanatics');
+      category.selectedIndex = Math.min(1, category.options.length - 1);
+      category.dispatchEvent(new Event('change', { bubbles: true }));
+      return {
+        categories: Array.from(category.options, option => option.textContent),
+        subcategories: Array.from(subcategory.options, option => option.textContent),
+        cardCount: document.querySelectorAll('#grid-futfanatics .deal-card').length,
+        legacyTeamFilter: Boolean(document.querySelector('#sel-filter-team-futfanatics'))
+      };
+    });
+    if (
+      futFilters.legacyTeamFilter ||
+      futFilters.categories.some(label => label.includes('Eletrônicos')) ||
+      !futFilters.categories.some(label => label.includes('Camisas e mantos')) ||
+      futFilters.subcategories.length < 2 ||
+      futFilters.cardCount < 1
+    ) {
+      throw new Error(`Filtros FutFanatics invalidos: ${JSON.stringify(futFilters)}`);
     }
 
     for (const tab of [

@@ -170,7 +170,6 @@ const elFilterNameFutFanatics = document.getElementById('ipt-filter-name-futfana
 const elFilterCategoryFutFanatics = document.getElementById('sel-filter-category-futfanatics');
 const elFilterSubcategoryFutFanatics = document.getElementById('sel-filter-subcategory-futfanatics');
 const elFilterDiscountFutFanatics = document.getElementById('sel-filter-discount-futfanatics');
-const elFilterTeamFutFanatics = document.getElementById('sel-filter-team-futfanatics');
 const elSortFutFanatics = document.getElementById('sel-sort-futfanatics');
 const elBtnToggleFiltersFutFanatics = document.getElementById('btn-toggle-filters-futfanatics');
 const elFiltersFutFanatics = document.getElementById('filters-futfanatics');
@@ -263,6 +262,35 @@ const DEFAULT_TAXONOMY_FALLBACK = {
 };
 
 let globalTaxonomy = { ...DEFAULT_TAXONOMY_FALLBACK };
+let dealFilterMetaCache = new WeakMap();
+
+const SHOPEE_CATEGORY_ALIASES = {
+  Beauty: 'Beleza e Cuidados Pessoais',
+  Health: 'Saúde, Fitness e Esportes',
+  Pets: 'Pets',
+  'Home & Living': 'Casa, Cozinha e Eletrodomésticos',
+  'Home Appliances': 'Casa, Cozinha e Eletrodomésticos',
+  'Mobile & Gadgets': 'Eletrônicos e Tecnologia',
+  'Computers & Accessories': 'Eletrônicos e Tecnologia',
+  'Cameras & Drones': 'Eletrônicos e Tecnologia',
+  Audio: 'Eletrônicos e Tecnologia',
+  'Women Clothes': 'Moda e Acessórios',
+  'Men Clothes': 'Moda e Acessórios',
+  'Women Shoes': 'Moda e Acessórios',
+  'Men Shoes': 'Moda e Acessórios',
+  'Women Bags': 'Moda e Acessórios',
+  'Men Bags': 'Moda e Acessórios',
+  'Fashion Accessories': 'Moda e Acessórios',
+  'Baby & Kids Fashion': 'Bebês e Crianças',
+  'Mom & Baby': 'Bebês e Crianças',
+  'Food & Beverages': 'Bebidas e Alimentos',
+  'Sports & Outdoors': 'Saúde, Fitness e Esportes',
+  'Spare Parts and Accessories for Vehicles': 'Automotivo',
+  'Books & Magazines': 'Papelaria e Livros',
+  Stationery: 'Papelaria e Livros',
+  'Hobbies & Collections': 'Hobbies e Colecionáveis',
+  'Travel & Luggage': 'Viagem e Bagagem'
+};
 
 // General
 const elTxtLastUpdate = document.getElementById('txt-last-update');
@@ -823,11 +851,100 @@ function getProductCategoryAndSub(dealOrTitle) {
   };
 }
 
+function normalizeFilterText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function getFutFanaticsCategory(deal) {
+  const title = normalizeFilterText(deal.title);
+  const sourceSubcategory = normalizeFilterText(deal.subcategory);
+  let category = 'Camisas e mantos';
+
+  if (/chuteira|futsal|society|indoor|trava/.test(title)) {
+    category = 'Chuteiras e futsal';
+  } else if (/nba|lakers|bulls|celtics|warriors|jordan|basquete/.test(title)) {
+    category = 'Basquete e NBA';
+  } else if (/tenis|sandalia|chinelo|sapato|bota|sapatilha/.test(title)) {
+    category = 'Calçados casuais';
+  } else if (/bola|luva|caneleira|meiao|mochila|bolsa|bone|oculos|relogio|faixa de capitao/.test(title)) {
+    category = 'Acessórios';
+  } else if (/camiseta|agasalho|jaqueta|moletom|calca|bermuda|shorts|polo|cropped|regata|blusa|vestido/.test(title)) {
+    category = 'Moda esportiva e casual';
+  } else if (!/camisa|manto|uniforme|jersey|torcedor/.test(title)) {
+    category = 'Outros produtos esportivos';
+  }
+
+  let subcategory = 'Sem time específico';
+  if (sourceSubcategory.includes('internacionais')) {
+    subcategory = 'Clubes internacionais';
+  } else if (sourceSubcategory.includes('clubes nacionais')) {
+    subcategory = 'Clubes nacionais';
+  } else if (sourceSubcategory.includes('selecoes nacionais')) {
+    subcategory = 'Seleções nacionais';
+  }
+
+  return { category, subcategory, icon: '⚽' };
+}
+
+function getDealFilterMeta(deal, platform) {
+  const cached = dealFilterMetaCache.get(deal);
+  if (cached?.platform === platform) return cached;
+
+  let categoryInfo;
+  if (platform === 'futfanatics') {
+    categoryInfo = getFutFanaticsCategory(deal);
+  } else if (platform === 'shopee') {
+    const inferred = getProductCategoryAndSub(deal.title);
+    categoryInfo = inferred.category !== 'Ofertas Gerais'
+      ? inferred
+      : {
+        category: SHOPEE_CATEGORY_ALIASES[deal.category] || deal.category || 'Ofertas Gerais',
+        subcategory: 'Outros',
+        icon: '🛍️'
+      };
+  } else {
+    categoryInfo = getProductCategoryAndSub(deal);
+  }
+
+  const meta = {
+    platform,
+    title: normalizeFilterText(deal.title),
+    categoryInfo
+  };
+  dealFilterMetaCache.set(deal, meta);
+  return meta;
+}
+
+function getDealsForPlatform(platform) {
+  if (platform === 'amazon') return allAmazonDeals;
+  if (platform === 'shopee') return allShopeeDeals;
+  if (platform === 'futfanatics') return allFutFanaticsDeals;
+  return allMLDeals;
+}
+
+function getAvailableCategories(platform) {
+  const categories = new Map();
+  for (const deal of getDealsForPlatform(platform)) {
+    const { category, subcategory } = getDealFilterMeta(deal, platform).categoryInfo;
+    const entry = categories.get(category) || { count: 0, subcategories: new Map() };
+    entry.count += 1;
+    entry.subcategories.set(
+      subcategory,
+      (entry.subcategories.get(subcategory) || 0) + 1
+    );
+    categories.set(category, entry);
+  }
+  return categories;
+}
+
 function populateAllCategorySelects() {
-  populateCategorySelect(elFilterCategoryML);
-  populateCategorySelect(elFilterCategoryAmazon);
-  populateCategorySelect(elFilterCategoryShopee);
-  populateCategorySelect(elFilterCategoryFutFanatics);
+  populateCategorySelect(elFilterCategoryML, 'ml');
+  populateCategorySelect(elFilterCategoryAmazon, 'amazon');
+  populateCategorySelect(elFilterCategoryShopee, 'shopee');
+  populateCategorySelect(elFilterCategoryFutFanatics, 'futfanatics');
 }
 
 async function fetchCategories() {
@@ -838,6 +955,7 @@ async function fetchCategories() {
       const data = await response.json();
       if (data && Object.keys(data).length > 0) {
         globalTaxonomy = data;
+        dealFilterMetaCache = new WeakMap();
         populateAllCategorySelects();
       }
     }
@@ -846,51 +964,72 @@ async function fetchCategories() {
   }
 }
 
-function populateCategorySelect(selectEl) {
+function populateCategorySelect(selectEl, platform) {
   if (!selectEl) return;
-  selectEl.innerHTML = '<option value="">Todas as Categorias</option>';
-  for (const catName of Object.keys(globalTaxonomy)) {
+  const selected = selectEl.value;
+  const available = getAvailableCategories(platform);
+  const categoryNames = available.size
+    ? [...available.keys()].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    : platform === 'futfanatics'
+      ? ['Camisas e mantos', 'Chuteiras e futsal', 'Calçados casuais', 'Basquete e NBA', 'Moda esportiva e casual', 'Acessórios', 'Outros produtos esportivos']
+      : Object.keys(globalTaxonomy);
+  selectEl.innerHTML = `<option value="">${platform === 'futfanatics'
+    ? 'Todos os tipos de produto'
+    : 'Todas as Categorias'}</option>`;
+  for (const catName of categoryNames) {
     const opt = document.createElement('option');
     opt.value = catName;
-    opt.textContent = catName;
+    const count = available.get(catName)?.count;
+    opt.textContent = count ? `${catName} (${count})` : catName;
     selectEl.appendChild(opt);
   }
+  if (categoryNames.includes(selected)) selectEl.value = selected;
 }
 
 function handleCategoryChange(categorySelectEl, subcategorySelectEl, platform = 'ml') {
   if (!categorySelectEl || !subcategorySelectEl) return;
   
   const selectedCat = categorySelectEl.value;
-  subcategorySelectEl.innerHTML = '<option value="">Todas as Subcategorias</option>';
+  subcategorySelectEl.innerHTML = `<option value="">${platform === 'futfanatics'
+    ? 'Todos os times e origens'
+    : 'Todas as Subcategorias'}</option>`;
   
-  if (!selectedCat || !globalTaxonomy[selectedCat]) {
+  if (!selectedCat) {
     subcategorySelectEl.disabled = true;
     subcategorySelectEl.value = '';
     return;
   }
-  
-  const deals = platform === 'amazon'
-    ? allAmazonDeals
-    : platform === 'shopee'
-      ? allShopeeDeals
-      : platform === 'futfanatics'
-        ? allFutFanaticsDeals
-        : allMLDeals;
-  const subcategories = Object.keys(globalTaxonomy[selectedCat].subcategories);
-  
-  subcategories.forEach(sub => {
-    const count = deals.filter(deal => {
-      const catInfo = getProductCategoryAndSub(deal);
-      return catInfo.category === selectedCat && catInfo.subcategory === sub;
-    }).length;
+
+  const subcategories = getAvailableCategories(platform)
+    .get(selectedCat)?.subcategories || new Map();
+  for (const [sub, count] of subcategories) {
 
     const opt = document.createElement('option');
     opt.value = sub;
     opt.textContent = `${sub} (${count})`;
     subcategorySelectEl.appendChild(opt);
-  });
+  }
   
-  subcategorySelectEl.disabled = false;
+  subcategorySelectEl.disabled = subcategories.size === 0;
+}
+
+function refreshPlatformCategoryFilters(platform) {
+  const categorySelect = platform === 'amazon'
+    ? elFilterCategoryAmazon
+    : platform === 'shopee'
+      ? elFilterCategoryShopee
+      : platform === 'futfanatics'
+        ? elFilterCategoryFutFanatics
+        : elFilterCategoryML;
+  const subcategorySelect = platform === 'amazon'
+    ? elFilterSubcategoryAmazon
+    : platform === 'shopee'
+      ? elFilterSubcategoryShopee
+      : platform === 'futfanatics'
+        ? elFilterSubcategoryFutFanatics
+        : elFilterSubcategoryML;
+  populateCategorySelect(categorySelect, platform);
+  handleCategoryChange(categorySelect, subcategorySelect, platform);
 }
 
 function updateActiveFilterChip(platform) {
@@ -982,6 +1121,7 @@ async function fetchMLDeals() {
     freshnessML = data.freshness || null;
 
     visibleMLLimit = DEALS_PAGE_SIZE;
+    refreshPlatformCategoryFilters('ml');
     renderMLDeals(allMLDeals);
     renderCoupons(allCoupons);
     
@@ -1022,6 +1162,7 @@ async function fetchAmazonDeals() {
     amazonDealsLoaded = true;
     freshnessAmazon = data.freshness || null;
     visibleAmazonLimit = DEALS_PAGE_SIZE;
+    refreshPlatformCategoryFilters('amazon');
     renderAmazonDeals(allAmazonDeals);
     
     if (data.generatedAt) {
@@ -1054,6 +1195,7 @@ async function fetchShopeeDeals() {
     shopeeDealsLoaded = true;
     freshnessShopee = data.freshness || null;
     visibleShopeeLimit = DEALS_PAGE_SIZE;
+    refreshPlatformCategoryFilters('shopee');
     renderShopeeDeals(allShopeeDeals);
 
     if (data.generatedAt) {
@@ -1094,6 +1236,7 @@ async function fetchFutFanaticsDeals() {
     futfanaticsDealsLoaded = true;
     freshnessFutFanatics = data.freshness || null;
     visibleFutFanaticsLimit = DEALS_PAGE_SIZE;
+    refreshPlatformCategoryFilters('futfanatics');
     renderFutFanaticsDeals(allFutFanaticsDeals);
     if (elTxtFutFanaticsAffiliate) {
       elTxtFutFanaticsAffiliate.textContent = data.affiliateConfigured
@@ -2721,50 +2864,28 @@ function applyFutFanaticsFilters() {
   renderFutFanaticsDeals(allFutFanaticsDeals);
 }
 
-function matchTeamFilter(deal, catInfo, selectedTeamSub) {
-  if (!selectedTeamSub) return true;
-  if (catInfo.subcategory === selectedTeamSub || deal.subcategory === selectedTeamSub) return true;
+const pendingFilterFrames = new Map();
 
-  const t = (deal.title || '').toLowerCase();
+function scheduleDealFilters(platform) {
+  const renderers = {
+    ml: applyMLFilters,
+    amazon: applyAmazonFilters,
+    shopee: applyShopeeFilters,
+    futfanatics: applyFutFanaticsFilters
+  };
+  cancelAnimationFrame(pendingFilterFrames.get(platform));
+  pendingFilterFrames.set(platform, requestAnimationFrame(() => {
+    pendingFilterFrames.delete(platform);
+    renderers[platform]();
+  }));
+}
 
-  if (selectedTeamSub.includes('Internacionais')) {
-    return t.includes('barcelona') || t.includes('real madrid') || t.includes('bayern') ||
-      t.includes('psg') || t.includes('juventus') || t.includes('manchester') ||
-      t.includes('liverpool') || t.includes('chelsea') || t.includes('arsenal') ||
-      t.includes('milan') || t.includes('inter de mil') || t.includes('dortmund') ||
-      t.includes('roma') || t.includes('napoli') || t.includes('ajax');
-  }
-
-  if (selectedTeamSub.includes('Nacionais')) {
-    return t.includes('flamengo') || t.includes('palmeiras') || t.includes('corinthians') ||
-      t.includes('sao paulo') || t.includes('são paulo') || t.includes('vasco') ||
-      t.includes('gremio') || t.includes('grêmio') || t.includes('internacional') ||
-      t.includes('atletico') || t.includes('atlético') || t.includes('cruzeiro') ||
-      t.includes('botafogo') || t.includes('fluminense') || t.includes('santos') ||
-      t.includes('chapecoense') || t.includes('ousadia') || t.includes('dragão') ||
-      t.includes('goianiense') || t.includes('bahia') || t.includes('sport') ||
-      t.includes('vitoria') || t.includes('vitória') || t.includes('fortaleza') ||
-      t.includes('ceara') || t.includes('ceará') || t.includes('juventude') ||
-      t.includes('bragantino') || t.includes('moto club');
-  }
-
-  if (selectedTeamSub.includes('Chuteiras')) {
-    return t.includes('chuteira') || t.includes('society') || t.includes('futsal') || t.includes('campo') || t.includes('indoor');
-  }
-
-  if (selectedTeamSub.includes('Basquete')) {
-    return t.includes('nba') || t.includes('lakers') || t.includes('bulls') || t.includes('jordan') || t.includes('basquete');
-  }
-
-  if (selectedTeamSub.includes('Vestuário')) {
-    return t.includes('polo') || t.includes('agasalho') || t.includes('jaqueta') || t.includes('moletom') || t.includes('bermuda') || t.includes('shorts') || t.includes('regata') || t.includes('cropped');
-  }
-
-  if (selectedTeamSub.includes('Equipamentos')) {
-    return t.includes('mochila') || t.includes('bolsa') || t.includes('bone') || t.includes('boné') || t.includes('bola') || t.includes('luva') || t.includes('oculos') || t.includes('óculos');
-  }
-
-  return false;
+function bindCategoryFilters(category, subcategory, platform, applyFilters) {
+  category?.addEventListener('change', () => {
+    handleCategoryChange(category, subcategory, platform);
+    applyFilters();
+  });
+  subcategory?.addEventListener('change', applyFilters);
 }
 
 function getFilteredDealEntries(deals, platform) {
@@ -2798,29 +2919,27 @@ function getFilteredDealEntries(deals, platform) {
           elFilterRecurringML
         ];
 
-  const searchTerm = (filters[0]?.value || '').toLowerCase().trim();
+  const searchTerm = normalizeFilterText(filters[0]?.value).trim();
   const selectedCategory = filters[1]?.value || '';
   const selectedSubcategory = filters[2]?.value || '';
   const selectedDiscount = filters[3]?.value || '';
   const recurringOnly = filters[4]?.value === 'recurring';
-
-  const selectedTeamSub = platform === 'futfanatics' ? elFilterTeamFutFanatics?.value : null;
 
   const entries = deals
     .map((deal, index) => ({ deal, index }))
     .filter(({ deal }) => {
       if (isDealInActiveQueue(deal, platform)) return false;
 
-      const catInfo = getProductCategoryAndSub(deal);
+      const meta = getDealFilterMeta(deal, platform);
+      const catInfo = meta.categoryInfo;
 
-      const matchSearch = !searchTerm || deal.title.toLowerCase().includes(searchTerm);
+      const matchSearch = !searchTerm || meta.title.includes(searchTerm);
       const matchCategory = !selectedCategory || catInfo.category === selectedCategory;
       const matchSubcategory = !selectedSubcategory || catInfo.subcategory === selectedSubcategory;
-      const matchTeam = matchTeamFilter(deal, catInfo, selectedTeamSub);
       const matchDiscount = !selectedDiscount || Number(deal.discount) >= Number(selectedDiscount);
       const matchRecurring = !recurringOnly || deal.recurringPurchase === true;
 
-      return matchSearch && matchCategory && matchSubcategory && matchTeam && matchDiscount && matchRecurring;
+      return matchSearch && matchCategory && matchSubcategory && matchDiscount && matchRecurring;
     });
   const sortControl = platform === 'amazon'
     ? elSortAmazon
@@ -3012,7 +3131,6 @@ function renderDeals(deals, platform) {
     showRecurring,
     updateSelection
   } = config;
-  grid.innerHTML = '';
 
   if (deals.length === 0) {
     pagination.hidden = true;
@@ -3037,6 +3155,7 @@ function renderDeals(deals, platform) {
   }
 
   const visibleEntries = filteredEntries.slice(0, visibleLimit);
+  const fragment = document.createDocumentFragment();
   for (const { deal, index } of visibleEntries) {
     const isSelected = selected.has(index);
     const isPublished = supportsPublished && Boolean(deal.publishedMsgId);
@@ -3164,9 +3283,10 @@ function renderDeals(deals, platform) {
         toggleDealSelectIndex(platform, index)
       );
     }
-    grid.appendChild(card);
+    fragment.appendChild(card);
   }
 
+  grid.replaceChildren(fragment);
   updateDealPagination(platform, visibleEntries.length, filteredEntries.length);
   updateSelection();
 }
@@ -3984,27 +4104,35 @@ function init() {
   }
 
   // Filters ML listeners
-  elFilterNameML.addEventListener('input', applyMLFilters);
+  elFilterNameML.addEventListener('input', () => scheduleDealFilters('ml'));
   elFilterDiscountML.addEventListener('change', applyMLFilters);
   elFilterRecurringML.addEventListener('change', applyMLFilters);
   elSortML?.addEventListener('change', applyMLFilters);
+  bindCategoryFilters(elFilterCategoryML, elFilterSubcategoryML, 'ml', applyMLFilters);
 
   // Filters Amazon listeners
-  elFilterNameAmazon.addEventListener('input', applyAmazonFilters);
+  elFilterNameAmazon.addEventListener('input', () => scheduleDealFilters('amazon'));
   elFilterDiscountAmazon.addEventListener('change', applyAmazonFilters);
   elSortAmazon?.addEventListener('change', applyAmazonFilters);
+  bindCategoryFilters(elFilterCategoryAmazon, elFilterSubcategoryAmazon, 'amazon', applyAmazonFilters);
 
   // Filters Shopee listeners
-  elFilterNameShopee.addEventListener('input', applyShopeeFilters);
+  elFilterNameShopee.addEventListener('input', () => scheduleDealFilters('shopee'));
   elFilterDiscountShopee.addEventListener('change', applyShopeeFilters);
   elFilterRecurringShopee.addEventListener('change', applyShopeeFilters);
   elSortShopee?.addEventListener('change', applyShopeeFilters);
+  bindCategoryFilters(elFilterCategoryShopee, elFilterSubcategoryShopee, 'shopee', applyShopeeFilters);
 
   // Filters FutFanatics listeners
-  if (elFilterNameFutFanatics) elFilterNameFutFanatics.addEventListener('input', applyFutFanaticsFilters);
+  if (elFilterNameFutFanatics) elFilterNameFutFanatics.addEventListener('input', () => scheduleDealFilters('futfanatics'));
   if (elFilterDiscountFutFanatics) elFilterDiscountFutFanatics.addEventListener('change', applyFutFanaticsFilters);
-  if (elFilterTeamFutFanatics) elFilterTeamFutFanatics.addEventListener('change', applyFutFanaticsFilters);
   if (elSortFutFanatics) elSortFutFanatics.addEventListener('change', applyFutFanaticsFilters);
+  bindCategoryFilters(
+    elFilterCategoryFutFanatics,
+    elFilterSubcategoryFutFanatics,
+    'futfanatics',
+    applyFutFanaticsFilters
+  );
   if (elBtnToggleFiltersFutFanatics && elFiltersFutFanatics) {
     elBtnToggleFiltersFutFanatics.addEventListener('click', () => {
       const open = elFiltersFutFanatics.classList.toggle('is-open');
