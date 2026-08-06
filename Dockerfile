@@ -1,17 +1,15 @@
 FROM node:22-slim
 
-# Instalar dependencias e baixar o Chrome oficial para Linux (essencial para o Puppeteer)
+# Instalar Chromium nativo do Debian (muito mais leve e rápido que o Google Chrome para VPS)
 RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
+    chromium \
     ca-certificates \
     curl \
     --no-install-recommends \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
+# Definir o caminho do executável do Chromium para o Puppeteer
+ENV BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 
 
 WORKDIR /app
