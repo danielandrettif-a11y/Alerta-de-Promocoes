@@ -3141,17 +3141,6 @@ function renderDeals(deals, platform) {
   updateSelection();
 }
 
-function renderMLDeals(deals) {
-  renderDeals(deals, 'ml');
-}
-
-function renderAmazonDeals(deals) {
-  renderDeals(deals, 'amazon');
-}
-
-function renderShopeeDeals(deals) {
-  renderDeals(deals, 'shopee');
-}
 
 let activeCouponMarketplace = 'all';
 
@@ -3672,10 +3661,6 @@ function switchDealSource(activeBtn, activePanel) {
   updateMobileSelectionBar();
 }
 
-function renderFutFanaticsDeals(deals) {
-  renderDeals(deals, 'futfanatics');
-  updateActiveFilterChip('futfanatics');
-}
 
 function applyFutFanaticsFilters() {
   selectedFutFanaticsIndices.clear();

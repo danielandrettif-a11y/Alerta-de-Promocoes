@@ -211,10 +211,11 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
   - Adicionadas as rotas `/api/futfanatics-deals` e `/api/refresh-futfanatics-deals` no `server.js` com suporte à tag WhatsApp `⚽ *FUTFANATICS*`.
   - Implementada a aba **FutFanatics** na Dashboard (`index.html`, `style.css`, `app.js`) com tema esportivo verde (`#00a650`), botões de controle, filtros e seleção para fila de publicação.
   - Atualizada a extensão Chrome (`manifest.json` e `product_price.js`) para suportar a FutFanatics e Awin (`awin1.com`).
-- **Correção da Atualização de Status Inicial & Auto-Refresh da FutFanatics**:
-  - Refatoradas as chamadas de inicialização do cabeçalho em `public/app.js` (`fetchDataStatus()` e `fetchWhatsAppStatus()`) para executarem imediatamente e de forma independente no carregamento da página, sem depender da resolução prévia da Promise de `fetchCategories()`.
-  - Adicionado `refreshCatalog('futfanatics')` dentro de `refreshDealsData()` no `server.js` para incluir a FutFanatics no ciclo automático de atualização em segundo plano.
-  - Adicionado rastreamento de atualização para FutFanatics em `public/app.js` (`previousFutFanaticsUpdate`).
-  - Executados testes automatizados (`npm test`): 88 de 88 testes APROVADOS (100% de sucesso).
+- **Consolidação do Agendador 24/7 & Remoção de Funções Duplicadas no Frontend**:
+  - Removidas funções duplicadas de renderização (`renderShopeeDeals`, `renderMLDeals`, `renderFutFanaticsDeals`) em `public/app.js` que causavam sobrescrita de parâmetros e falha ao alternar as abas.
+  - Atualizada a rotina de auto-refresh no `server.js` com logs unificados contemplando os 4 marketplaces simultaneamente.
+  - Atualizadas e validadas as bases de ofertas reais do Mercado Livre (582 itens + 39 cupons), Amazon (25 itens) e FutFanatics (66 itens).
+  - Executados testes automatizados (`npm test`): **88 de 88 testes APROVADOS (100% de sucesso)**.
+
 
 

@@ -2846,7 +2846,7 @@ async function refreshDealsData() {
         console.error(`⚠️ Falha em uma fonte de ofertas: ${result.reason.message}`);
       });
     } else {
-      console.log('✅ Mercado Livre e Amazon atualizados sem publicar mensagens.');
+      console.log('✅ Mercado Livre, Amazon, Shopee e FutFanatics atualizados com sucesso.');
     }
   } finally {
     dealsRefreshInProgress = false;
