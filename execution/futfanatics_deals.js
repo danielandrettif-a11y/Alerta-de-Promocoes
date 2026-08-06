@@ -112,10 +112,13 @@ async function scrapeDealsFromPage(page, pageNum = 1) {
       timeout: 40000
     });
 
-    await page.evaluate(() => window.scrollBy(0, 800));
-    await new Promise(r => setTimeout(r, 1500));
+    try {
+      await page.evaluate(() => window.scrollBy(0, 800));
+    } catch (e) {}
+    
+    await new Promise(r => setTimeout(r, 2000));
 
-    const rawDeals = await page.evaluate(() => {
+    const scrapingLogic = () => {
       const items = [];
       const links = document.querySelectorAll('a[href*="futfanatics.com.br/"]');
 
@@ -181,7 +184,20 @@ async function scrapeDealsFromPage(page, pageNum = 1) {
       });
 
       return items;
-    });
+    };
+
+    let rawDeals = [];
+    try {
+      rawDeals = await page.evaluate(scrapingLogic);
+    } catch (evalErr) {
+      if (evalErr.message.includes('Execution context was destroyed')) {
+        console.warn(`[FutFanatics] Contexto destruído na página ${pageNum}. Aguardando estabilização e tentando novamente...`);
+        await new Promise(r => setTimeout(r, 4000));
+        rawDeals = await page.evaluate(scrapingLogic);
+      } else {
+        throw evalErr;
+      }
+    }
 
     return rawDeals;
   } catch (err) {
