@@ -3133,6 +3133,7 @@ function renderDeals(deals, platform) {
     grid.innerHTML = `
       <div class="empty-state">
         <p>${emptyMessage}</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Dica: Verifique se elas não estão na aba <strong>Fila</strong> (ofertas na fila são ocultadas daqui para evitar duplicidade).</p>
       </div>
     `;
     return;
@@ -3144,6 +3145,7 @@ function renderDeals(deals, platform) {
     grid.innerHTML = `
       <div class="empty-state">
         <p>Nenhuma oferta corresponde aos filtros selecionados.</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">Dica: Verifique se as ofertas já não estão na aba <strong>Fila</strong>.</p>
       </div>
     `;
     updateSelection();
