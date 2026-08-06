@@ -202,10 +202,11 @@ function inferCategoryAndSub(title) {
       for (const keyword of keywords) {
         if (cleanTitle.includes(keyword)) {
           // Exceções e refinamentos específicos para termos ambíguos:
-          if (keyword === 'cola' && cleanTitle.includes('colageno')) continue; // colágeno é suplemento
-          if (keyword === 'cabo' && cleanTitle.includes('cabernet')) continue; // Cabernet é vinho
-          if (keyword === 'barra' && cleanTitle.includes('barra de cereal')) continue; // barra de cereal é alimentos
-          if (keyword === 'game' && cleanTitle.includes('cadeira gamer')) continue; // cadeira gamer é acessório gamer
+          if (keyword === 'cola' && (cleanTitle.includes('colageno') || cleanTitle.includes('coca cola'))) continue;
+          if (keyword === 'cabo' && cleanTitle.includes('cabernet')) continue;
+          if (keyword === 'barra' && cleanTitle.includes('barra de cereal')) continue;
+          if (keyword === 'game' && cleanTitle.includes('cadeira gamer')) continue;
+          if (keyword === 'gin' && !/\bgin\b/i.test(cleanTitle)) continue;
           
           return {
             category: catName,

@@ -172,7 +172,94 @@ const elFilterDiscountFutFanatics = document.getElementById('sel-filter-discount
 const elFilterTeamFutFanatics = document.getElementById('sel-filter-team-futfanatics');
 const elSortFutFanatics = document.getElementById('sel-sort-futfanatics');
 
-let globalTaxonomy = {};
+const DEFAULT_TAXONOMY_FALLBACK = {
+  'Futebol e Mantos Esportivos': {
+    icon: '⚽',
+    subcategories: {
+      'Clubes Nacionais 🇧🇷': [],
+      'Clubes Internacionais 🌍': [],
+      'Seleções Nacionais 🏆': [],
+      'Chuteiras e Futsal 👟': [],
+      'Basquete e NBA 🏀': [],
+      'Vestuário e Agasalhos 👕': [],
+      'Equipamentos e Acessórios 🎒': []
+    }
+  },
+  'Eletrônicos e Tecnologia': {
+    icon: '💻',
+    subcategories: {
+      'Celulares e Smartphones': [],
+      'Computadores e Notebooks': [],
+      'Fones de Ouvido e Som': [],
+      'Smartwatches e Relógios': [],
+      'Acessórios e Periféricos': []
+    }
+  },
+  'Saúde, Fitness e Esportes': {
+    icon: '💪',
+    subcategories: {
+      'Camisas de Futebol e Mantos': [],
+      'Chuteiras e Equipamentos de Futebol': [],
+      'Suplementos e Creatinas': [],
+      'Roupas e Calçados Esportivos': [],
+      'Equipamentos de Treino': [],
+      'Bike e Lazer': []
+    }
+  },
+  'Casa, Cozinha e Eletrodomésticos': {
+    icon: '🏠',
+    subcategories: {
+      'Eletrodomésticos Grandes': [],
+      'Eletroportáteis': [],
+      'Utensílios de Cozinha': [],
+      'Cama, Mesa, Banho e Decoração': []
+    }
+  },
+  'Beleza e Cuidados Pessoais': {
+    icon: '✨',
+    subcategories: {
+      'Perfumaria': [],
+      'Cuidados com Cabelo': [],
+      'Skincare e Maquiagem': [],
+      'Higiene Diária': []
+    }
+  },
+  'Moda e Acessórios': {
+    icon: '👗',
+    subcategories: {
+      'Calçados': [],
+      'Roupas Masculinas': [],
+      'Roupas Femininas': [],
+      'Bolsas e Mochilas': []
+    }
+  },
+  'Games e Consoles': {
+    icon: '🎮',
+    subcategories: {
+      'Consoles': [],
+      'Jogos': [],
+      'Acessórios Gamer': []
+    }
+  },
+  'Bebidas e Alimentos': {
+    icon: '🍻',
+    subcategories: {
+      'Destilados e Cervejas': [],
+      'Vinhos e Espumantes': [],
+      'Alimentos e Cafés': []
+    }
+  },
+  'Ferramentas e Construção': {
+    icon: '🛠️',
+    subcategories: {
+      'Ferramentas Elétricas': [],
+      'Ferramentas Manuais': [],
+      'Jardim e Reparos': []
+    }
+  }
+};
+
+let globalTaxonomy = { ...DEFAULT_TAXONOMY_FALLBACK };
 
 // General
 const elTxtLastUpdate = document.getElementById('txt-last-update');
@@ -718,39 +805,24 @@ function getProductCategoryAndSub(dealOrTitle) {
   };
 }
 
+function populateAllCategorySelects() {
+  populateCategorySelect(elFilterCategoryML);
+  populateCategorySelect(elFilterCategoryAmazon);
+  populateCategorySelect(elFilterCategoryShopee);
+  populateCategorySelect(elFilterCategoryFutFanatics);
+}
+
 async function fetchCategories() {
+  populateAllCategorySelects();
   try {
     const response = await fetch('/api/categories');
-    globalTaxonomy = await response.json();
-    
-    // Povoar os selects de categoria
-    populateCategorySelect(elFilterCategoryML);
-    populateCategorySelect(elFilterCategoryAmazon);
-    populateCategorySelect(elFilterCategoryShopee);
-    populateCategorySelect(elFilterCategoryFutFanatics);
-    
-    // Configurar listeners em cascata
-    elFilterCategoryML.addEventListener('change', () => {
-      handleCategoryChange(elFilterCategoryML, elFilterSubcategoryML);
-      applyMLFilters();
-    });
-    elFilterCategoryAmazon.addEventListener('change', () => {
-      handleCategoryChange(elFilterCategoryAmazon, elFilterSubcategoryAmazon);
-      applyAmazonFilters();
-    });
-    elFilterCategoryShopee.addEventListener('change', () => {
-      handleCategoryChange(elFilterCategoryShopee, elFilterSubcategoryShopee);
-      applyShopeeFilters();
-    });
-    elFilterCategoryFutFanatics?.addEventListener('change', () => {
-      handleCategoryChange(elFilterCategoryFutFanatics, elFilterSubcategoryFutFanatics, 'futfanatics');
-      applyFutFanaticsFilters();
-    });
-    
-    elFilterSubcategoryML.addEventListener('change', applyMLFilters);
-    elFilterSubcategoryAmazon.addEventListener('change', applyAmazonFilters);
-    elFilterSubcategoryShopee.addEventListener('change', applyShopeeFilters);
-    elFilterSubcategoryFutFanatics?.addEventListener('change', applyFutFanaticsFilters);
+    if (response.ok) {
+      const data = await response.json();
+      if (data && Object.keys(data).length > 0) {
+        globalTaxonomy = data;
+        populateAllCategorySelects();
+      }
+    }
   } catch (err) {
     console.error('Erro ao buscar taxonomia de categorias:', err);
   }
@@ -2610,6 +2682,52 @@ function applyFutFanaticsFilters() {
   renderFutFanaticsDeals(allFutFanaticsDeals);
 }
 
+function matchTeamFilter(deal, catInfo, selectedTeamSub) {
+  if (!selectedTeamSub) return true;
+  if (catInfo.subcategory === selectedTeamSub || deal.subcategory === selectedTeamSub) return true;
+
+  const t = (deal.title || '').toLowerCase();
+
+  if (selectedTeamSub.includes('Internacionais')) {
+    return t.includes('barcelona') || t.includes('real madrid') || t.includes('bayern') ||
+      t.includes('psg') || t.includes('juventus') || t.includes('manchester') ||
+      t.includes('liverpool') || t.includes('chelsea') || t.includes('arsenal') ||
+      t.includes('milan') || t.includes('inter de mil') || t.includes('dortmund') ||
+      t.includes('roma') || t.includes('napoli') || t.includes('ajax');
+  }
+
+  if (selectedTeamSub.includes('Nacionais')) {
+    return t.includes('flamengo') || t.includes('palmeiras') || t.includes('corinthians') ||
+      t.includes('sao paulo') || t.includes('são paulo') || t.includes('vasco') ||
+      t.includes('gremio') || t.includes('grêmio') || t.includes('internacional') ||
+      t.includes('atletico') || t.includes('atlético') || t.includes('cruzeiro') ||
+      t.includes('botafogo') || t.includes('fluminense') || t.includes('santos') ||
+      t.includes('chapecoense') || t.includes('ousadia') || t.includes('dragão') ||
+      t.includes('goianiense') || t.includes('bahia') || t.includes('sport') ||
+      t.includes('vitoria') || t.includes('vitória') || t.includes('fortaleza') ||
+      t.includes('ceara') || t.includes('ceará') || t.includes('juventude') ||
+      t.includes('bragantino') || t.includes('moto club');
+  }
+
+  if (selectedTeamSub.includes('Chuteiras')) {
+    return t.includes('chuteira') || t.includes('society') || t.includes('futsal') || t.includes('campo') || t.includes('indoor');
+  }
+
+  if (selectedTeamSub.includes('Basquete')) {
+    return t.includes('nba') || t.includes('lakers') || t.includes('bulls') || t.includes('jordan') || t.includes('basquete');
+  }
+
+  if (selectedTeamSub.includes('Vestuário')) {
+    return t.includes('polo') || t.includes('agasalho') || t.includes('jaqueta') || t.includes('moletom') || t.includes('bermuda') || t.includes('shorts') || t.includes('regata') || t.includes('cropped');
+  }
+
+  if (selectedTeamSub.includes('Equipamentos')) {
+    return t.includes('mochila') || t.includes('bolsa') || t.includes('bone') || t.includes('boné') || t.includes('bola') || t.includes('luva') || t.includes('oculos') || t.includes('óculos');
+  }
+
+  return false;
+}
+
 function getFilteredDealEntries(deals, platform) {
   const filters = platform === 'amazon'
     ? [
@@ -2659,7 +2777,7 @@ function getFilteredDealEntries(deals, platform) {
       const matchSearch = !searchTerm || deal.title.toLowerCase().includes(searchTerm);
       const matchCategory = !selectedCategory || catInfo.category === selectedCategory;
       const matchSubcategory = !selectedSubcategory || catInfo.subcategory === selectedSubcategory;
-      const matchTeam = !selectedTeamSub || catInfo.subcategory === selectedTeamSub;
+      const matchTeam = matchTeamFilter(deal, catInfo, selectedTeamSub);
       const matchDiscount = !selectedDiscount || Number(deal.discount) >= Number(selectedDiscount);
       const matchRecurring = !recurringOnly || deal.recurringPurchase === true;
 
