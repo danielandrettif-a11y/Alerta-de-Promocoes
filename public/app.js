@@ -2889,41 +2889,42 @@ function bindCategoryFilters(category, subcategory, platform, applyFilters) {
 }
 
 function getFilteredDealEntries(deals, platform) {
-  const filters = platform === 'amazon'
-    ? [
-      elFilterNameAmazon,
-      elFilterCategoryAmazon,
-      elFilterSubcategoryAmazon,
-      elFilterDiscountAmazon
-    ]
-    : platform === 'shopee'
-      ? [
-        elFilterNameShopee,
-        elFilterCategoryShopee,
-        elFilterSubcategoryShopee,
-        elFilterDiscountShopee,
-        elFilterRecurringShopee
-      ]
-      : platform === 'futfanatics'
-        ? [
-          elFilterNameFutFanatics,
-          elFilterCategoryFutFanatics,
-          elFilterSubcategoryFutFanatics,
-          elFilterDiscountFutFanatics
-        ]
-        : [
-          elFilterNameML,
-          elFilterCategoryML,
-          elFilterSubcategoryML,
-          elFilterDiscountML,
-          elFilterRecurringML
-        ];
+  if (!deals || deals.length === 0) return [];
 
-  const searchTerm = normalizeFilterText(filters[0]?.value).trim();
-  const selectedCategory = filters[1]?.value || '';
-  const selectedSubcategory = filters[2]?.value || '';
-  const selectedDiscount = filters[3]?.value || '';
-  const recurringOnly = filters[4]?.value === 'recurring';
+  let searchTerm = '';
+  let selectedCategory = '';
+  let selectedSubcategory = '';
+  let selectedDiscount = '';
+  let recurringOnly = false;
+  let sortControl = null;
+
+  if (platform === 'amazon') {
+    searchTerm = normalizeFilterText(elFilterNameAmazon?.value).trim();
+    selectedCategory = elFilterCategoryAmazon?.value || '';
+    selectedSubcategory = elFilterSubcategoryAmazon?.value || '';
+    selectedDiscount = elFilterDiscountAmazon?.value || '';
+    sortControl = elSortAmazon;
+  } else if (platform === 'shopee') {
+    searchTerm = normalizeFilterText(elFilterNameShopee?.value).trim();
+    selectedCategory = elFilterCategoryShopee?.value || '';
+    selectedSubcategory = elFilterSubcategoryShopee?.value || '';
+    selectedDiscount = elFilterDiscountShopee?.value || '';
+    recurringOnly = elFilterRecurringShopee?.value === 'recurring';
+    sortControl = elSortShopee;
+  } else if (platform === 'futfanatics') {
+    searchTerm = normalizeFilterText(elFilterNameFutFanatics?.value).trim();
+    selectedCategory = elFilterCategoryFutFanatics?.value || '';
+    selectedSubcategory = elFilterSubcategoryFutFanatics?.value || '';
+    selectedDiscount = elFilterDiscountFutFanatics?.value || '';
+    sortControl = elSortFutFanatics;
+  } else {
+    searchTerm = normalizeFilterText(elFilterNameML?.value).trim();
+    selectedCategory = elFilterCategoryML?.value || '';
+    selectedSubcategory = elFilterSubcategoryML?.value || '';
+    selectedDiscount = elFilterDiscountML?.value || '';
+    recurringOnly = elFilterRecurringML?.value === 'recurring';
+    sortControl = elSortML;
+  }
 
   const entries = deals
     .map((deal, index) => ({ deal, index }))
@@ -2941,13 +2942,8 @@ function getFilteredDealEntries(deals, platform) {
 
       return matchSearch && matchCategory && matchSubcategory && matchDiscount && matchRecurring;
     });
-  const sortControl = platform === 'amazon'
-    ? elSortAmazon
-    : platform === 'shopee'
-      ? elSortShopee
-      : platform === 'futfanatics'
-        ? elSortFutFanatics
-        : elSortML;
+
+  const sortMethod = sortControl?.value || 'deal';
   const value = deal => {
     switch (sortControl?.value || 'score') {
       case 'demand':
