@@ -2,16 +2,20 @@
 let allMLDeals = [];
 let allAmazonDeals = [];
 let allShopeeDeals = [];
+let allFutFanaticsDeals = [];
 let allCoupons = [];
 const selectedMLIndices = new Set();
 const selectedAmazonIndices = new Set();
 const selectedShopeeIndices = new Set();
+const selectedFutFanaticsIndices = new Set();
 let lastUpdateML = '';
 let lastUpdateAmazon = '';
 let lastUpdateShopee = '';
+let lastUpdateFutFanatics = '';
 let freshnessML = null;
 let freshnessAmazon = null;
 let freshnessShopee = null;
+let freshnessFutFanatics = null;
 let publicationQueueEnabled = false;
 let publicationQueueItems = [];
 let publicationQueueSummary = {};
@@ -23,6 +27,7 @@ const selectedQueueItemIds = new Set();
 let publicationHistorySignature = '';
 let amazonDealsLoaded = false;
 let shopeeDealsLoaded = false;
+let futfanaticsDealsLoaded = false;
 let whatsappReady = false;
 let activeDealPlatform = 'ml';
 let lastFocusedElement = null;
@@ -33,6 +38,7 @@ const DEALS_PAGE_SIZE = 20;
 let visibleMLLimit = DEALS_PAGE_SIZE;
 let visibleAmazonLimit = DEALS_PAGE_SIZE;
 let visibleShopeeLimit = DEALS_PAGE_SIZE;
+let visibleFutFanaticsLimit = DEALS_PAGE_SIZE;
 const IMAGE_PLACEHOLDER = `data:image/svg+xml,${encodeURIComponent(`
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">
     <rect width="640" height="480" fill="#f3f3f3"/>
@@ -59,6 +65,7 @@ const elTabProducts = document.getElementById('btn-tab-products');
 const elTabML = document.getElementById('btn-tab-ml');
 const elTabAmazon = document.getElementById('btn-tab-amazon');
 const elTabShopee = document.getElementById('btn-tab-shopee');
+const elTabFutFanatics = document.getElementById('btn-tab-futfanatics');
 const elTabCoupons = document.getElementById('btn-tab-coupons');
 const elTabQueue = document.getElementById('btn-tab-queue');
 const elTabSearch = document.getElementById('btn-tab-search');
@@ -68,6 +75,7 @@ const elPanelProducts = document.getElementById('panel-products');
 const elPanelML = document.getElementById('panel-ml');
 const elPanelAmazon = document.getElementById('panel-amazon');
 const elPanelShopee = document.getElementById('panel-shopee');
+const elPanelFutFanatics = document.getElementById('panel-futfanatics');
 const elPanelCoupons = document.getElementById('panel-coupons');
 const elPanelQueue = document.getElementById('panel-queue');
 const elPanelSearch = document.getElementById('panel-search');
@@ -76,17 +84,21 @@ const elPanelSearch = document.getElementById('panel-search');
 const elGridML = document.getElementById('grid-ml');
 const elGridAmazon = document.getElementById('grid-amazon');
 const elGridShopee = document.getElementById('grid-shopee');
+const elGridFutFanatics = document.getElementById('grid-futfanatics');
 const elGridCoupons = document.getElementById('grid-coupons');
 const elGridQueue = document.getElementById('grid-queue');
 const elPaginationML = document.getElementById('pagination-ml');
 const elPaginationAmazon = document.getElementById('pagination-amazon');
 const elPaginationShopee = document.getElementById('pagination-shopee');
+const elPaginationFutFanatics = document.getElementById('pagination-futfanatics');
 const elPaginationCountML = document.getElementById('pagination-count-ml');
 const elPaginationCountAmazon = document.getElementById('pagination-count-amazon');
 const elPaginationCountShopee = document.getElementById('pagination-count-shopee');
+const elPaginationCountFutFanatics = document.getElementById('pagination-count-futfanatics');
 const elBtnLoadMoreML = document.getElementById('btn-load-more-ml');
 const elBtnLoadMoreAmazon = document.getElementById('btn-load-more-amazon');
 const elBtnLoadMoreShopee = document.getElementById('btn-load-more-shopee');
+const elBtnLoadMoreFutFanatics = document.getElementById('btn-load-more-futfanatics');
 
 // DOM elements - ML Actions
 const elBtnUpdateML = document.getElementById('btn-update-ml');
@@ -118,6 +130,15 @@ const elTxtQueueCountShopee =
 const elTxtShopeeCatalogUpdate =
   document.getElementById('txt-shopee-catalog-update');
 
+// DOM elements - FutFanatics Actions
+const elBtnUpdateFutFanatics = document.getElementById('btn-update-futfanatics');
+const elBtnGenerateFutFanatics = document.getElementById('btn-generate-futfanatics');
+const elChkSelectAllFutFanatics = document.getElementById('chk-select-all-futfanatics');
+const elBtnClearSelectionFutFanatics = document.getElementById('btn-clear-selection-futfanatics');
+const elTxtSelectedCountFutFanatics = document.getElementById('txt-selected-count-futfanatics');
+const elBtnQueueFutFanatics = document.getElementById('btn-queue-futfanatics');
+const elTxtQueueCountFutFanatics = document.getElementById('txt-queue-count-futfanatics');
+
 // DOM elements - Filters ML
 const elFilterNameML = document.getElementById('ipt-filter-name-ml');
 const elFilterCategoryML = document.getElementById('sel-filter-category-ml');
@@ -142,6 +163,13 @@ const elFilterDiscountShopee = document.getElementById('sel-filter-discount-shop
 const elFilterRecurringShopee =
   document.getElementById('sel-filter-recurring-shopee');
 const elSortShopee = document.getElementById('sel-sort-shopee');
+
+// DOM elements - Filters FutFanatics
+const elFilterNameFutFanatics = document.getElementById('ipt-filter-name-futfanatics');
+const elFilterCategoryFutFanatics = document.getElementById('sel-filter-category-futfanatics');
+const elFilterSubcategoryFutFanatics = document.getElementById('sel-filter-subcategory-futfanatics');
+const elFilterDiscountFutFanatics = document.getElementById('sel-filter-discount-futfanatics');
+const elSortFutFanatics = document.getElementById('sel-sort-futfanatics');
 
 let globalTaxonomy = {};
 
@@ -314,12 +342,16 @@ function updateLastUpdateUI(platform) {
     ? lastUpdateAmazon
     : platform === 'shopee'
       ? lastUpdateShopee
-      : lastUpdateML;
+      : platform === 'futfanatics'
+        ? lastUpdateFutFanatics
+        : lastUpdateML;
   const freshness = platform === 'amazon'
     ? freshnessAmazon
     : platform === 'shopee'
       ? freshnessShopee
-      : freshnessML;
+      : platform === 'futfanatics'
+        ? freshnessFutFanatics
+        : freshnessML;
   if (currentUpdateStr) {
     const date = parseBackendDate(currentUpdateStr);
     if (date) {
@@ -364,9 +396,11 @@ async function fetchDataStatus() {
     freshnessML = status.mercadoLivre || freshnessML;
     freshnessAmazon = status.amazon || freshnessAmazon;
     freshnessShopee = status.shopee || freshnessShopee;
+    freshnessFutFanatics = status.futfanatics || freshnessFutFanatics;
     lastUpdateML = status.mercadoLivre?.generatedAt || lastUpdateML;
     lastUpdateAmazon = status.amazon?.generatedAt || lastUpdateAmazon;
     lastUpdateShopee = status.shopee?.generatedAt || lastUpdateShopee;
+    lastUpdateFutFanatics = status.futfanatics?.generatedAt || lastUpdateFutFanatics;
     updateShopeeCatalogUpdate(lastUpdateShopee);
     if (previousMLUpdate && lastUpdateML !== previousMLUpdate) fetchMLDeals();
     if (previousAmazonUpdate && lastUpdateAmazon !== previousAmazonUpdate) {
@@ -681,6 +715,7 @@ async function fetchCategories() {
     populateCategorySelect(elFilterCategoryML);
     populateCategorySelect(elFilterCategoryAmazon);
     populateCategorySelect(elFilterCategoryShopee);
+    populateCategorySelect(elFilterCategoryFutFanatics);
     
     // Configurar listeners em cascata
     elFilterCategoryML.addEventListener('change', () => {
@@ -695,10 +730,15 @@ async function fetchCategories() {
       handleCategoryChange(elFilterCategoryShopee, elFilterSubcategoryShopee);
       applyShopeeFilters();
     });
+    elFilterCategoryFutFanatics?.addEventListener('change', () => {
+      handleCategoryChange(elFilterCategoryFutFanatics, elFilterSubcategoryFutFanatics, 'futfanatics');
+      applyFutFanaticsFilters();
+    });
     
     elFilterSubcategoryML.addEventListener('change', applyMLFilters);
     elFilterSubcategoryAmazon.addEventListener('change', applyAmazonFilters);
     elFilterSubcategoryShopee.addEventListener('change', applyShopeeFilters);
+    elFilterSubcategoryFutFanatics?.addEventListener('change', applyFutFanaticsFilters);
   } catch (err) {
     console.error('Erro ao buscar taxonomia de categorias:', err);
   }
@@ -727,7 +767,13 @@ function handleCategoryChange(categorySelectEl, subcategorySelectEl, platform = 
     return;
   }
   
-  const deals = platform === 'amazon' ? allAmazonDeals : platform === 'shopee' ? allShopeeDeals : allMLDeals;
+  const deals = platform === 'amazon'
+    ? allAmazonDeals
+    : platform === 'shopee'
+      ? allShopeeDeals
+      : platform === 'futfanatics'
+        ? allFutFanaticsDeals
+        : allMLDeals;
   const subcategories = Object.keys(globalTaxonomy[selectedCat].subcategories);
   
   subcategories.forEach(sub => {
@@ -746,9 +792,27 @@ function handleCategoryChange(categorySelectEl, subcategorySelectEl, platform = 
 }
 
 function updateActiveFilterChip(platform) {
-  const containerId = platform === 'amazon' ? 'active-filter-chip-amazon' : platform === 'shopee' ? 'active-filter-chip-shopee' : 'active-filter-chip-ml';
-  const categoryEl = platform === 'amazon' ? elFilterCategoryAmazon : platform === 'shopee' ? elFilterCategoryShopee : elFilterCategoryML;
-  const subcategoryEl = platform === 'amazon' ? elFilterSubcategoryAmazon : platform === 'shopee' ? elFilterSubcategoryShopee : elFilterSubcategoryML;
+  const containerId = platform === 'amazon'
+    ? 'active-filter-chip-amazon'
+    : platform === 'shopee'
+      ? 'active-filter-chip-shopee'
+      : platform === 'futfanatics'
+        ? 'active-filter-chip-futfanatics'
+        : 'active-filter-chip-ml';
+  const categoryEl = platform === 'amazon'
+    ? elFilterCategoryAmazon
+    : platform === 'shopee'
+      ? elFilterCategoryShopee
+      : platform === 'futfanatics'
+        ? elFilterCategoryFutFanatics
+        : elFilterCategoryML;
+  const subcategoryEl = platform === 'amazon'
+    ? elFilterSubcategoryAmazon
+    : platform === 'shopee'
+      ? elFilterSubcategoryShopee
+      : platform === 'futfanatics'
+        ? elFilterSubcategoryFutFanatics
+        : elFilterSubcategoryML;
   const container = document.getElementById(containerId);
   if (!container) return;
 
@@ -784,6 +848,10 @@ function clearCategoryFilter(platform) {
     elFilterCategoryShopee.value = '';
     handleCategoryChange(elFilterCategoryShopee, elFilterSubcategoryShopee, 'shopee');
     applyShopeeFilters();
+  } else if (platform === 'futfanatics') {
+    if (elFilterCategoryFutFanatics) elFilterCategoryFutFanatics.value = '';
+    handleCategoryChange(elFilterCategoryFutFanatics, elFilterSubcategoryFutFanatics, 'futfanatics');
+    applyFutFanaticsFilters();
   } else {
     elFilterCategoryML.value = '';
     handleCategoryChange(elFilterCategoryML, elFilterSubcategoryML, 'ml');
@@ -903,6 +971,65 @@ async function fetchShopeeDeals() {
         <p>Não foi possível carregar as ofertas da Shopee.</p>
       </div>
     `;
+  }
+}
+
+async function fetchFutFanaticsDeals() {
+  if (elGridFutFanatics) showDealSkeletons(elGridFutFanatics);
+  try {
+    const historyRes = await fetch('/api/publish-history');
+    const historyData = await historyRes.json();
+    const publishedEntries = historyData.entries || [];
+    publicationHistorySignature = JSON.stringify(publishedEntries);
+
+    const response = await fetch('/api/futfanatics-deals');
+    const data = await response.json();
+
+    allFutFanaticsDeals = (data.deals || []).map(deal =>
+      addPublicationState(deal, 'futfanatics', publishedEntries)
+    );
+    futfanaticsDealsLoaded = true;
+    freshnessFutFanatics = data.freshness || null;
+    visibleFutFanaticsLimit = DEALS_PAGE_SIZE;
+    renderFutFanaticsDeals(allFutFanaticsDeals);
+
+    if (data.generatedAt) {
+      lastUpdateFutFanatics = data.generatedAt;
+      if (
+        elTabProducts.classList.contains('active') &&
+        activeDealPlatform === 'futfanatics'
+      ) {
+        updateLastUpdateUI('futfanatics');
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao buscar ofertas da FutFanatics:', err);
+    if (elGridFutFanatics) {
+      elGridFutFanatics.innerHTML = `
+        <div class="empty-state">
+          <p>Não foi possível carregar as ofertas da FutFanatics. Tente novamente.</p>
+        </div>
+      `;
+    }
+  }
+}
+
+async function triggerFutFanaticsScraper() {
+  showLoading('Varrendo ofertas da FutFanatics... Por favor aguarde.');
+  try {
+    const response = await fetch('/api/refresh-futfanatics-deals', { method: 'POST' });
+    const data = await response.json();
+    if (data.error) {
+      alert(`Erro: ${data.error}`);
+    } else {
+      await fetchFutFanaticsDeals();
+      alert('Ofertas da FutFanatics atualizadas com sucesso!');
+    }
+  } catch (err) {
+    console.error('Erro ao atualizar FutFanatics:', err);
+    alert('Erro ao atualizar ofertas da FutFanatics.');
+  } finally {
+    hideLoading();
   }
 }
 
@@ -2585,16 +2712,33 @@ function updateDealPagination(platform, visibleCount, totalCount) {
     ? [elPaginationAmazon, elPaginationCountAmazon, elBtnLoadMoreAmazon]
     : platform === 'shopee'
       ? [elPaginationShopee, elPaginationCountShopee, elBtnLoadMoreShopee]
-      : [elPaginationML, elPaginationCountML, elBtnLoadMoreML];
+      : platform === 'futfanatics'
+        ? [elPaginationFutFanatics, elPaginationCountFutFanatics, elBtnLoadMoreFutFanatics]
+        : [elPaginationML, elPaginationCountML, elBtnLoadMoreML];
   const [pagination, count, button] = elements;
 
-  pagination.hidden = totalCount === 0;
-  count.textContent =
-    `Mostrando ${Math.min(visibleCount, totalCount)} de ${totalCount} ofertas`;
-  button.hidden = visibleCount >= totalCount;
+  if (pagination) pagination.hidden = totalCount === 0;
+  if (count) count.textContent = `Mostrando ${Math.min(visibleCount, totalCount)} de ${totalCount} ofertas`;
+  if (button) button.hidden = visibleCount >= totalCount;
 }
 
 function getDealRenderConfig(platform) {
+  if (platform === 'futfanatics') {
+    return {
+      grid: elGridFutFanatics,
+      pagination: elPaginationFutFanatics,
+      selected: selectedFutFanaticsIndices,
+      visibleLimit: visibleFutFanaticsLimit,
+      theme: 'futfanatics-theme',
+      sourceCta: 'Ver Produto na FutFanatics 🔗',
+      ratingLabel: 'Avaliação FutFanatics',
+      emptyMessage: 'Nenhuma oferta da FutFanatics carregada. Clique em "Atualizar FutFanatics".',
+      supportsPublished: true,
+      showCoupon: true,
+      showRecurring: false,
+      updateSelection: updateFutFanaticsSelectionUI
+    };
+  }
   if (platform === 'amazon') {
     return {
       grid: elGridAmazon,
@@ -3328,20 +3472,50 @@ function switchTab(activeBtn, activePanel) {
 }
 
 function switchDealSource(activeBtn, activePanel) {
-  [elTabML, elTabAmazon, elTabShopee].forEach(btn => {
-    btn.classList.toggle('active', btn === activeBtn);
-    btn.setAttribute('aria-selected', String(btn === activeBtn));
+  [elTabML, elTabAmazon, elTabShopee, elTabFutFanatics].forEach(btn => {
+    if (btn) {
+      btn.classList.toggle('active', btn === activeBtn);
+      btn.setAttribute('aria-selected', String(btn === activeBtn));
+    }
   });
-  [elPanelML, elPanelAmazon, elPanelShopee].forEach(panel =>
-    panel.classList.toggle('active', panel === activePanel)
-  );
+  [elPanelML, elPanelAmazon, elPanelShopee, elPanelFutFanatics].forEach(panel => {
+    if (panel) panel.classList.toggle('active', panel === activePanel);
+  });
 
   activeDealPlatform = activeBtn === elTabAmazon
     ? 'amazon'
     : activeBtn === elTabShopee
       ? 'shopee'
-      : 'ml';
+      : activeBtn === elTabFutFanatics
+        ? 'futfanatics'
+        : 'ml';
   updateLastUpdateUI(activeDealPlatform);
+  updateMobileSelectionBar();
+}
+
+function renderFutFanaticsDeals(deals) {
+  renderDeals(deals, 'futfanatics');
+  updateActiveFilterChip('futfanatics');
+}
+
+function applyFutFanaticsFilters() {
+  selectedFutFanaticsIndices.clear();
+  visibleFutFanaticsLimit = DEALS_PAGE_SIZE;
+  renderFutFanaticsDeals(allFutFanaticsDeals);
+}
+
+function updateFutFanaticsSelectionUI() {
+  if (!elGridFutFanatics) return;
+  const visibleCards = elGridFutFanatics.querySelectorAll('.deal-card:not(.hidden-filter)');
+  const count = selectedFutFanaticsIndices.size;
+  if (elTxtSelectedCountFutFanatics) elTxtSelectedCountFutFanatics.textContent = count;
+  if (elTxtQueueCountFutFanatics) elTxtQueueCountFutFanatics.textContent = count;
+  if (elBtnGenerateFutFanatics) elBtnGenerateFutFanatics.disabled = count === 0;
+  if (elBtnQueueFutFanatics) elBtnQueueFutFanatics.disabled = count === 0;
+  if (elBtnClearSelectionFutFanatics) elBtnClearSelectionFutFanatics.disabled = count === 0;
+  if (elChkSelectAllFutFanatics) {
+    elChkSelectAllFutFanatics.checked = visibleCards.length > 0 && Array.from(visibleCards).every(card => selectedFutFanaticsIndices.has(Number(card.dataset.index)));
+  }
   updateMobileSelectionBar();
 }
 
@@ -3385,6 +3559,12 @@ function init() {
     switchDealSource(elTabShopee, elPanelShopee);
     if (!shopeeDealsLoaded) fetchShopeeDeals();
   });
+  if (elTabFutFanatics) {
+    elTabFutFanatics.addEventListener('click', () => {
+      switchDealSource(elTabFutFanatics, elPanelFutFanatics);
+      if (!futfanaticsDealsLoaded) fetchFutFanaticsDeals();
+    });
+  }
   elTabCoupons.addEventListener('click', () => switchTab(elTabCoupons, elPanelCoupons));
   elTabQueue.addEventListener('click', () => {
     switchTab(elTabQueue, elPanelQueue);
@@ -3411,6 +3591,7 @@ function init() {
   elBtnUpdateML.addEventListener('click', triggerMLScraper);
   elBtnUpdateAmazon.addEventListener('click', triggerAmazonScraper);
   elBtnUpdateShopee.addEventListener('click', triggerShopeeRefresh);
+  if (elBtnUpdateFutFanatics) elBtnUpdateFutFanatics.addEventListener('click', triggerFutFanaticsScraper);
   elBtnLoadMoreML.addEventListener('click', () => {
     visibleMLLimit += DEALS_PAGE_SIZE;
     renderMLDeals(allMLDeals);
@@ -3423,6 +3604,12 @@ function init() {
     visibleShopeeLimit += DEALS_PAGE_SIZE;
     renderShopeeDeals(allShopeeDeals);
   });
+  if (elBtnLoadMoreFutFanatics) {
+    elBtnLoadMoreFutFanatics.addEventListener('click', () => {
+      visibleFutFanaticsLimit += DEALS_PAGE_SIZE;
+      renderFutFanaticsDeals(allFutFanaticsDeals);
+    });
+  }
 
   // Generate / Post Triggers
   elBtnGenerateML.addEventListener('click', () => postSelectedDeals('ml'));
@@ -3557,6 +3744,22 @@ function init() {
     updateShopeeSelectionUI();
   });
 
+  // Select All FutFanatics Toggle
+  if (elChkSelectAllFutFanatics) {
+    elChkSelectAllFutFanatics.addEventListener('change', () => {
+      const visible = elGridFutFanatics.querySelectorAll('.deal-card:not(.hidden-filter)');
+      visible.forEach(card => {
+        const idx = parseInt(card.dataset.index, 10);
+        if (elChkSelectAllFutFanatics.checked) {
+          selectedFutFanaticsIndices.add(idx);
+        } else {
+          selectedFutFanaticsIndices.delete(idx);
+        }
+      });
+      updateFutFanaticsSelectionUI();
+    });
+  }
+
   // Clear Selections
   elBtnClearSelectionML.addEventListener('click', () => {
     selectedMLIndices.clear();
@@ -3570,6 +3773,12 @@ function init() {
     selectedShopeeIndices.clear();
     updateShopeeSelectionUI();
   });
+  if (elBtnClearSelectionFutFanatics) {
+    elBtnClearSelectionFutFanatics.addEventListener('click', () => {
+      selectedFutFanaticsIndices.clear();
+      updateFutFanaticsSelectionUI();
+    });
+  }
 
   // Filters ML listeners
   elFilterNameML.addEventListener('input', applyMLFilters);
@@ -3588,7 +3797,16 @@ function init() {
   elFilterRecurringShopee.addEventListener('change', applyShopeeFilters);
   elSortShopee?.addEventListener('change', applyShopeeFilters);
 
-  // Coupon Filters listeners
+  // Filters FutFanatics listeners
+  if (elFilterNameFutFanatics) elFilterNameFutFanatics.addEventListener('input', applyFutFanaticsFilters);
+  if (elFilterDiscountFutFanatics) elFilterDiscountFutFanatics.addEventListener('change', applyFutFanaticsFilters);
+  if (elSortFutFanatics) elSortFutFanatics.addEventListener('change', applyFutFanaticsFilters);
+  if (elBtnToggleFiltersFutFanatics && elFiltersFutFanatics) {
+    elBtnToggleFiltersFutFanatics.addEventListener('click', () => {
+      const open = elFiltersFutFanatics.classList.toggle('is-open');
+      elBtnToggleFiltersFutFanatics.setAttribute('aria-expanded', String(open));
+    });
+  }
   const btnCouponAll = document.getElementById('btn-coupon-tab-all');
   const btnCouponML = document.getElementById('btn-coupon-tab-ml');
   const btnCouponAmazon = document.getElementById('btn-coupon-tab-amazon');
