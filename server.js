@@ -2093,37 +2093,29 @@ app.post('/api/scrape', async (req, res) => {
 });
 
 // POST /api/scrape-amazon - Dispara o scraper de ofertas da Amazon
-app.post('/api/scrape-amazon', (req, res) => {
+app.post('/api/scrape-amazon', async (req, res) => {
   console.log('Disparando scraper de ofertas da Amazon...');
-  exec('node execution/amazon_deals.js', (error, stdout, stderr) => {
-    if (error) {
-      console.error(`Erro no scraping da Amazon: ${error.message}`);
-      return res.status(500).json({ error: `Falha ao atualizar ofertas da Amazon: ${error.message}` });
-    }
-    
+  try {
+    await refreshCatalog('amazon');
     console.log('Scraping da Amazon concluído!');
-    try {
-      const rawData = fs.readFileSync(amazonDealsReportPath, 'utf-8');
-      const parsedData = JSON.parse(rawData);
-      res.json({
-        success: true,
-        data: {
-          deals: enrichDeals(
-            parsedData.deals || [],
-            'amazon',
-            parsedData.generatedAt
-          ),
-          generatedAt: parsedData.generatedAt || null,
-          freshness: getFreshness(
-            parsedData.generatedAt,
-            Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
-          )
-        }
-      });
-    } catch (e) {
-      res.status(500).json({ error: 'Scraping da Amazon concluído, mas erro ao ler resultados.' });
-    }
-  });
+    const parsedData = JSON.parse(fs.readFileSync(amazonDealsReportPath, 'utf-8'));
+    res.json({
+      success: true,
+      data: {
+        deals: enrichDeals(parsedData.deals || [], 'amazon', parsedData.generatedAt),
+        generatedAt: parsedData.generatedAt || null,
+        freshness: getFreshness(
+          parsedData.generatedAt,
+          Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
+        )
+      }
+    });
+  } catch (error) {
+    console.error(`Erro no scraping da Amazon: ${error.message}`);
+    res.status(500).json({
+      error: `Falha ao atualizar ofertas da Amazon: ${error.message}`
+    });
+  }
 });
 
 // POST /api/refresh-shopee - Verifica o ETag e importa somente se mudou

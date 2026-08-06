@@ -15,8 +15,9 @@ const path = require('path');
 const puppeteer = require('puppeteer-core');
 const { inferCategoryAndSub, getRecurringPurchaseCategory } = require('./category_helper.js');
 
-function findBrowserPath() {
+function findBrowserPath(env = process.env, exists = fs.existsSync) {
   const possiblePaths = [
+    env.BROWSER_EXECUTABLE_PATH,
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     path.join(process.env.USERPROFILE || 'C:\\Users\\danie', 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
@@ -28,8 +29,8 @@ function findBrowserPath() {
     '/usr/bin/chromium-browser'
   ];
 
-  for (const executablePath of possiblePaths) {
-    if (fs.existsSync(executablePath)) {
+  for (const executablePath of possiblePaths.filter(Boolean)) {
+    if (exists(executablePath)) {
       return executablePath;
     }
   }
@@ -69,6 +70,19 @@ function selectVerifiedDeals(deals, limit = 50) {
       parseNumericPrice(deal.originalPrice) > parseNumericPrice(deal.currentPrice))
     .sort((a, b) => b.discount - a.discount)
     .slice(0, limit);
+}
+
+function saveAmazonReport(reportPath, deals, generatedAt = new Date().toISOString()) {
+  if (!Array.isArray(deals) || deals.length === 0) {
+    throw new Error('A coleta não encontrou ofertas válidas; o catálogo anterior foi preservado.');
+  }
+  const temporaryPath = `${reportPath}.tmp`;
+  fs.writeFileSync(
+    temporaryPath,
+    JSON.stringify({ generatedAt, deals }, null, 2),
+    'utf-8'
+  );
+  fs.renameSync(temporaryPath, reportPath);
 }
 
 async function scrapeDealsFromPage(page, url) {
@@ -221,9 +235,9 @@ async function main() {
 
   const browserPath = findBrowserPath();
   if (!browserPath) {
-    console.warn("⚠️ Navegador Chrome/Edge não localizado. Salvando relatório vazio.");
-    writeEmptyReport();
-    process.exit(0);
+    console.error("❌ Navegador Chrome/Chromium não localizado; catálogo anterior preservado.");
+    process.exitCode = 1;
+    return;
   }
 
   const amazonDealsPath = path.join(__dirname, '..', 'amazon_deals_report.json');
@@ -248,8 +262,8 @@ async function main() {
     });
   } catch (err) {
     console.error("❌ Falha ao abrir navegador:", err.message);
-    writeEmptyReport();
-    process.exit(0);
+    process.exitCode = 1;
+    return;
   }
 
   try {
@@ -349,35 +363,24 @@ async function main() {
     }
 
     const finalDeals = selectVerifiedDeals(formattedDeals);
-    const reportData = {
-      generatedAt: new Date().toISOString(),
-      deals: finalDeals
-    };
-    fs.writeFileSync(amazonDealsPath, JSON.stringify(reportData, null, 2), 'utf-8');
+    saveAmazonReport(amazonDealsPath, finalDeals);
     console.log(`\n✅ Sucesso! Scraping da Amazon concluído.`);
     console.log(`📊 Total de ${finalDeals.length} ofertas com desconto comprovado salvas em amazon_deals_report.json.`);
 
   } catch (err) {
     console.warn("⚠️ Falha durante execução do Puppeteer na Amazon:", err.message);
     try { await browser.close(); } catch (e) {}
-    if (!fs.existsSync(amazonDealsPath)) {
-      writeEmptyReport();
-    }
+    process.exitCode = 1;
   }
-}
-
-function writeEmptyReport() {
-  const amazonDealsPath = path.join(__dirname, '..', 'amazon_deals_report.json');
-  const reportData = {
-    generatedAt: new Date().toISOString(),
-    deals: []
-  };
-  fs.writeFileSync(amazonDealsPath, JSON.stringify(reportData, null, 2), 'utf-8');
-  console.log(`✅ Concluído! Relatório da Amazon salvo como vazio (0 ofertas).`);
 }
 
 if (require.main === module) {
   main();
 }
 
-module.exports = { parsePromotionText, selectVerifiedDeals };
+module.exports = {
+  findBrowserPath,
+  parsePromotionText,
+  selectVerifiedDeals,
+  saveAmazonReport
+};

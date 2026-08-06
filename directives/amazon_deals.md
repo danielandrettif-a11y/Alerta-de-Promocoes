@@ -32,11 +32,10 @@ Automate the extraction of Amazon Brasil daily deals (`https://www.amazon.com.br
 
 ## Reliability & Fallback
 - Runs in headless mode (true on Linux, false on Windows local).
-- In case of network failure or bot blocking, writes a clean empty report (`deals: []`) to prevent panel crashes.
+- In case of browser, network or bot-blocking failure, exits with an error and preserves the previous valid report.
 - Never invent a default discount when the crossed-out reference price is
   absent. Discard products without a positive discount backed by a higher
   reference price.
-- A successful collection with no verified deals writes an empty report so
-  stale offers cannot return to the panel.
+- A collection with no verified deals fails without replacing the last valid catalog.
 - A product-page coupon badge is discovery metadata, not proof of the final
   price after coupon.

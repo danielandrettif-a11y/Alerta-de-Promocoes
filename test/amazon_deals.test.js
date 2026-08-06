@@ -1,8 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {
+  findBrowserPath,
   parsePromotionText,
-  selectVerifiedDeals
+  selectVerifiedDeals,
+  saveAmazonReport
 } = require('../execution/amazon_deals.js');
 
 test('Amazon preserva somente descontos comprovados', () => {
@@ -19,4 +24,28 @@ test('Amazon preserva somente descontos comprovados', () => {
   ]);
 
   assert.deepEqual(deals.map(deal => deal.title), ['Oferta real']);
+});
+
+test('Amazon preserva o catálogo anterior quando a coleta falha', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'amazon-report-'));
+  const reportPath = path.join(directory, 'amazon.json');
+  const previous = { generatedAt: '2026-08-05T12:00:00.000Z', deals: [{ title: 'Anterior' }] };
+  fs.writeFileSync(reportPath, JSON.stringify(previous));
+
+  try {
+    assert.throws(
+      () => saveAmazonReport(reportPath, []),
+      /catálogo anterior foi preservado/
+    );
+    assert.deepEqual(JSON.parse(fs.readFileSync(reportPath)), previous);
+    assert.equal(
+      findBrowserPath(
+        { BROWSER_EXECUTABLE_PATH: '/custom/chromium' },
+        candidate => candidate === '/custom/chromium'
+      ),
+      '/custom/chromium'
+    );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
