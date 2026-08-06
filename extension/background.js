@@ -239,7 +239,7 @@ async function getOrCreateWorkerTab(platform, productUrl) {
     workerWindow = await chrome.windows.create({
       url,
       type: 'normal',
-      focused: false,
+      focused: true,
       state: 'normal'
     });
     await maximizeWindow(workerWindow.id, false);
@@ -251,13 +251,14 @@ async function getOrCreateWorkerTab(platform, productUrl) {
 
   const previousTabs = workerWindow.tabs ||
     await chrome.tabs.query({ windowId: workerWindow.id });
-  const initialTab = (createdWindow || platform === 'shopee')
-    ? previousTabs.find(tab => tabMatchesPlatform(tab, platform))
-    : null;
+    
+  // Ponytail mode: always try to reuse a tab of the same platform instead of opening new ones
+  const initialTab = previousTabs.find(tab => tabMatchesPlatform(tab, platform)) || null;
+  
   const tab = initialTab || await chrome.tabs.create({
       windowId: workerWindow.id,
       url,
-      active: false
+      active: true
     });
   for (const previousTab of previousTabs) {
     if (!previousTab.id || previousTab.id === tab.id) continue;

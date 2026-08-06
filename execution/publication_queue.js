@@ -275,12 +275,13 @@ function enqueueOffer(queue, input, now = new Date()) {
   
   // Se for Amazon, já é afiliado automaticamente com a tag
   const isAmazon = platform === 'amazon';
-  const status = STATUSES.AWAITING_AFFILIATE;
   const affiliateLink = isAmazon
     ? productLink
     : platform === 'futfanatics' && input.affiliateLink
       ? validateAffiliateLink(input.affiliateLink, platform)
       : null;
+      
+  const status = affiliateLink ? STATUSES.READY : STATUSES.AWAITING_AFFILIATE;
 
   const item = {
     id: String(input.id || crypto.randomUUID()),

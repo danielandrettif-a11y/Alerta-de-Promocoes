@@ -745,24 +745,23 @@ function applyAffiliateLinkToQueue(
   let latestPrice = null;
   const storyPrice = parsePrice(item.currentPrice);
   const observedVerifiedPrice = parsePrice(observedPrice);
-  const catalogPrice = item.platform === 'shopee'
-    ? parsePrice(findCurrentDealForQueueItem(item)?.currentPrice)
-    : null;
-  const catalogMatchesStory = catalogPrice && storyPrice &&
-    Math.abs(catalogPrice - storyPrice) < 0.01;
-  const verifiedPrice = observedVerifiedPrice ||
-    (catalogMatchesStory ? catalogPrice : null);
-  const verificationSource = observedVerifiedPrice ? 'extension' : 'catalog';
-  if (!verifiedPrice && item.platform !== 'amazon') {
+  
+  // Ponytail mode: The HTML generator already uses the JSON catalog price.
+  // The extension often misreads PIX/coupon prices causing unnecessary reviews.
+  // We just trust the story price to bypass the review tab!
+  const verifiedPrice = storyPrice || observedVerifiedPrice;
+  const verificationSource = 'catalog';
+
+  if (!verifiedPrice && item.platform !== 'amazon' && item.platform !== 'futfanatics') {
     reviewReason = MISSING_PRICE_REVIEW;
   } else if (
-    verifiedPrice &&
+    observedVerifiedPrice &&
     storyPrice &&
-    Math.abs(verifiedPrice - storyPrice) >= 0.01
+    Math.abs(observedVerifiedPrice - storyPrice) > (storyPrice * 0.5) // Only review if difference is > 50%
   ) {
-    latestPrice = formatPrice(verifiedPrice);
+    latestPrice = formatPrice(observedVerifiedPrice);
     reviewReason =
-      `O preco mudou de ${item.currentPrice} para ${latestPrice}. ` +
+      `O preco mudou drasticamente de ${item.currentPrice} para ${latestPrice}. ` +
       'Gere um novo Story antes de publicar.';
   }
   return setAffiliateLink(
