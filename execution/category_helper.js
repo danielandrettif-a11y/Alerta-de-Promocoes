@@ -30,8 +30,10 @@ const TAXONOMY = {
   'Saúde, Fitness e Esportes': {
     icon: '💪',
     subcategories: {
+      'Camisas de Futebol e Mantos': ['camisa', 'manto', 'oficial', 'futfanatics', 'flamengo', 'palmeiras', 'corinthians', 'sao paulo', 'vasco', 'gremio', 'internacional', 'atletico', 'cruzeiro', 'botafogo', 'fluminense', 'santos', 'real madrid', 'barcelona', 'bayern', 'psg', 'juventus', 'manchester', 'liverpool', 'chelsea', 'arsenal', 'milan', 'inter de milao', 'selecao', 'brasil', 'argentina', 'reforma', 'retro'],
+      'Chuteiras e Equipamentos de Futebol': ['chuteira', 'society', 'futsal', 'campo', 'luva de goleiro', 'bola de futebol', 'caneleira futebol', 'meia de futebol'],
       'Suplementos e Creatinas': ['creatina', 'whey', 'proteina', 'suplemento', 'caps', 'omega', 'vitamina', 'colageno', 'termogenico', 'pre treino', 'bcaa', 'glutamina'],
-      'Roupas e Calçados Esportivos': ['camisa dry fit', 'shorts academia', 'legging', 'tenis corrida', 'meia esportiva', 'top fitness'],
+      'Roupas e Calçados Esportivos': ['camisa dry fit', 'shorts academia', 'legging', 'tenis corrida', 'meia esportiva', 'top fitness', 'agasalho', 'jaqueta esportiva', 'regata'],
       'Equipamentos de Treino': ['halter', 'colchonete', 'elastico', 'caneleira', 'barra', 'esteira', 'bicicleta ergometrica', 'corda de pular', 'anilhas'],
       'Bike e Lazer': ['bicicleta', 'bike', 'capacete', 'patinete', 'skate', 'mochila hidratação', 'barraca', 'saco de dormir']
     }

@@ -4602,4 +4602,41 @@ select:focus-visible {
   display: inline-block;
 }
 
+/* ==========================================
+   FutFanatics Marketplace Styles
+   ========================================== */
+.source-tab[aria-controls="panel-futfanatics"].active {
+  background: rgba(0, 166, 80, 0.2);
+  color: #00e66b;
+  border-color: #00a650;
+}
+
+.btn-futfanatics-refresh {
+  background: rgba(0, 166, 80, 0.15);
+  color: #00e66b;
+  border: 1px solid rgba(0, 166, 80, 0.4);
+}
+
+.btn-futfanatics-refresh:hover:not(:disabled) {
+  background: rgba(0, 166, 80, 0.3);
+  border-color: #00a650;
+}
+
+.btn-futfanatics-cta {
+  background: linear-gradient(135deg, #00a650 0%, #008037 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(0, 166, 80, 0.3);
+}
+
+.btn-futfanatics-cta:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(0, 166, 80, 0.5);
+}
+
+.platform-badge.futfanatics {
+  background: rgba(0, 166, 80, 0.15);
+  color: #00e66b;
+  border: 1px solid rgba(0, 166, 80, 0.3);
+}
+
+
 

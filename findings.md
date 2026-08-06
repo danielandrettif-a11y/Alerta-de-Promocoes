@@ -70,4 +70,54 @@ Este documento registra as descobertas de pesquisas, especificações técnicas 
 - **Link Afiliado Amazon e Tag de Associado**: A Amazon Brasil permite atrelar a tag de associado (`AMAZON_ASSOCIATE_TAG`) diretamente aos links dos produtos via query parameter `?tag=alertadesc0dd-20`, dispensando extensões de navegador ou automações complexas de cliques.
 - **Integração de Cupons com Story de Instagram**: Vincular cupons específicos a produtos e calcular o preço final promocional (`Preço COM Cupom`) permite a renderização automática de imagens de Stories vertical (1080x1920) com banners destacados para publicação imediata.
 
+## Integração FutFanatics — Análise Técnica (05/08/2026)
+
+### Plataforma e Anti-Bot
+- **Plataforma de e-commerce**: Tray (identificado pelo rodapé "Tecnologia Tray" e CDN `images.tcdn.com.br`).
+- **Anti-bot**: O site carregou diretamente no Puppeteer sem desafios Cloudflare, reCAPTCHA ou bloqueio de requisição. Contudo, requisições HTTP diretas (fetch/axios) retornam HTTP 403, exigindo headers de navegador (`User-Agent`) ou Puppeteer completo.
+- **Carregamento**: Páginas levam 5-15 segundos para carregar completamente, com timeout frequente. Necessário aguardar `domcontentloaded` com timeout generoso (~35s).
+
+### Estrutura de URLs e Paginação
+- **URL do Outlet**: `https://www.futfanatics.com.br/outlet`
+- **URL do Sistema de Busca**: `https://www.futfanatics.com.br/loja/busca.php`
+- **Parâmetros de Query**:
+  - `loja=311840` — Identificador obrigatório da loja na plataforma Tray.
+  - `categoria=495` — ID da categoria "Outlet".
+  - `pg=N` — Paginação por número de página.
+  - `marca=marca_<slug>` — Filtro por marca (ex: `marca_adidas`, `marca_nike`).
+  - `range=<min>-<max>` — Filtro de faixa de preço.
+- **URL de Produto**: Formato de slug na raiz: `https://www.futfanatics.com.br/<slug-do-produto>`.
+
+### Estrutura DOM dos Cards de Produto (Listagem)
+- **Container**: Elemento `<a>` que encapsula todo o card (link direto para o produto).
+- **Título**: Div ou `<h4>` com texto do nome do produto dentro do link.
+- **Imagem**: Tag `<img>` apontando para CDN `images.tcdn.com.br`.
+- **Desconto**: `<span>` contendo `"34%"` ou `"34%OFF"`.
+- **Preço Original (De)**: Div contendo `"R$"` seguido de `<span>` com preço cheio (ex: `189,90`).
+- **Preço Promocional (Por)**: Div/Span com valor final (ex: `R$119,90`).
+- **Desconto PIX**: Texto indicando `"Economize 10% à vista via PIX"` ou preço já calculado.
+- **Tamanhos**: Botões individuais exibidos diretamente no card (`P`, `M`, `G`, `GG`).
+
+### Estrutura DOM da Página de Detalhes do Produto
+- **Título**: Elemento de cabeçalho principal.
+- **Preços**: Estrutura similar ao card, com destaque para porcentagem de desconto e cashback (`2% CashBack`).
+- **Cupons Exclusivos**: Alguns produtos exibem cupons diretamente no HTML (ex: `"Cupom Exclusivo 15% OFF | OUTFUT15"`). Código extraível via regex.
+- **Tamanhos**: Lista `<li>` com tags `<div>` para cada opção.
+- **Personalização**: Inputs `#infoAdicional_31` (Nome, +R$15) e `#infoAdicional_41` (Número, +R$20).
+- **SKU**: Exibido como `#172938`.
+- **Botão de Compra**: `#button-buy`.
+
+### Programa de Afiliados
+- **Rede**: Awin (principal).
+- **Formato do Link Afiliado**: `https://www.awin1.com/cread.php?awinmid=ADVERTISER_ID&awinaffid=PUBLISHER_ID&ued=ENCODED_DESTINATION_URL`
+- **Parâmetro opcional**: `&clickref=YOUR_VALUE` para rastreamento de campanhas.
+- **API Awin**: Endpoint `POST` em `https://api.awin.com` para geração em lote (até 100 links por requisição), autenticação OAuth2.
+- **Extensão MyAwin**: Gera deeplinks diretamente enquanto navega no site.
+- **Comissões**: Conteúdo/Influenciadores ~8%, Cashback ~7%, Padrão ~5%, Cupons ~5%.
+- **Cookie**: 30 dias de duração.
+
+### Seções Principais do Site
+- **Outlet**: Camisas, chuteiras e acessórios com desconto permanente.
+- **Home Page**: Contém shelves de "Ofertas Especiais" e banners dinâmicos.
+- **Marcas disponíveis (Outlet)**: Adidas, Nike, Puma, Umbro, Kappa, Penalty, Olympikus, Balboa, Topper, entre outras.
 

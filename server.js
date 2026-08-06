@@ -135,6 +135,14 @@ app.use(express.static(path.join(__dirname, 'public'), {
 const mlDealsReportPath = path.join(__dirname, 'mercado_livre_deals_report.json');
 const amazonDealsReportPath = path.join(__dirname, 'amazon_deals_report.json');
 const shopeeDealsReportPath = path.join(__dirname, 'shopee_deals_report.json');
+const futfanaticsDealsReportPath = path.join(APP_RUNTIME_DIR, 'futfanatics_deals_report.json');
+const futfanaticsDealsRootPath = path.join(__dirname, 'futfanatics_deals_report.json');
+
+function getFutFanaticsReportPath() {
+  if (fs.existsSync(futfanaticsDealsReportPath)) return futfanaticsDealsReportPath;
+  return futfanaticsDealsRootPath;
+}
+
 const couponsPath = path.join(__dirname, 'coupons.json');
 const affiliateCommissionsPath = path.join(__dirname, 'affiliate_commissions.json');
 ensureSessionDirectories();
@@ -276,6 +284,10 @@ app.get('/api/data-status', (req, res) => {
       readGeneratedAt(shopeeDealsReportPath),
       Number(readEnv().SHOPEE_STALE_AFTER_MINUTES) || 1560
     ),
+    futfanatics: getFreshness(
+      readGeneratedAt(getFutFanaticsReportPath()),
+      staleAfterMinutes
+    ),
     publishing: {
       enabled: process.env.AUTO_RUN_ENABLED === 'true',
       targetPerHour,
@@ -373,6 +385,7 @@ function enrichDeals(deals, platform, generatedAt) {
 function getPlatformTag(platform) {
   if (platform === 'amazon') return '🟡 *AMAZON*';
   if (platform === 'shopee') return '🟠 *SHOPEE*';
+  if (platform === 'futfanatics') return '⚽ *FUTFANATICS*';
   return '🛍️ *MERCADO LIVRE*';
 }
 
@@ -650,6 +663,47 @@ app.get('/api/shopee-deals', (req, res) => {
       generatedAt,
       Number(readEnv().SHOPEE_STALE_AFTER_MINUTES) || 1560
     )
+  });
+});
+
+// GET /api/futfanatics-deals - Retorna as ofertas da FutFanatics
+app.get('/api/futfanatics-deals', (req, res) => {
+  let deals = [];
+  let generatedAt = null;
+  const reportPath = getFutFanaticsReportPath();
+
+  if (fs.existsSync(reportPath)) {
+    try {
+      const parsedData = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
+      deals = parsedData.deals || [];
+      generatedAt = parsedData.generatedAt || null;
+    } catch (err) {
+      console.error('Erro ao ler ofertas da FutFanatics:', err);
+    }
+  }
+  deals = enrichDeals(deals, 'futfanatics', generatedAt);
+  res.json({
+    deals,
+    generatedAt,
+    freshness: getFreshness(
+      generatedAt,
+      Number(process.env.DEALS_STALE_AFTER_MINUTES) || 90
+    )
+  });
+});
+
+// POST /api/refresh-futfanatics-deals - Dispara atualização das ofertas da FutFanatics
+app.post('/api/refresh-futfanatics-deals', (req, res) => {
+  console.log('[API] Disparando atualização das ofertas da FutFanatics...');
+  const scriptPath = path.join(__dirname, 'execution', 'futfanatics_deals.js');
+  
+  execFile(process.execPath, [scriptPath], { cwd: __dirname }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('Erro ao atualizar FutFanatics:', error.message);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+    console.log('[API] Ofertas da FutFanatics atualizadas com sucesso.');
+    res.json({ success: true, message: 'Ofertas da FutFanatics atualizadas.' });
   });
 });
 
@@ -2756,7 +2810,8 @@ function refreshCatalog(platform) {
   const scripts = {
     mercado_livre: 'mercado_livre_deals.js',
     amazon: 'amazon_deals.js',
-    shopee: 'shopee_refresh.js'
+    shopee: 'shopee_refresh.js',
+    futfanatics: 'futfanatics_deals.js'
   };
   if (!scripts[platform]) {
     return Promise.reject(new Error(`Catalogo ${platform} desconhecido.`));
@@ -2832,6 +2887,19 @@ function loadAvailableDeals() {
       })));
     } catch (err) {
       console.error(`Erro ao carregar ofertas da Shopee: ${err.message}`);
+    }
+  }
+
+  const futReportPath = getFutFanaticsReportPath();
+  if (fs.existsSync(futReportPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(futReportPath, 'utf-8'));
+      deals.push(...(data.deals || []).map(deal => ({
+        ...deal,
+        platform: 'futfanatics'
+      })));
+    } catch (err) {
+      console.error(`Erro ao carregar ofertas da FutFanatics: ${err.message}`);
     }
   }
 

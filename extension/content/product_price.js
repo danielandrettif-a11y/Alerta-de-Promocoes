@@ -46,12 +46,19 @@
         '[data-a-color="price"] .a-offscreen',
         'meta[itemprop="price"]'
       ]
-      : [
-        '[data-testid="pdp-product-price"]',
-        '[class*="product-price"]',
-        '[class*="pqTWkA"]',
-        'meta[itemprop="price"]'
-      ];
+      : hostname.includes('futfanatics.com.br')
+        ? [
+          '.preco-por',
+          '.precos .por',
+          'meta[itemprop="price"]',
+          '[class*="preco"]'
+        ]
+        : [
+          '[data-testid="pdp-product-price"]',
+          '[class*="product-price"]',
+          '[class*="pqTWkA"]',
+          'meta[itemprop="price"]'
+        ];
     for (const selector of selectors) {
       const element = root.querySelector(selector);
       if (!element) continue;

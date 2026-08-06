@@ -59,5 +59,17 @@ Este documento registra as fases de desenvolvimento para a automação de oferta
 - [x] 3. Validar a recepção das ofertas da Amazon no endpoint `/api/queue` e a criação dos Stories/envio ao WhatsApp.
 - [x] 4. Testes E2E e validação no Dashboard.
 
+### Fase 9: Integração do Marketplace FutFanatics (Concluída)
+- [x] 1. Respostas das 5 Perguntas de Descoberta V.L.A.E.G. coletadas.
+- [x] 2. Descobertas técnicas e estrutura DOM do site registradas em `findings.md`.
+- [x] 3. Plano de implementação criado em `implementation_plan.md`.
+- [x] 4. Criar a diretiva `directives/futfanatics_deals.md`.
+- [x] 5. Desenvolver o scraper `execution/futfanatics_deals.js` e atualizar `category_helper.js`.
+- [x] 6. Adicionar a aba FutFanatics na interface (`index.html`, `style.css`, `app.js`).
+- [x] 7. Criar as rotas de backend em `server.js` (`/api/futfanatics-deals` e `/api/refresh-futfanatics-deals`).
+- [x] 8. Adicionar suporte à FutFanatics na extensão Chrome (`manifest.json`, `background.js`, `content/product_price.js`).
+- [x] 9. Desenvolver os testes unitários (`test/futfanatics_deals.test.js`) e validar com `npm test` (88/88 pass).
+
+
 
 

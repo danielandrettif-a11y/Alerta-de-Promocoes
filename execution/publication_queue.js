@@ -190,6 +190,13 @@ function validateAffiliateLink(rawValue, platform = 'mercado_livre') {
     }
     return parsed.toString();
   }
+  if (platform === 'futfanatics') {
+    const host = parsed.hostname.toLowerCase();
+    if (!['futfanatics.com.br', 'www.futfanatics.com.br', 'awin1.com', 'www.awin1.com'].includes(host)) {
+      throw new Error('Use um link valido da FutFanatics ou Awin.');
+    }
+    return parsed.toString();
+  }
   const hostname = platform === 'shopee' ? 's.shopee.com.br' : 'meli.la';
   if (parsed.hostname.toLowerCase() !== hostname) {
     throw new Error(`Use um link afiliado oficial no dominio ${hostname}.`);
@@ -210,12 +217,14 @@ function normalizeProductLink(rawValue, platform) {
     ? ['shopee.com.br', 'www.shopee.com.br'].includes(hostname)
     : platform === 'amazon'
       ? ['amazon.com.br', 'www.amazon.com.br'].includes(hostname)
-      : hostname === 'mercadolivre.com.br' ||
-        hostname.endsWith('.mercadolivre.com.br');
+      : platform === 'futfanatics'
+        ? ['futfanatics.com.br', 'www.futfanatics.com.br', 'awin1.com', 'www.awin1.com'].includes(hostname)
+        : hostname === 'mercadolivre.com.br' ||
+          hostname.endsWith('.mercadolivre.com.br');
   if (!valid) {
     throw new Error(
       `O produto precisa apontar para ${
-        platform === 'shopee' ? 'a Shopee Brasil' : platform === 'amazon' ? 'a Amazon Brasil' : 'o Mercado Livre Brasil'
+        platform === 'shopee' ? 'a Shopee Brasil' : platform === 'amazon' ? 'a Amazon Brasil' : platform === 'futfanatics' ? 'a FutFanatics' : 'o Mercado Livre Brasil'
       }.`
     );
   }
@@ -243,8 +252,8 @@ function enqueueOffer(queue, input, now = new Date()) {
   }
 
   const platform = String(input.platform || '').toLowerCase();
-  if (!['mercado_livre', 'shopee', 'amazon'].includes(platform)) {
-    throw new Error('A fila afiliada aceita Mercado Livre, Shopee ou Amazon.');
+  if (!['mercado_livre', 'shopee', 'amazon', 'futfanatics'].includes(platform)) {
+    throw new Error('A fila afiliada aceita Mercado Livre, Shopee, Amazon ou FutFanatics.');
   }
 
   const timestamp = now.toISOString();

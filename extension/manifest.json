@@ -17,7 +17,11 @@
     "https://shopee.com.br/*",
     "https://www.shopee.com.br/*",
     "https://amazon.com.br/*",
-    "https://www.amazon.com.br/*"
+    "https://www.amazon.com.br/*",
+    "https://futfanatics.com.br/*",
+    "https://www.futfanatics.com.br/*",
+    "https://awin1.com/*",
+    "https://www.awin1.com/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -55,7 +59,9 @@
         "https://shopee.com.br/*",
         "https://www.shopee.com.br/*",
         "https://amazon.com.br/*",
-        "https://www.amazon.com.br/*"
+        "https://www.amazon.com.br/*",
+        "https://futfanatics.com.br/*",
+        "https://www.futfanatics.com.br/*"
       ],
       "js": [
         "content/product_price.js"

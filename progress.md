@@ -200,10 +200,16 @@ Registro contínuo do progresso, execuções de testes, erros encontrados e solu
     - Implementada a divisão automática de tela (Split Screen): ao iniciar a geração de links, a janela principal do usuário ajusta para a metade esquerda (50%) e a janela da extensão para a metade direita (50%) usando `chrome.system.display`.
     - Implementada a restauração automática da janela principal (`restoreMainWindowState`): assim que a extensão conclui a geração de links e fecha as guias, a janela do navegador do usuário retorna automaticamente para **tela cheia / maximizada** como estava antes.
 
-
-
-
-
-
-
+### 05/08/2026
+- **Atualização do Repositório via GitHub**:
+  - Executado `git fetch origin` e identificados 7 novos commits remotos no repositório `https://github.com/danielandrettif-a11y/Alerta-de-Promocoes.git`.
+  - Executado `git pull origin main` com sucesso (fast-forward da versão `d347b8a` para `127a759`), atualizando 48 arquivos no projeto.
+- **Implementação do 4º Marketplace: FutFanatics**:
+  - Coletadas as respostas das 5 Perguntas de Descoberta V.L.A.E.G. e criados os arquivos de controle (`findings.md`, `task_plan.md`, `implementation_plan.md`, `walkthrough.md`).
+  - Criada a diretiva `directives/futfanatics_deals.md` e o scraper Puppeteer `execution/futfanatics_deals.js`.
+  - Adicionadas subcategorias de camisas de futebol, mantos e chuteiras no `execution/category_helper.js`.
+  - Adicionadas as rotas `/api/futfanatics-deals` e `/api/refresh-futfanatics-deals` no `server.js` com suporte à tag WhatsApp `⚽ *FUTFANATICS*`.
+  - Implementada a aba **FutFanatics** na Dashboard (`index.html`, `style.css`, `app.js`) com tema esportivo verde (`#00a650`), botões de controle, filtros e seleção para fila de publicação.
+  - Atualizada a extensão Chrome (`manifest.json` e `product_price.js`) para suportar a FutFanatics e Awin (`awin1.com`).
+  - Criados os testes unitários (`test/futfanatics_deals.test.js`) e executada a bateria completa de testes automatizados (`npm test`): **88 de 88 testes APROVADOS (100% de sucesso)**.
 

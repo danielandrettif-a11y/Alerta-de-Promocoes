@@ -192,6 +192,105 @@
           aria-selected="false" aria-controls="panel-shopee">
           <span aria-hidden="true">🟠</span> Shopee
         </button>
+        <button id="btn-tab-futfanatics" class="source-tab" type="button" role="tab"
+          aria-selected="false" aria-controls="panel-futfanatics">
+          <span aria-hidden="true">⚽</span> FutFanatics
+        </button>
+      </div>
+
+      <!-- FutFanatics source panel -->
+      <div id="panel-futfanatics" class="source-panel" role="tabpanel"
+        aria-labelledby="btn-tab-futfanatics">
+        <p class="source-note">
+          Ofertas e Mantos esportivos da FutFanatics Brasil com desconto.
+          Podem ser enviadas diretamente ao WhatsApp ou preparadas para publicação.
+        </p>
+        <div class="control-bar">
+          <div class="selection-actions">
+            <label class="checkbox-container">
+              <input type="checkbox" id="chk-select-all-futfanatics">
+              <span class="checkmark"></span>
+              Selecionar Todos
+            </label>
+            <button id="btn-clear-selection-futfanatics" class="btn-secondary" disabled>
+              Limpar Seleção
+            </button>
+          </div>
+          <div class="primary-actions">
+            <button id="btn-update-futfanatics" class="btn-refresh btn-futfanatics-refresh">
+              <span class="icon-sync">🔄</span> Atualizar FutFanatics
+            </button>
+            <button id="btn-queue-futfanatics" class="btn-queue" type="button" disabled hidden>
+              Preparar na fila (<span id="txt-queue-count-futfanatics">0</span>)
+            </button>
+            <button id="btn-generate-futfanatics" class="btn-cta btn-futfanatics-cta" disabled>
+              Enviar agora (<span id="txt-selected-count-futfanatics">0</span>) →
+            </button>
+          </div>
+        </div>
+
+        <button id="btn-toggle-filters-futfanatics" class="mobile-filter-toggle"
+          type="button" aria-expanded="false" aria-controls="filters-futfanatics">
+          🔎 Busca e filtros
+        </button>
+        <!-- Filter Bar -->
+        <div id="filters-futfanatics" class="filter-bar filter-bar-2rows">
+          <div class="filter-row-quick">
+            <div class="filter-group search-filter">
+              <span class="filter-icon">🔍</span>
+              <input type="text" id="ipt-filter-name-futfanatics" placeholder="Filtrar somente as ofertas já carregadas..." aria-label="Filtrar ofertas da FutFanatics por nome">
+            </div>
+            <div class="filter-group discount-filter">
+              <span class="filter-icon">📉</span>
+              <select id="sel-filter-discount-futfanatics" class="select-premium" aria-label="Filtrar ofertas da FutFanatics por desconto">
+                <option value="">Qualquer desconto</option>
+                <option value="20">20% OFF ou mais</option>
+                <option value="30">30% OFF ou mais</option>
+                <option value="40">40% OFF ou mais</option>
+                <option value="50">50% OFF ou mais</option>
+              </select>
+            </div>
+            <div class="filter-group score-sort-filter">
+              <span class="filter-icon">★</span>
+              <select id="sel-sort-futfanatics" class="select-premium" aria-label="Ordenar ofertas da FutFanatics">
+                <option value="score">Melhores oportunidades</option>
+                <option value="discount">Maior desconto</option>
+                <option value="rating">Melhor avaliação</option>
+              </select>
+            </div>
+          </div>
+          <div class="filter-row-taxonomy">
+            <div class="filter-group category-filter">
+              <span class="filter-icon">🏷️</span>
+              <select id="sel-filter-category-futfanatics" class="select-premium" aria-label="Filtrar ofertas da FutFanatics por categoria">
+                <option value="">Todas as Categorias</option>
+              </select>
+            </div>
+            <div class="filter-group subcategory-filter">
+              <span class="filter-icon">📂</span>
+              <select id="sel-filter-subcategory-futfanatics" class="select-premium" aria-label="Filtrar ofertas da FutFanatics por subcategoria" disabled>
+                <option value="">Selecione uma categoria primeiro</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Filter Chip -->
+        <div id="active-filter-chip-futfanatics" class="active-filter-chip-container" hidden></div>
+
+        <!-- Grid -->
+        <div id="grid-futfanatics" class="grid-layout">
+          <div class="empty-state">
+            <p>Nenhuma oferta FutFanatics carregada. Clique em "Atualizar FutFanatics" para buscar ofertas.</p>
+          </div>
+        </div>
+        <div id="pagination-futfanatics" class="deal-pagination" hidden>
+          <span id="pagination-count-futfanatics"></span>
+          <button id="btn-load-more-futfanatics" class="btn-secondary" type="button">
+            Carregar mais 20
+          </button>
+        </div>
+      </div>
       </div>
 
       <div id="panel-ml" class="source-panel active" role="tabpanel" aria-labelledby="btn-tab-ml">
