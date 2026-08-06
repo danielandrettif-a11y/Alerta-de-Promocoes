@@ -350,6 +350,13 @@ if (whatsappEnabled) {
   console.log('[Painel Web] WhatsApp Web desativado por WHATSAPP_ENABLED=false.');
 }
 
+async function initializeWhatsApp() {
+  if (!WHATSAPP_ENABLED) {
+    console.log('[WhatsApp] Desativado via WHATSAPP_ENABLED=false.');
+    return;
+  }
+}
+
 // Inferência de Categoria e Subcategoria via Helper unificado
 function inferCategory(title) {
   const info = inferCategoryAndSub(title);
