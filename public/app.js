@@ -373,7 +373,9 @@ function generateClientDealId(deal, platform) {
     : ['amz', 'amazon'].includes(rawPlatform)
       ? 'amazon'
       : rawPlatform;
-  const rawLink = String(deal?.link || deal?.productLink || '');
+  
+  // Use rawLink if available (crucial for FutFanatics/Awin links so they don't all resolve to cread.php)
+  const rawLink = String(deal?.rawLink || deal?.link || deal?.productLink || '');
   let normalizedLink = rawLink.split(/[?#]/)[0].replace(/\/+$/, '');
   try {
     const parsed = new URL(rawLink);
